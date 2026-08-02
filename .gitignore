@@ -1,0 +1,9 @@
+# AI 辅助工具(skills)的配置,不属于 app 本身,不上传到 GitHub
+.claude/
+.agents/
+skills-lock.json
+docs/
+CLAUDE.md
+
+# node 依赖(以后如果用得到)
+node_modules/

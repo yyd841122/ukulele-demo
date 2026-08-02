@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>尤克里里弹唱练习</title>
+
+  <!-- 下面这几行让网页变成"可安装的 app"(PWA) -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    /* —— 基础样子 —— */
+    body {
+      margin: 0;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: #0f172a;
+      color: #cbd5e1;
+      line-height: 1.6;
+    }
+    .screen {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 24px 16px 300px;
+    }
+    h1 { font-size: 20px; text-align: center; color: #ffffff; margin: 0 0 20px; }
+    .section { font-size: 15px; text-align: center; color: #94a3b8; margin: 36px 0 16px; }
+
+    /* —— 顶部:和弦指法参考栏 —— */
+    .chords-bar { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 20px; }
+    .chord-card { background: #1e293b; border-radius: 8px; padding: 8px 6px 4px; text-align: center; }
+    .chord-card .name { color: #fbbf24; font-weight: bold; font-size: 16px; margin-bottom: 2px; }
+
+    /* —— 固定在顶部不动的:控制条 + 练习面板 —— */
+    .sticky-top {
+      position: sticky; top: 0; z-index: 10;
+      background: #0f172a;
+      padding: 6px 0 12px;
+      margin-bottom: 8px;
+    }
+    .controls {
+      display: flex; align-items: center; gap: 14px; justify-content: center;
+      flex-wrap: wrap; margin-bottom: 12px;
+    }
+    .controls button {
+      background: #fbbf24; color: #0f172a; border: none; border-radius: 8px;
+      padding: 10px 22px; font-size: 16px; font-weight: bold; cursor: pointer;
+      font-family: inherit;
+    }
+    .controls .tempo { display: flex; align-items: center; gap: 8px; color: #cbd5e1; font-size: 14px; }
+    .controls input[type=range] { width: 130px; }
+
+    .panel { background: #1e293b; border-radius: 12px; padding: 12px; text-align: center; }
+    .panel .now { font-size: 13px; color: #94a3b8; }
+    .panel .big-chord { font-size: 38px; font-weight: bold; color: #fbbf24; line-height: 1.1; }
+    .panel .big-diagram { margin: 4px 0; }
+    .strums { display: flex; gap: 16px; justify-content: center; font-size: 22px; margin: 8px 0; }
+    .strums span { color: #334155; }              /* 没轮到的拍子:暗 */
+    .strums span.active { color: #fbbf24; }       /* 当前这一下:亮 */
+    .panel .meta { font-size: 13px; color: #94a3b8; }
+    .panel .next { color: #cbd5e1; }
+
+    /* —— 歌词 + 和弦(由 JS 根据 SONG 数据生成)—— */
+    .line { margin-bottom: 16px; padding: 6px 8px; border-radius: 6px; }
+    .line.current { background: #16202f; }        /* 当前这一行:底色高亮 */
+    .chords-row { margin-bottom: 2px; }
+    .chord-chip {
+      display: inline-block; color: #fbbf24; font-weight: bold;
+      margin-right: 18px; padding: 0 4px; border-radius: 4px;
+    }
+    .chord-chip.current { background: #fbbf24; color: #0f172a; }   /* 当前和弦:反色高亮 */
+    .lyric { white-space: pre-wrap; color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <h1>🌈 Somewhere Over the Rainbow</h1>
+
+    <!-- 这首歌的和弦指法参考栏(JS 自动填) -->
+    <div id="chords-bar" class="chords-bar"></div>
+
+    <!-- 固定在顶部的控制 + 练习面板 -->
+    <div class="sticky-top">
+      <div class="controls">
+        <button id="play-btn">▶ 开始</button>
+        <div class="tempo">
+          速度
+          <input id="tempo" type="range" min="40" max="140" value="72">
+          <span id="bpm">72</span> BPM
+        </div>
+      </div>
+      <div class="panel">
+        <div class="now">现在弹</div>
+        <div class="big-chord" id="now-chord">—</div>
+        <div class="big-diagram" id="now-diagram"></div>
+        <div class="strums" id="strums"></div>
+        <div class="meta">
+          第 <span id="beat">1</span> / 4 拍 ·
+          <span class="next">下一个:<span id="next-chord">—</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 歌词 + 和弦(JS 根据 SONG 生成) -->
+    <div id="song"></div>
+  </div>
+
+  <script>
+    // ===== 1) 和弦指法数据 =====
+    // frets = 四根弦(G C E A,从左到右)分别按第几品;0 = 空弦
+    const CHORDS = {
+      C:  { frets: [0, 0, 0, 3] },
+      G:  { frets: [0, 2, 3, 2] },
+      Am: { frets: [2, 0, 0, 0] },
+      F:  { frets: [2, 0, 1, 0] },
+    };
+
+    // 画一个和弦的指法小图。scale 控制显示大小(面板里放大点)。
+    function drawChord(frets, scale = 1) {
+      const W = 56, H = 80;
+      const nStrings = 4, nFrets = 4;
+      const left = 10, right = W - 10, top = 16, bottom = H - 8;
+      const dx = (right - left) / (nStrings - 1);
+      const dy = (bottom - top) / nFrets;
+      let s = `<svg width="${W * scale}" height="${H * scale}" viewBox="0 0 ${W} ${H}">`;
+      for (let i = 0; i < nStrings; i++) {
+        if (frets[i] === 0) {
+          const x = left + i * dx;
+          s += `<circle cx="${x}" cy="8" r="3" fill="none" stroke="#94a3b8" stroke-width="1"/>`;
+        }
+      }
+      s += `<line x1="${left}" y1="${top}" x2="${right}" y2="${top}" stroke="#e5e7eb" stroke-width="3"/>`;
+      for (let f = 1; f <= nFrets; f++) {
+        const y = top + f * dy;
+        s += `<line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="#475569" stroke-width="1"/>`;
+      }
+      for (let i = 0; i < nStrings; i++) {
+        const x = left + i * dx;
+        s += `<line x1="${x}" y1="${top}" x2="${x}" y2="${bottom}" stroke="#475569" stroke-width="1"/>`;
+      }
+      for (let i = 0; i < nStrings; i++) {
+        if (frets[i] > 0) {
+          const x = left + i * dx;
+          const y = top + (frets[i] - 0.5) * dy;
+          s += `<circle cx="${x}" cy="${y}" r="5" fill="#fbbf24"/>`;
+        }
+      }
+      s += `</svg>`;
+      return s;
+    }
+
+    // ===== 2) 这首歌的数据:歌词、每行的和弦、节奏 =====
+    const SONG = {
+      title: "Somewhere Over the Rainbow",
+      tempo: 72,            // 默认速度 BPM(≈原曲节奏)
+      beatsPerChord: 4,     // 每个和弦弹几下(一拍一下,往下扫)
+      sections: [
+        {
+          lines: [
+            { chords: ["C", "G", "Am", "F"], lyric: "Somewhere over the rainbow, way up high" },
+            { chords: ["C", "G", "Am", "F"], lyric: "And the dreams that you dream of, once in a lullaby" },
+            { chords: ["C", "G", "Am", "F"], lyric: "Somewhere over the rainbow, bluebirds fly" },
+            { chords: ["C", "G", "Am", "F"], lyric: "And the dreams that you dare to, oh why oh why can't I" },
+          ],
+        },
+        {
+          name: '🎵 接着那段 "What a wonderful world"',
+          lines: [
+            { chords: ["C", "G", "Am", "F"], lyric: "Well I see trees of green, red roses too" },
+            { chords: ["C", "G", "Am", "F"], lyric: "I watch them bloom for me and you" },
+            { chords: ["Am", "F", "C", "G"], lyric: "And I think to myself, what a wonderful world" },
+          ],
+        },
+      ],
+    };
+
+    // ===== 3) 根据 SONG 数据,把页面生成出来 =====
+    const bar = document.getElementById("chords-bar");
+    const songEl = document.getElementById("song");
+    const flat = [];          // 所有和弦,按顺序排好
+    const lineOfChord = [];   // 每个和弦属于第几行
+    const chordChipEls = [];  // 每个和弦的小标签(用来高亮)
+    const lineEls = [];       // 每一行的元素(用来高亮)
+
+    let lineIdx = 0;
+    SONG.sections.forEach((sec) => {
+      if (sec.name) {
+        const h = document.createElement("h2");
+        h.className = "section";
+        h.textContent = sec.name;
+        songEl.appendChild(h);
+      }
+      sec.lines.forEach((line) => {
+        const lineEl = document.createElement("div");
+        lineEl.className = "line";
+        const row = document.createElement("div");
+        row.className = "chords-row";
+        line.chords.forEach((c) => {
+          const chip = document.createElement("span");
+          chip.className = "chord-chip";
+          chip.textContent = c;
+          row.appendChild(chip);
+          chordChipEls.push(chip);
+          flat.push(c);
+          lineOfChord.push(lineIdx);
+        });
+        const ly = document.createElement("div");
+        ly.className = "lyric";
+        ly.textContent = line.lyric;
+        lineEl.appendChild(row);
+        lineEl.appendChild(ly);
+        songEl.appendChild(lineEl);
+        lineEls.push(lineEl);
+        lineIdx++;
+      });
+    });
+
+    // 顶部的和弦参考栏:这首歌用到哪些和弦(去重,按出现顺序)
+    [...new Set(flat)].forEach((name) => {
+      const card = document.createElement("div");
+      card.className = "chord-card";
+      card.innerHTML = `<div class="name">${name}</div>` + drawChord(CHORDS[name].frets);
+      bar.appendChild(card);
+    });
+
+    // ===== 4) 节拍器练习引擎 =====
+    const playBtn = document.getElementById("play-btn");
+    const tempoInput = document.getElementById("tempo");
+    const bpmLabel = document.getElementById("bpm");
+    const nowChord = document.getElementById("now-chord");
+    const nowDiagram = document.getElementById("now-diagram");
+    const strumsEl = document.getElementById("strums");
+    const beatLabel = document.getElementById("beat");
+    const nextChord = document.getElementById("next-chord");
+
+    let bpm = SONG.tempo;
+    let idx = 0;        // 当前第几个和弦
+    let beat = 0;       // 当前和弦的第几拍(从 0 起)
+    let playing = false;
+    let timer = null;
+    let lastLine = 0;   // 上一次高亮的行(避免每拍都滚动)
+    let audioCtx = null;
+
+    // 浏览器规定:声音必须在用户点过按钮之后才能响,所以在这初始化
+    function ensureAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    }
+    // 现场合成一声"嗒"(不用音频文件,断网也能响)
+    function click(accent) {
+      if (!audioCtx) return;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.frequency.value = accent ? 1500 : 900;  // 每个和弦第一拍:声音高一点 = 重音
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      const t = audioCtx.currentTime;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.25, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      o.start(t);
+      o.stop(t + 0.06);
+    }
+
+    // 把"现在该弹啥"画到面板上,并高亮当前和弦 / 当前行
+    function renderState() {
+      const chord = flat[idx];
+      nowChord.textContent = chord;
+      nowDiagram.innerHTML = CHORDS[chord] ? drawChord(CHORDS[chord].frets, 1.5) : "";
+      strumsEl.innerHTML = "";
+      for (let i = 0; i < SONG.beatsPerChord; i++) {
+        const s = document.createElement("span");
+        s.textContent = "↓";
+        if (i === beat) s.className = "active";
+        strumsEl.appendChild(s);
+      }
+      beatLabel.textContent = beat + 1;
+      nextChord.textContent = flat[(idx + 1) % flat.length];
+      chordChipEls.forEach((el, i) => el.classList.toggle("current", i === idx));
+      const li = lineOfChord[idx];
+      lineEls.forEach((el, i) => el.classList.toggle("current", i === li));
+      if (li !== lastLine) {            // 只有换行时才滚动,免得每拍都晃
+        lastLine = li;
+        if (lineEls[li]) lineEls[li].scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    }
+
+    // 每一拍执行一次
+    function tick() {
+      click(beat === 0);   // 第一拍:重音
+      renderState();
+      beat++;
+      if (beat >= SONG.beatsPerChord) {
+        beat = 0;
+        idx = (idx + 1) % flat.length;   // 播完自动回到开头,循环练习
+      }
+    }
+
+    function start() {
+      ensureAudio();
+      playing = true;
+      playBtn.textContent = "⏸ 暂停";
+      renderState();
+      timer = setInterval(tick, 60000 / bpm);   // 60000ms ÷ BPM = 每拍间隔
+    }
+    function pause() {
+      playing = false;
+      playBtn.textContent = "▶ 开始";
+      clearInterval(timer);
+    }
+
+    playBtn.addEventListener("click", () => (playing ? pause() : start()));
+    tempoInput.addEventListener("input", () => {
+      bpm = parseInt(tempoInput.value, 10);
+      bpmLabel.textContent = bpm;
+      if (playing) {
+        clearInterval(timer);
+        timer = setInterval(tick, 60000 / bpm);
+      }
+    });
+
+    // 页面一打开先画一次,让面板不是空的
+    renderState();
+  </script>
+
+  <script>
+    // 注册 service worker:让 app 能离线打开、能"添加到主屏幕"
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => console.log('SW 注册失败:', err));
+      });
+    }
+  </script>
+</body>
+</html>
