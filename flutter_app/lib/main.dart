@@ -1,121 +1,159 @@
+// 尤克里里弹唱练习 —— Flutter 版主入口 + 歌曲页。
+//
+// 这一版是【超薄切片】:把一首歌的"歌词 + 和弦"静态铺出来,
+// 先不接节拍器、不自动滚动、不高亮当前和弦。
+// 目标是在手机上亲眼看到"真正的尤克里里内容"用 Flutter 渲染出来 —— 证明构建链路能交付真东西。
 import 'package:flutter/material.dart';
 
+import 'models.dart';
+
 void main() {
-  runApp(const MyApp());
+  runApp(const UkuleleApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// App 根部件:决定主题,并把"歌曲页"设为首页。
+class UkuleleApp extends StatelessWidget {
+  const UkuleleApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: '尤克里里弹唱练习',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        // 深色主题,观感对齐 Web 版 PWA;seedColor 决定整体配色基调。
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6C8EE3), // 偏蓝紫,呼应"彩虹"主题
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const SongScreen(song: sampleSong),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+/// 歌曲页:把一首歌的每一段、每一行铺出来。
+/// 每一行 = 上面一排和弦"贴片" + 下面一行歌词。
+class SongScreen extends StatelessWidget {
+  final Song song;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  const SongScreen({super.key, required this.song});
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    // 把"段落标题(可选)+ 它的每一行"拍平成一个列表,丢进可滚动的 ListView。
+    // (这一步 ListView 还不会自己滚 —— 留给后面"自动滚动"切片。)
+    final List<Widget> items = [];
+    for (final section in song.sections) {
+      if (section.name != null) {
+        items.add(_SectionHeader(section.name!));
+      }
+      for (final line in section.lines) {
+        items.add(_LineView(line: line));
+      }
+    }
+
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+        title: Text(song.title),
+        // 顶部右上角显示速度信息(只展示,这一步还不能调)。
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Text(
+                '${song.tempo} BPM · ${song.beatsPerChord}拍/和弦',
+                style: theme.textTheme.bodySmall,
+              ),
             ),
-          ],
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: items,
+      ),
+    );
+  }
+}
+
+/// 段落标题(如"🎵 接着那段..."、"🎶 副歌")。下划线开头 = 这个部件只在本文件内用。
+class _SectionHeader extends StatelessWidget {
+  final String name;
+
+  const _SectionHeader(this.name);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 8),
+      child: Text(
+        name,
+        style: theme.textTheme.titleMedium?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w600,
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+/// 一行:上面一排和弦贴片,下面是歌词。
+class _LineView extends StatelessWidget {
+  final Line line;
+
+  const _LineView({required this.line});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 和弦行:每个和弦一个小贴片。用 Wrap 是为了窄屏(手机)能自动换行,不会溢出报错。
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [for (final c in line.chords) _ChordChip(c)],
+          ),
+          const SizedBox(height: 4),
+          // 歌词
+          Text(line.lyric, style: theme.textTheme.bodyLarge),
+        ],
+      ),
+    );
+  }
+}
+
+/// 单个和弦贴片:圆角小色块 + 和弦名。
+class _ChordChip extends StatelessWidget {
+  final String chord;
+
+  const _ChordChip(this.chord);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cs.primary, width: 1),
+      ),
+      child: Text(
+        chord,
+        style: TextStyle(
+          color: cs.onPrimaryContainer,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
       ),
     );
   }
