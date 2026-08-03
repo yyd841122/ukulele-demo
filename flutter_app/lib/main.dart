@@ -393,20 +393,26 @@ class _SongScreenState extends State<SongScreen> {
         items.add(_SectionHeader(section.name!));
       }
       for (final line in section.lines) {
-        final marker = _markerForLine(lineCursor);
+        // 关键:lineCursor 是循环【外】的变量、每轮 +1。onTap 是【以后点的时候】才执行的闭包,
+        // 若直接写 () => _onLineTapped(lineCursor),它捕获的是 lineCursor 这个变量本身——
+        // 等点的时候 lineCursor 早变成"总行数"了,点哪行都传同一个越界值(就是这次的 RangeError)。
+        // 所以每轮单独存一份 final lineIdx,让闭包捕获这份固定的值。
+        // (注:Dart 的 C 式 for(var i)循环变量倒是每轮独立的,这里 lineCursor 不是循环变量才中招。)
+        final lineIdx = lineCursor;
+        final marker = _markerForLine(lineIdx);
         final inRange = _abActive &&
-            lineCursor >= _loopStartLine &&
-            lineCursor <= _loopEndLine;
+            lineIdx >= _loopStartLine &&
+            lineIdx <= _loopEndLine;
         items.add(
           _LineView(
             line: line,
-            lineKey: _lineKeys[lineCursor],
-            isCurrentLine: lineCursor == currentLine,
+            lineKey: _lineKeys[lineIdx],
+            isCurrentLine: lineIdx == currentLine,
             chordStart: chordCursor, // 这一行第 1 个和弦的全局下标
             currentChord: _idx,
             marker: marker,
             inRange: inRange,
-            onTap: () => _onLineTapped(lineCursor),
+            onTap: () => _onLineTapped(lineIdx),
           ),
         );
         chordCursor += line.chords.length;
@@ -617,12 +623,11 @@ class _LineView extends StatelessWidget {
               ? cs.primaryContainer.withValues(alpha: 0.3)
               : (inRange ? cs.primaryContainer.withValues(alpha: 0.12) : null),
           borderRadius: BorderRadius.circular(6),
-          border: Border(
-            left: BorderSide(
-              color: inRange ? cs.primary : Colors.transparent,
-              width: inRange ? 3 : 0,
-            ),
-          ),
+          // 注意:不在区间内时 border 必须给 null,不能给 width:0 的边框——
+          // "宽度0的细线边框 + borderRadius"会被 Flutter 断言拒掉(paint 时抛异常、疯狂刷错)。
+          border: inRange
+              ? Border(left: BorderSide(color: cs.primary, width: 3))
+              : null,
         ),
         // 左边可能一个 AB 徽标,右边是歌词词单元(Wrap)。徽标顶对齐,词按基线排。
         child: Row(
