@@ -92,6 +92,12 @@ class _SongScreenState extends State<SongScreen> {
   // 当前选的第几个节奏型(patternsFor 返回的那几个)。换歌不重置——节奏型是练习偏好,跨歌保留。
   int _patternIndex = 0;
 
+  // —— 分段 AB 循环 ——
+  // _markerA / _markerB:用户在歌词上点的两个"循环点"(行下标)。两个都标好 → 引擎到 B 行末尾跳回 A 行开头反复。
+  // 只标了 A(_markerB 仍 null)= 还没成区间,只在那一行显示 A 徽标。换歌清空(行下标是按某首歌的行算的,不能跨歌保留)。
+  int? _markerA;
+  int? _markerB;
+
   // SoLoud:把两个嗒声各加载成一个"声源(AudioSource)"。每拍 play(src) 起一个全新实例从头播 →
   // 低延迟、每次从头响、连播不会变小声、第一拍也不会被吞(专为这种场景设计)。
   AudioSource? _normalSrc; // 普通"嗒"
@@ -161,6 +167,56 @@ class _SongScreenState extends State<SongScreen> {
   Duration get _halfBeat =>
       Duration(milliseconds: (30000 / _tempo).round());
 
+  // —— AB 循环的只读折算(仅在 _abActive 时调用才合法)——
+  bool get _abActive => _markerA != null && _markerB != null;
+  // A、B 谁先点不一定(可能先点后面的行),取小当起点、大当终点。
+  int get _loopStartLine => _markerA! <= _markerB! ? _markerA! : _markerB!;
+  int get _loopEndLine => _markerA! >= _markerB! ? _markerA! : _markerB!;
+  // AB 区间在 _flat 里的和弦范围:从起点行第 1 个和弦,到终点行最后一个和弦。
+  int get _loopFirstChord => _lineStartFlat[_loopStartLine];
+  int get _loopLastChord =>
+      _lineStartFlat[_loopEndLine] + _lineChords[_loopEndLine].length - 1;
+
+  /// 点一行歌词:设 A,再点一行设 B(成区间、立刻把位置拉到 A 开头好让循环起跑);
+  /// 两个都标过后再点 = 重新开始(把这次点的当新 A)。给 _LineView 的 onTap 用。
+  void _onLineTapped(int lineIdx) {
+    setState(() {
+      if (_markerA == null) {
+        _markerA = lineIdx;
+      } else if (_markerB == null) {
+        _markerB = lineIdx;
+        // 两点成区间 → 立刻跳到起点行第 1 个和弦、槽归 0,循环马上从 A 起跑。
+        _idx = _lineStartFlat[_loopStartLine];
+        _slot = 0;
+        _lastLine = (_lineOfChord.isNotEmpty && _idx < _lineOfChord.length)
+            ? _lineOfChord[_idx]
+            : _lastLine;
+      } else {
+        // 都标过了 → 重新开始:这次点的当新 A,清掉 B。
+        _markerA = lineIdx;
+        _markerB = null;
+      }
+    });
+  }
+
+  /// 清除 AB 区间,回到整曲循环。位置不动,让它自然走到下一处。
+  void _clearAb() {
+    setState(() {
+      _markerA = null;
+      _markerB = null;
+    });
+  }
+
+  /// 某一行该显示什么 AB 标记:none / a / b。给 _LineView 画徽标用。
+  _AbMarker _markerForLine(int l) {
+    if (_markerA == l && _markerB == null) return _AbMarker.a; // 只标了 A
+    if (_abActive) {
+      if (l == _loopStartLine) return _AbMarker.a;
+      if (l == _loopEndLine) return _AbMarker.b;
+    }
+    return _AbMarker.none;
+  }
+
   /// 按一下 ▶/⏸:正在响就停,没响就接着弹。
   /// 对齐 Web:不归零、resume——暂停后再按 ▶ 接着上次停的地方继续;只有换歌才从头(见 _onSongChanged)。
   void _togglePlay() {
@@ -173,6 +229,13 @@ class _SongScreenState extends State<SongScreen> {
       if (!_everPlayed) {
         _inCountIn = true;
         _slot = 0; // 预备拍从槽0(第1拍)开始
+        // 设了 AB 区间的话,"从头开始" = 从 A 行开头开始(而不是歌曲第1和弦),好让练习聚焦在指定段。
+        if (_abActive) {
+          _idx = _loopFirstChord;
+          _lastLine = (_lineOfChord.isNotEmpty && _idx < _lineOfChord.length)
+              ? _lineOfChord[_idx]
+              : _lastLine;
+        }
       }
       // 立刻响当下这一下(预备拍第1下 或 恢复处的槽),不用干等半拍。
       _tick();
@@ -193,6 +256,8 @@ class _SongScreenState extends State<SongScreen> {
       _loops = 0; // 换歌重新计数
       _inCountIn = false; // 换歌取消可能进行中的预备拍
       _everPlayed = false; // 新歌从头算"还没正式开始",下次按 ▶ 会重新数预备拍
+      _markerA = null; // 换歌清空 AB(行下标按某首歌的行算,不能跨歌保留)
+      _markerB = null;
       _tempo = songs[i].tempo; // 新歌用新歌的原速,免得还按上一首调出来的慢速走
       _rebuildFlat();
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
@@ -230,8 +295,11 @@ class _SongScreenState extends State<SongScreen> {
         _inCountIn = false;
         _everPlayed = true;
       } else if (_flat.isNotEmpty) {
-        // 到末尾就循环回开头;走到头一次 = 又练完一遍,_loops +1。
-        if (_idx + 1 >= _flat.length) {
+        // AB 循环优先:到 B 行末尾就跳回 A 行开头(单独计一遍);否则正常推进 / 整曲末尾循环回开头。
+        if (_abActive && _idx >= _loopLastChord) {
+          _idx = _loopFirstChord;
+          _loops++;
+        } else if (_idx + 1 >= _flat.length) {
           _idx = 0;
           _loops++;
         } else {
@@ -283,11 +351,17 @@ class _SongScreenState extends State<SongScreen> {
     final song = songs[_selected];
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    // 整首歌走到哪了(0~1):当前第几个和弦 + 这和弦里第几个槽,折算成百分比。空歌算 0。
-    // 公式天然落在 [0, 1) 内(末尾和弦最后槽 ≈ 接近1,循环回开头归 0),不用再钳位。
-    final progress = _flat.isEmpty
-        ? 0.0
-        : (_idx + _slot / (song.beatsPerChord * 2)) / _flat.length;
+    // 进度条:整曲模式按整首歌走;AB 模式只走 AB 区间那一段(到 B 回 0)。空歌算 0。
+    final double progress;
+    if (_flat.isEmpty) {
+      progress = 0.0;
+    } else if (_abActive) {
+      final span = _loopLastChord - _loopFirstChord + 1;
+      progress =
+          ((_idx - _loopFirstChord) + _slot / (song.beatsPerChord * 2)) / span;
+    } else {
+      progress = (_idx + _slot / (song.beatsPerChord * 2)) / _flat.length;
+    }
 
     // 预备拍当前数到第几拍(1..beatsPerChord);0 = 不在数预备拍。
     // _slot 走一小节:槽 0/1→第1拍、2/3→第2拍 …… 偶数槽=刚敲到这拍、奇数槽=这拍的"&(数字不变)。
@@ -319,6 +393,10 @@ class _SongScreenState extends State<SongScreen> {
         items.add(_SectionHeader(section.name!));
       }
       for (final line in section.lines) {
+        final marker = _markerForLine(lineCursor);
+        final inRange = _abActive &&
+            lineCursor >= _loopStartLine &&
+            lineCursor <= _loopEndLine;
         items.add(
           _LineView(
             line: line,
@@ -326,6 +404,9 @@ class _SongScreenState extends State<SongScreen> {
             isCurrentLine: lineCursor == currentLine,
             chordStart: chordCursor, // 这一行第 1 个和弦的全局下标
             currentChord: _idx,
+            marker: marker,
+            inRange: inRange,
+            onTap: () => _onLineTapped(lineCursor),
           ),
         );
         chordCursor += line.chords.length;
@@ -395,8 +476,14 @@ class _SongScreenState extends State<SongScreen> {
             patternNames: [for (final p in patterns) p.name],
             patternIndex: _patternIndex,
             onPatternChanged: (i) => setState(() => _patternIndex = i),
+            abActive: _abActive,
+            onClearAb: _clearAb,
             countInNumber: countInNumber,
-            nextChord: _flat.isEmpty ? '—' : _flat[(_idx + 1) % _flat.length],
+            nextChord: _flat.isEmpty
+                ? '—'
+                : (_abActive && _idx >= _loopLastChord
+                    ? _flat[_loopFirstChord] // AB 到 B 末尾:下一个就是跳回 A 的那个和弦
+                    : _flat[(_idx + 1) % _flat.length]),
             tempo: _tempo,
             minTempo: (song.tempo / 2).round(), // 最慢到原速一半
             maxTempo: (song.tempo * 2).round(), // 最快到原速两倍——放开加速练
@@ -422,6 +509,37 @@ class _SongScreenState extends State<SongScreen> {
         ],
       ),
       // ▶/⏸ 已挪进练习栏的调速行(最左小图标),不再用右下大圆按钮——它会在歌长时挡住歌词。
+    );
+  }
+}
+
+/// AB 循环点的标记类型:不是标记 / A 点(起点)/ B 点(终点)。
+enum _AbMarker { none, a, b }
+
+/// AB 循环点的行徽标:一个小圆,写着 A 或 B。点在歌词行左边标出区间起止。
+class _AbBadge extends StatelessWidget {
+  final _AbMarker marker;
+  const _AbBadge(this.marker);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: 20,
+      height: 20,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: cs.primary,
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        marker == _AbMarker.a ? 'A' : 'B',
+        style: TextStyle(
+          color: cs.onPrimary,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }
@@ -460,6 +578,9 @@ class _LineView extends StatelessWidget {
   final bool isCurrentLine;
   final int chordStart; // 这一行第 1 个和弦在全局 _flat 里的下标
   final int currentChord; // 当前全局和弦下标(_idx)
+  final _AbMarker marker; // 这行的 AB 标记(none/a/b)
+  final bool inRange; // 这行在 AB 区间内吗(区间内的行加左边框、淡底色)
+  final VoidCallback? onTap; // 点这行 → 设 AB 循环点
 
   const _LineView({
     required this.line,
@@ -467,6 +588,9 @@ class _LineView extends StatelessWidget {
     required this.isCurrentLine,
     required this.chordStart,
     required this.currentChord,
+    this.marker = _AbMarker.none,
+    this.inRange = false,
+    this.onTap,
   });
 
   @override
@@ -483,22 +607,44 @@ class _LineView extends StatelessWidget {
         _WordUnitView(chord: u.chord, word: u.word, isCurrent: isCurrent),
       );
     }
-    return Container(
-      key: lineKey,
-      padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-      decoration: BoxDecoration(
-        color: isCurrentLine
-            ? cs.primaryContainer.withValues(alpha: 0.3)
-            : null,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      // Wrap:词单元横向排开、窄屏自动换行。crossAxisAlignment=end → 所有词同基线,
-      // 和弦只浮在"有和弦的词"上方(没和弦的词不占和弦槽,连贯)。
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.end,
-        spacing: 4,
-        runSpacing: 2,
-        children: children,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        key: lineKey,
+        padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+        decoration: BoxDecoration(
+          color: isCurrentLine
+              ? cs.primaryContainer.withValues(alpha: 0.3)
+              : (inRange ? cs.primaryContainer.withValues(alpha: 0.12) : null),
+          borderRadius: BorderRadius.circular(6),
+          border: Border(
+            left: BorderSide(
+              color: inRange ? cs.primary : Colors.transparent,
+              width: inRange ? 3 : 0,
+            ),
+          ),
+        ),
+        // 左边可能一个 AB 徽标,右边是歌词词单元(Wrap)。徽标顶对齐,词按基线排。
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (marker != _AbMarker.none)
+              Padding(
+                padding: const EdgeInsets.only(top: 3, right: 6),
+                child: _AbBadge(marker),
+              ),
+            Expanded(
+              // Wrap:词单元横向排开、窄屏自动换行。crossAxisAlignment=end → 所有词同基线,
+              // 和弦只浮在"有和弦的词"上方(没和弦的词不占和弦槽,连贯)。
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.end,
+                spacing: 4,
+                runSpacing: 2,
+                children: children,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -667,6 +813,8 @@ class _PracticeBar extends StatelessWidget {
   final List<String> patternNames; // 可选节奏型的名字(给那一排选择芯片用)
   final int patternIndex; // 当前选第几个节奏型
   final ValueChanged<int> onPatternChanged; // 切节奏型时回调父级
+  final bool abActive; // AB 循环区间设好了吗(没设就显示提示,设了显示状态 + ✕)
+  final VoidCallback onClearAb; // 清除 AB 区间
   final int countInNumber; // 预备拍当前数到几(1..beatsPerChord);0 = 不在数预备拍
   final String nextChord; // 下一个和弦名
   final int tempo; // 当前速度(可调,实际在用的 BPM)
@@ -686,6 +834,8 @@ class _PracticeBar extends StatelessWidget {
     required this.patternNames,
     required this.patternIndex,
     required this.onPatternChanged,
+    required this.abActive,
+    required this.onClearAb,
     required this.countInNumber,
     required this.nextChord,
     required this.tempo,
@@ -743,6 +893,43 @@ class _PracticeBar extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                 ),
             ],
+          ),
+          // AB 循环状态行:没设时给操作提示;设好后显示"循环中"+ ✕ 清除。
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: abActive
+                ? Row(
+                    children: [
+                      Icon(Icons.repeat_rounded, size: 16, color: cs.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'AB 循环中',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: onClearAb,
+                        tooltip: '清除 AB 区间',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 28,
+                        ),
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        style: IconButton.styleFrom(
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  )
+                : Text(
+                    '👆 点两行歌词设 AB 循环点(到 B 跳回 A 反复练)',
+                    style: TextStyle(fontSize: 11, color: cs.outline),
+                  ),
           ),
           const SizedBox(height: 4),
           // 扫弦型 / 预备拍数字(二选一):
