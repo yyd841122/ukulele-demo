@@ -4,8 +4,7 @@
 //   Song(歌曲) → Section(段落) → Line(歌词行) → Chord(和弦)
 //
 // 这个文件【只放数据长什么样】,不放界面。界面在 main.dart。
-// 把数据和界面分开是这一步最值得记住的习惯:以后换布局、加节拍器,
-// 都不用动这里;加新歌也只是往底下加一行数据。
+// 加新歌只是往下面的 songs 列表里再加一条,界面自动跟上。
 import 'package:flutter/foundation.dart';
 
 /// 一行歌词 + 压在它上方的和弦序列(按出现顺序)。
@@ -18,7 +17,7 @@ class Line {
   const Line({required this.chords, required this.lyric});
 }
 
-/// 歌曲里的一个段落,例如"副歌"。name 可空 —— 第一段常常没有名字。
+/// 歌曲里的一个段落,例如"副歌"。name 可空 —— 单段落的歌常没有名字。
 @immutable
 class Section {
   final String? name;
@@ -48,34 +47,43 @@ class Song {
   });
 }
 
-/// 超薄切片用的样例歌:Somewhere Over the Rainbow。
-/// 数据直接照搬 Web 版(index.html 里的 SONGS[0]),保证两版内容一致、便于对照。
-const Song sampleSong = Song(
-  title: '🌈 Somewhere Over the Rainbow',
-  tempo: 72,
-  beatsPerChord: 4,
-  sections: [
-    Section(lines: [
-      Line(
-        chords: ['C', 'G', 'Am', 'F'],
-        lyric: 'Somewhere over the rainbow, way up high',
-      ),
-      Line(
-        chords: ['C', 'G', 'Am', 'F'],
-        lyric: "And the dreams that you dream of, once in a lullaby",
-      ),
-      Line(
-        chords: ['C', 'G', 'Am', 'F'],
-        lyric: 'Somewhere over the rainbow, bluebirds fly',
-      ),
-      Line(
-        chords: ['C', 'G', 'Am', 'F'],
-        lyric: "And the dreams that you dare to, oh why oh why can't I",
-      ),
-    ]),
-    Section(
-      name: '🎵 接着那段 "What a wonderful world"',
-      lines: [
+/// 歌曲库。界面里用顶栏下拉框选一首。
+///
+/// 数据照搬 Web 版(index.html 的 SONGS)。原 IZ 版把《Over the Rainbow》和
+/// 《What a Wonderful World》串成一首串烧(medley),这里按"两首就该分两条"的
+/// 原则拆成两首,免得新手以为后半段是《Over the Rainbow》的词。
+const List<Song> songs = [
+  Song(
+    title: '🌈 Somewhere Over the Rainbow',
+    tempo: 72,
+    beatsPerChord: 4,
+    sections: [
+      Section(lines: [
+        Line(
+          chords: ['C', 'G', 'Am', 'F'],
+          lyric: 'Somewhere over the rainbow, way up high',
+        ),
+        Line(
+          chords: ['C', 'G', 'Am', 'F'],
+          lyric: "And the dreams that you dream of, once in a lullaby",
+        ),
+        Line(
+          chords: ['C', 'G', 'Am', 'F'],
+          lyric: 'Somewhere over the rainbow, bluebirds fly',
+        ),
+        Line(
+          chords: ['C', 'G', 'Am', 'F'],
+          lyric: "And the dreams that you dare to, oh why oh why can't I",
+        ),
+      ]),
+    ],
+  ),
+  Song(
+    title: '🌻 What a Wonderful World',
+    tempo: 70,
+    beatsPerChord: 4,
+    sections: [
+      Section(lines: [
         Line(
           chords: ['C', 'G', 'Am', 'F'],
           lyric: 'Well I see trees of green, red roses too',
@@ -88,7 +96,7 @@ const Song sampleSong = Song(
           chords: ['Am', 'F', 'C', 'G'],
           lyric: 'And I think to myself, what a wonderful world',
         ),
-      ],
-    ),
-  ],
-);
+      ]),
+    ],
+  ),
+];

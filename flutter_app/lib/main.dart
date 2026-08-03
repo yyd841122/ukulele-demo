@@ -1,8 +1,7 @@
 // 尤克里里弹唱练习 —— Flutter 版主入口 + 歌曲页。
 //
-// 这一版是【超薄切片】:把一首歌的"歌词 + 和弦"静态铺出来,
-// 先不接节拍器、不自动滚动、不高亮当前和弦。
-// 目标是在手机上亲眼看到"真正的尤克里里内容"用 Flutter 渲染出来 —— 证明构建链路能交付真东西。
+// 这一版:歌曲页能展示一首歌的"歌词 + 和弦",顶栏下拉框可切换不同歌。
+// 仍为静态:不接节拍器、不自动滚动、不高亮当前和弦。
 import 'package:flutter/material.dart';
 
 import 'models.dart';
@@ -11,7 +10,7 @@ void main() {
   runApp(const UkuleleApp());
 }
 
-/// App 根部件:决定主题,并把"歌曲页"设为首页。
+/// App 根部件:决定主题,把"歌曲页"设为首页。
 class UkuleleApp extends StatelessWidget {
   const UkuleleApp({super.key});
 
@@ -28,22 +27,31 @@ class UkuleleApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const SongScreen(song: sampleSong),
+      home: const SongScreen(),
     );
   }
 }
 
-/// 歌曲页:把一首歌的每一段、每一行铺出来。
-/// 每一行 = 上面一排和弦"贴片" + 下面一行歌词。
-class SongScreen extends StatelessWidget {
-  final Song song;
+/// 歌曲页:顶栏下拉选歌,正文铺出当前歌的每一段、每一行。
+/// 因为要"记住当前选的是哪首",这里用 StatefulWidget(带状态),
+/// 之前只显示一首时用的是 StatelessWidget。
+class SongScreen extends StatefulWidget {
+  const SongScreen({super.key});
 
-  const SongScreen({super.key, required this.song});
+  @override
+  State<SongScreen> createState() => _SongScreenState();
+}
+
+class _SongScreenState extends State<SongScreen> {
+  // 当前选中的歌在 songs 列表里的下标。默认第 0 首(Over the Rainbow)。
+  int _selected = 0;
 
   @override
   Widget build(BuildContext context) {
+    final song = songs[_selected];
+    final theme = Theme.of(context);
+
     // 把"段落标题(可选)+ 它的每一行"拍平成一个列表,丢进可滚动的 ListView。
-    // (这一步 ListView 还不会自己滚 —— 留给后面"自动滚动"切片。)
     final List<Widget> items = [];
     for (final section in song.sections) {
       if (section.name != null) {
@@ -54,23 +62,54 @@ class SongScreen extends StatelessWidget {
       }
     }
 
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(song.title),
-        // 顶部右上角显示速度信息(只展示,这一步还不能调)。
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Text(
-                '${song.tempo} BPM · ${song.beatsPerChord}拍/和弦',
-                style: theme.textTheme.bodySmall,
+        // 标题行:选歌下拉框(独占整行宽度,不再和 BPM 抢,就不会重叠出斑马纹)。
+        title: DropdownButton<int>(
+          value: _selected,
+          // 下拉框默认会在选中值下面画一条横线,顶栏里很难看,这里用空部件去掉。
+          underline: const SizedBox.shrink(),
+          // 让下拉框占满整行宽度:歌名才有地方放,而且下面的 FittedBox 才知道往多窄缩。
+          isExpanded: true,
+          items: [
+            for (var i = 0; i < songs.length; i++)
+              DropdownMenuItem(
+                value: i,
+                // FittedBox(scaleDown):歌名短就原样大小;太长就自动缩小字号塞进去,绝不溢出。
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    songs[i].title,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                  ),
+                ),
               ),
+          ],
+          onChanged: (i) {
+            if (i != null) {
+              setState(() => _selected = i);
+            }
+          },
+          dropdownColor: theme.colorScheme.surface,
+          // 下面这个 style 是"下拉框里当前显示的那行歌名"的文字样式。
+          style: theme.textTheme.titleMedium
+              ?.copyWith(color: theme.colorScheme.onSurface),
+          icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurface),
+        ),
+        // 第二行:速度信息。用 AppBar 的 bottom 槽放,跟标题各占一行,互不重叠。
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(24),
+          child: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              '${song.tempo} BPM · ${song.beatsPerChord}拍/和弦',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ),
-        ],
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -80,7 +119,7 @@ class SongScreen extends StatelessWidget {
   }
 }
 
-/// 段落标题(如"🎵 接着那段..."、"🎶 副歌")。下划线开头 = 这个部件只在本文件内用。
+/// 段落标题(如"🎶 副歌")。下划线开头 = 这个部件只在本文件内用。
 class _SectionHeader extends StatelessWidget {
   final String name;
 
