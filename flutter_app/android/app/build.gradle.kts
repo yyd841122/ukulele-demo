@@ -19,7 +19,9 @@ android {
         applicationId = "com.example.ukulele_demo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // soundpool 依赖的 AndroidX 库要求 minSdk ≥ 21,这里显式设到 24 满足它们。
+        // (荣耀300 是 Android 16,毫无影响;只是不再支持 Android 7 以下的老机器。)
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
