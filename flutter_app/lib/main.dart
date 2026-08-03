@@ -938,7 +938,7 @@ class _PracticeBar extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           // 扫弦型 / 预备拍数字(二选一):
-          // 正式播放:按8分音符槽位画一排 ↓/↑/(·休止),当前槽高亮放大;正拍(偶数槽)前留宽缝,把"一拍两槽"归成一组,节奏一眼可读。
+          // 正式播放:按8分音符槽位画一排 ↓/↑/(·休止),当前槽用颜色高亮(不变大,免得整排跳动晕眼);正拍(偶数槽)前留宽缝,把"一拍两槽"归成一组,节奏一眼可读。
           // 预备拍(countInNumber>0):换成大字 1..N 倒计时,当前那拍高亮(跟旧版一致)。
           countInNumber > 0
               ? Row(
@@ -976,9 +976,10 @@ class _PracticeBar extends StatelessWidget {
                       else
                         Text(
                           strumGrid[i] == StrumDir.down ? '↓' : '↑',
+                          // 只用颜色高亮当前那下,字号固定不变大——
+                          // 每个↓轮着放大会让整排一直跳动,手机上看久了晕眼。
                           style: TextStyle(
-                            fontSize: i == slot ? 24 : 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
                             color: i == slot ? cs.primary : cs.outline,
                           ),
                         ),
