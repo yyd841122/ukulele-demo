@@ -79,6 +79,14 @@ class _SongScreenState extends State<SongScreen> {
   // 已完整练了几遍:引擎从末尾循环回开头一次就 +1。给练习一点"打了多少卡"的反馈。
   int _loops = 0;
 
+  // —— 预备拍(倒计时)——
+  // _countInLeft:还剩几下预备拍没数(>0 表示正在数"1-2-3-4")。_tick 每次把它减 1,
+  // 减到 0 那一下 = 正式第1拍重音、正式开始。
+  // _everPlayed:这首歌这一轮"正式开始播"过了吗。只在"从头第一次按 ▶"给一轮预备拍;
+  // 暂停后恢复、以及自动循环回开头都不重复数——预备拍是给"人"准备手用的,机器自己循环不需要。
+  int _countInLeft = 0;
+  bool _everPlayed = false;
+
   // SoLoud:把两个嗒声各加载成一个"声源(AudioSource)"。每拍 play(src) 起一个全新实例从头播 →
   // 低延迟、每次从头响、连播不会变小声、第一拍也不会被吞(专为这种场景设计)。
   AudioSource? _normalSrc; // 普通"嗒"
@@ -154,12 +162,22 @@ class _SongScreenState extends State<SongScreen> {
       _timer?.cancel();
       _timer = null;
     } else {
-      // 立刻响当前这一拍(第 1 次按就是 beat 0),不用干等一个间隔。
+      // 从头第一次按 ▶:先数一轮预备拍(beatsPerChord 下"1-2-3-4"),给新手把手指放好的时间。
+      // 已经正式开始过(暂停后恢复)就不重复数;暂停在预备拍中间(_countInLeft>0)则接着数剩下的。
+      if (!_everPlayed && _countInLeft == 0) {
+        _countInLeft = songs[_selected].beatsPerChord;
+      }
+      // 立刻响当下这一下(预备拍第1下 或 正式的拍),不用干等一个间隔。
       _tick();
-      // 之后每一拍:先推进到下一拍,再响+刷新。推进放前面,重画时读到的才是"正在响"的那拍。
+      // 之后每一下:还在预备拍里就少一下、接着数;预备拍数完进入正常推进。
       _timer = Timer.periodic(_beatInterval, (_) {
-        _advance();
-        _tick();
+        if (_countInLeft > 0) {
+          _countInLeft--;
+          _tick();
+        } else {
+          _advance();
+          _tick();
+        }
       });
     }
     setState(() => _playing = !_playing);
@@ -175,6 +193,8 @@ class _SongScreenState extends State<SongScreen> {
       _idx = 0;
       _beat = 0;
       _loops = 0; // 换歌重新计数
+      _countInLeft = 0; // 换歌取消可能进行中的预备拍
+      _everPlayed = false; // 新歌从头算"还没正式开始",下次按 ▶ 会重新数预备拍
       _tempo = songs[i].tempo; // 新歌用新歌的原速,免得还按上一首调出来的慢速走
       _rebuildFlat();
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
@@ -197,14 +217,22 @@ class _SongScreenState extends State<SongScreen> {
     }
   }
 
-  /// 走一拍:播当前这一拍的声音 + 刷新界面(练习栏、和弦贴片、当前行高亮)+ 该滚就滚。
-  /// 这里【不】改 _beat/_idx —— 推进放 _advance() 里、在"下一拍"之前做。
-  /// 因为 setState 是延迟到下一帧才重画的:若这边 setState 完就 +1,重画时读到的会是 +1 后的值,
-  /// ↓ 会比声音快一拍(踩过的坑)。推进放前面就对了。
+  /// 走一下:播当前这一拍的声音 + 刷新界面。这里【不】改 _beat/_idx/_countInLeft ——
+  /// 推进/递减放在调用方(定时器回调)里、在"下一拍"之前做。
+  /// 因为 setState 是延迟到下一帧才重画的:若这边 setState 完就改值,重画时读到的会是改后的值,
+  /// ↓ 会比声音快一拍(踩过的坑)。递减放前面就对了。
+  /// 预备拍期间(_countInLeft>0):位置不动、不滚动,只响嗒声 + 练习栏显示倒计时数字。
   void _tick() {
-    _playClick(accent: _beat == 0); // 第 1 拍重音
-    setState(() {}); // 刷新:练习栏、和弦贴片、当前行高亮
-    _maybeScrollToCurrentLine();
+    if (_countInLeft > 0) {
+      // 预备拍:第1下也重音(跟正式第1拍一样),给"1"打头。其余轻。
+      final n = songs[_selected].beatsPerChord - _countInLeft + 1; // 显示的数字 1..N
+      _playClick(accent: n == 1);
+    } else {
+      _playClick(accent: _beat == 0); // 第 1 拍重音
+      _everPlayed = true; // 正式开始播了(之后暂停恢复不再数预备拍)
+    }
+    setState(() {}); // 刷新:练习栏(倒计时数字 / 扫弦点)、和弦贴片、当前行高亮
+    if (_countInLeft == 0) _maybeScrollToCurrentLine();
   }
 
   /// 推进到下一拍:拍数 +1,到组末就进下一个和弦(末尾循环)。在每次 _tick 之前调。
@@ -259,6 +287,11 @@ class _SongScreenState extends State<SongScreen> {
     final progress = _flat.isEmpty
         ? 0.0
         : (_idx + _beat / song.beatsPerChord) / _flat.length;
+
+    // 预备拍当前数到几(1..beatsPerChord);0 = 不在数预备拍。给练习栏把 ↓ 换成倒计时数字用。
+    final countInNumber = _countInLeft > 0
+        ? song.beatsPerChord - _countInLeft + 1
+        : 0;
 
     // 把"段落标题 + 每一行"拍平成列表,同时数出每个和弦/每行的全局下标,
     // 用来标记"当前该高亮哪个和弦贴片、哪行歌词"。
@@ -353,6 +386,7 @@ class _SongScreenState extends State<SongScreen> {
             currentChordIndex: currentChordIndex,
             beat: _beat,
             beatsPerChord: song.beatsPerChord,
+            countInNumber: countInNumber,
             nextChord: _flat.isEmpty ? '—' : _flat[(_idx + 1) % _flat.length],
             tempo: _tempo,
             minTempo: (song.tempo / 2).round(), // 最慢到原速一半
@@ -620,6 +654,7 @@ class _PracticeBar extends StatelessWidget {
   final int currentChordIndex; // 当前弹到这一行的第几个(0 起)
   final int beat; // 当前第几拍(0 起)
   final int beatsPerChord; // 一组几拍
+  final int countInNumber; // 预备拍当前数到几(1..beatsPerChord);0 = 不在数预备拍
   final String nextChord; // 下一个和弦名
   final int tempo; // 当前速度(可调,实际在用的 BPM)
   final int minTempo; // 滑块最慢一档(约原速一半)
@@ -634,6 +669,7 @@ class _PracticeBar extends StatelessWidget {
     required this.currentChordIndex,
     required this.beat,
     required this.beatsPerChord,
+    required this.countInNumber,
     required this.nextChord,
     required this.tempo,
     required this.minTempo,
@@ -675,26 +711,41 @@ class _PracticeBar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          // 扫弦点:一组几拍就画几个 ↓,当前那下用主色,其余暗淡。
+          // 扫弦点 / 预备拍数字:一组几拍就画几个,当前那个高亮。
+          // 预备拍(countInNumber>0)时改成大字 1..N 倒计时;正常播放时是一拍一个 ↓。
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               for (var i = 0; i < beatsPerChord; i++)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    '↓',
-                    style: TextStyle(
-                      fontSize: 22,
-                      color: i == beat ? cs.primary : cs.outline,
-                    ),
-                  ),
+                  child: countInNumber > 0
+                      ? Text(
+                          '${i + 1}',
+                          style: TextStyle(
+                            fontSize: i + 1 == countInNumber ? 28 : 18,
+                            fontWeight: FontWeight.bold,
+                            color: i + 1 == countInNumber
+                                ? cs.primary
+                                : cs.outline,
+                          ),
+                        )
+                      : Text(
+                          '↓',
+                          style: TextStyle(
+                            fontSize: 22,
+                            color: i == beat ? cs.primary : cs.outline,
+                          ),
+                        ),
                 ),
             ],
           ),
           const SizedBox(height: 4),
+          // 信息行:预备拍时提示"准备从哪个和弦开始";否则显示当前第几拍 + 下一个和弦。
           Text(
-            '第 ${beat + 1} / $beatsPerChord 拍  ·  下一个: $nextChord',
+            countInNumber > 0
+                ? '预备拍 · 准备从「${lineChords.isNotEmpty ? lineChords.first : '—'}」开始'
+                : '第 ${beat + 1} / $beatsPerChord 拍  ·  下一个: $nextChord',
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
