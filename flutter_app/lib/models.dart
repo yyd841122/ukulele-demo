@@ -89,6 +89,76 @@ const Map<String, List<int>> chordShapes = {
   'F': [2, 0, 1, 0],
 };
 
+/// 一拍 = 两个 8 分音符槽位。节奏型就按这些槽位描述,这样"上扫"这种落在后半拍的扫弦才表达得出来。
+/// 约定:槽 0 = 第1拍正拍、槽 1 = 第1拍的"&"(后半拍)、槽 2 = 第2拍正拍 …… 一个和弦共 beatsPerChord×2 个槽。
+/// 用 beatsPerChord×2 而不是更细的 16 分音符:尤克里里常用节奏型最细到半拍,够用且界面不挤。
+/// 一个扫弦的方向:向下扫 / 向上扫 / 这一下不扫(休止,留着看节奏空隙用)。
+enum StrumDir { down, up, rest }
+
+/// 节奏型里的一下扫弦:在哪个槽位、往哪个方向扫。
+@immutable
+class Strum {
+  final int slot;
+  final StrumDir dir;
+
+  const Strum(this.slot, this.dir);
+}
+
+/// 节奏型(Strum Pattern):在一个和弦内的扫弦序列。strums 里没出现的槽位 = 休止。
+@immutable
+class StrumPattern {
+  final String name;
+  final List<Strum> strums;
+
+  const StrumPattern({required this.name, required this.strums});
+
+  /// 拍成"按槽位取方向"的数组(长度 = beatsPerChord×2),给界面逐槽高亮用。
+  /// 没出现的槽算 rest;越界的扫弦忽略(防节奏型比一小节长)。
+  List<StrumDir> grid(int beatsPerChord) {
+    final g = List<StrumDir>.filled(beatsPerChord * 2, StrumDir.rest);
+    for (final s in strums) {
+      if (s.slot >= 0 && s.slot < g.length) g[s.slot] = s.dir;
+    }
+    return g;
+  }
+}
+
+/// 给一个和弦持续拍数,返回几个常用节奏型供选。
+/// 「全下」:每个正拍一个下扫(最简单,跟节拍器一拍一下一样)——新手起步用它。
+/// 「下上」:每个 8 分音符都扫(偶数槽下、奇数槽上)——稳的密集伴奏。
+/// 「海岛」(Island/Calypso):D - D U - U D U——尤克里里最招牌的节奏,练熟它能弹一大半流行歌。
+///   注:海岛按 4 拍和弦(8 槽)写的;别的拍数会自动截断(grid 会忽略越界槽),不崩但形状会怪。
+///   现有 4 首歌都是 4 拍,所以没问题。
+List<StrumPattern> patternsFor(int beatsPerChord) {
+  return [
+    StrumPattern(
+      name: '全下',
+      strums: [
+        for (var s = 0; s < beatsPerChord * 2; s += 2)
+          Strum(s, StrumDir.down),
+      ],
+    ),
+    StrumPattern(
+      name: '下上',
+      strums: [
+        for (var s = 0; s < beatsPerChord * 2; s++)
+          Strum(s, s.isEven ? StrumDir.down : StrumDir.up),
+      ],
+    ),
+    const StrumPattern(
+      name: '海岛',
+      strums: [
+        Strum(0, StrumDir.down),
+        Strum(2, StrumDir.down),
+        Strum(3, StrumDir.up),
+        Strum(5, StrumDir.up),
+        Strum(6, StrumDir.down),
+        Strum(7, StrumDir.up),
+      ],
+    ),
+  ];
+}
+
 /// 一行歌词,和弦用 [C] 标在"该弹的那个词"前面(行内和弦)。
 /// chords 是从歌词里解析出来的(按出现顺序),给节拍器拍扁成一条线往前推进用。
 @immutable
