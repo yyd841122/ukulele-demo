@@ -58,6 +58,9 @@ class _SongScreenState extends State<SongScreen> {
   // 当前按到"拍扁的和弦序列"里的第几个(0 = 第一个和弦)。每数够一组拍就前进一个。
   int _idx = 0;
   Timer? _timer;
+  // 可调速度(BPM)。默认 = 当前歌的原速;拖练习栏的滑块能放慢来练。换歌时重置回原速。
+  // 单独搞一个字段、不直接改 song.tempo:song.tempo 是"原速"这个只读事实,_tempo 才是"现在实际用多快"。
+  late int _tempo;
 
   // —— 拍扁后的歌曲数据(换歌时重建)——
   // 这首歌所有和弦按顺序拍成一条线,跨所有行。例:[C, G, Am, F, C, G, Am, F, ...]
@@ -79,6 +82,7 @@ class _SongScreenState extends State<SongScreen> {
   void initState() {
     super.initState();
     _rebuildFlat(); // 先把当前歌拍扁,界面第一次画就能显示"现在弹 第1个和弦"
+    _tempo = songs[_selected].tempo; // 默认原速(late 字段必须在第一次被读之前赋上值)
     _initAudio(); // 后台初始化引擎 + 加载两个音频(不 await,不卡界面)
   }
 
@@ -127,9 +131,9 @@ class _SongScreenState extends State<SongScreen> {
   }
 
   /// 两拍之间的间隔。BPM = 每分钟多少拍,所以一拍 = 60000毫秒 ÷ BPM。
-  /// 例:72 BPM → 60000/72 ≈ 833 毫秒一拍。
+  /// 例:72 BPM → 60000/72 ≈ 833 毫秒一拍。这里读 _tempo(可调),不读 song.tempo(原速)。
   Duration get _beatInterval =>
-      Duration(milliseconds: (60000 / songs[_selected].tempo).round());
+      Duration(milliseconds: (60000 / _tempo).round());
 
   /// 按一下 ▶/⏸:正在响就停,没响就接着弹。
   /// 对齐 Web:不归零、resume——暂停后再按 ▶ 接着上次停的地方继续;只有换歌才从头(见 _onSongChanged)。
@@ -158,9 +162,26 @@ class _SongScreenState extends State<SongScreen> {
       _selected = i;
       _idx = 0;
       _beat = 0;
+      _tempo = songs[i].tempo; // 新歌用新歌的原速,免得还按上一首调出来的慢速走
       _rebuildFlat();
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
     });
+  }
+
+  /// 拖滑块调速。正在播放时,旧 Timer.periodic 的间隔是【创建那一刻】就定死的、之后改 _tempo 它不知道,
+  /// 所以必须 cancel 掉、用新的 _beatInterval 再起一个(下一拍就按新速度来)。
+  /// 不归零位置(_idx/_beat 不动)、也不立刻补响一声——否则会跟刚才那拍叠在一起。
+  /// 暂停时调也没事:只更新 _tempo,下次按 ▶ 自然用新速度。
+  void _setTempo(int v) {
+    if (v == _tempo) return;
+    setState(() => _tempo = v);
+    if (_playing) {
+      _timer?.cancel();
+      _timer = Timer.periodic(_beatInterval, (_) {
+        _advance();
+        _tick();
+      });
+    }
   }
 
   /// 走一拍:播当前这一拍的声音 + 刷新界面(练习栏、和弦贴片、当前行高亮)+ 该滚就滚。
@@ -279,7 +300,7 @@ class _SongScreenState extends State<SongScreen> {
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '${song.tempo} BPM · ${song.beatsPerChord}拍 · 第1拍重音',
+              '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 第1拍重音',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
@@ -295,6 +316,10 @@ class _SongScreenState extends State<SongScreen> {
             beatsPerChord: song.beatsPerChord,
             nextChord:
                 _flat.isEmpty ? '—' : _flat[(_idx + 1) % _flat.length],
+            tempo: _tempo,
+            minTempo: (song.tempo / 2).round(), // 最慢到原速一半
+            maxTempo: (song.tempo * 2).round(), // 最快到原速两倍——放开加速练
+            onTempoChanged: _setTempo,
           ),
           // 歌词区:可滚动,当前行会自动滚到屏幕中间。
           Expanded(
@@ -549,12 +574,20 @@ class _PracticeBar extends StatelessWidget {
   final int beat; // 当前第几拍(0 起)
   final int beatsPerChord; // 一组几拍
   final String nextChord; // 下一个和弦名
+  final int tempo; // 当前速度(可调,实际在用的 BPM)
+  final int minTempo; // 滑块最慢一档(约原速一半)
+  final int maxTempo; // 滑块最快一档(原速)
+  final ValueChanged<int> onTempoChanged; // 拖滑块时回调父级 _setTempo
 
   const _PracticeBar({
     required this.chord,
     required this.beat,
     required this.beatsPerChord,
     required this.nextChord,
+    required this.tempo,
+    required this.minTempo,
+    required this.maxTempo,
+    required this.onTempoChanged,
   });
 
   @override
@@ -611,6 +644,39 @@ class _PracticeBar extends StatelessWidget {
           Text(
             '第 ${beat + 1} / $beatsPerChord 拍  ·  下一个: $nextChord',
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          // 调速滑块:左"调速"字、中间滑块、右边实时 BPM。范围约 = 原速的一半 ~ 两倍。
+          // clamp 是保险:万一 tempo 落在 [min,max] 外(理论上不会),Slider 会断言报错,钳一下就稳。
+          Row(
+            children: [
+              Text(
+                '调速',
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+              Expanded(
+                child: Slider(
+                  value: tempo.clamp(minTempo, maxTempo).toDouble(),
+                  min: minTempo.toDouble(),
+                  max: maxTempo.toDouble(),
+                  divisions: maxTempo > minTempo ? maxTempo - minTempo : null,
+                  label: '$tempo BPM',
+                  onChanged: (v) => onTempoChanged(v.round()),
+                ),
+              ),
+              SizedBox(
+                width: 60,
+                child: Text(
+                  '$tempo BPM',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
