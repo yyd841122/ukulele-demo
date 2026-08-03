@@ -87,6 +87,8 @@ const Map<String, List<int>> chordShapes = {
   'G': [0, 2, 3, 2],
   'Am': [2, 0, 0, 0],
   'F': [2, 0, 1, 0],
+  'D': [2, 2, 2, 0], // 三根手指按第2品(G C E)、A 空弦
+  'Em': [0, 4, 3, 2], // G 空弦,C 按第4品、E 第3品、A 第2品(够不着就慢慢练)
 };
 
 /// 一拍 = 两个 8 分音符槽位。节奏型就按这些槽位描述,这样"上扫"这种落在后半拍的扫弦才表达得出来。
@@ -281,6 +283,91 @@ const List<Song> songs = [
           Line(lyric: '[C]You make me happy when [G]skies are gray'),
           Line(lyric: "[C]You'll never know dear, [G]how much I love you"),
           Line(lyric: "[C]Please don't take my [G]sunshine [C]away"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🌴 Riptide',
+    tempo: 102,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: "[Am]I was scared of [G]dentists and the [C]dark"),
+          Line(
+            lyric: "[Am]I was scared of [G]pretty girls and [C]starting conversations",
+          ),
+          Line(lyric: "[Am]Oh, all my [G]friends are turning [C]green"),
+          Line(
+            lyric: "[Am]You're the ma[G]gician's assistant [C]in their dream",
+          ),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[Am]Lady, running [G]down to the [C]riptide"),
+          Line(lyric: "[Am]Taken away [G]to the dark [C]side"),
+          Line(lyric: "[Am]I wanna be your [G]left hand [C]man"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: "😎 I'm Yours",
+    tempo: 88,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(
+            lyric: "[G]Well you [D]done done me and you [Em]bet I felt it [C]",
+          ),
+          Line(
+            lyric: "[G]I tried to be [D]chill but you're so [Em]hot that I melted [C]",
+          ),
+          Line(
+            lyric: "[G]Listen to the [D]music of the [Em]moment people [C]dance and sing",
+          ),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(
+            lyric: "[G]But I won't [D]hesitate no [Em]more, no more [C]",
+          ),
+          Line(lyric: "[G]It cannot [D]wait, I'm [Em]yours [C]"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🌙 Stand By Me',
+    tempo: 118,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(
+            lyric: "[C]When the [Am]night has [F]come and the [G]land is dark",
+          ),
+          Line(
+            lyric: "[C]And the [Am]moon is the [F]only light we'll [G]see",
+          ),
+          Line(
+            lyric: "[C]No I [Am]won't be a-[F]fraid, no I [G]won't shed a tear",
+          ),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]So darlin', [Am]darlin' [F]stand, by [G]me"),
+          Line(
+            lyric: "[C]Oh [Am]stand, [F]by me, oh [G]stand, stand by me",
+          ),
         ],
       ),
     ],
