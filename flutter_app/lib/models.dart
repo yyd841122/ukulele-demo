@@ -141,16 +141,20 @@ const List<Song> songs = [
     tempo: 72,
     beatsPerChord: 4,
     sections: [
-      Section(lines: [
-        Line(lyric: '[C]Somewhere [G]over the [Am]rainbow, [F]way up high'),
-        Line(
+      Section(
+        lines: [
+          Line(lyric: '[C]Somewhere [G]over the [Am]rainbow, [F]way up high'),
+          Line(
             lyric:
-                '[C]And the [G]dreams that you [Am]dream of, [F]once in a lullaby'),
-        Line(lyric: '[C]Somewhere [G]over the [Am]rainbow, [F]bluebirds fly'),
-        Line(
+                '[C]And the [G]dreams that you [Am]dream of, [F]once in a lullaby',
+          ),
+          Line(lyric: '[C]Somewhere [G]over the [Am]rainbow, [F]bluebirds fly'),
+          Line(
             lyric:
-                "[C]And the [G]dreams that you [Am]dare to, [F]oh why oh why can't I"),
-      ]),
+                "[C]And the [G]dreams that you [Am]dare to, [F]oh why oh why can't I",
+          ),
+        ],
+      ),
     ],
   ),
   Song(
@@ -158,13 +162,57 @@ const List<Song> songs = [
     tempo: 70,
     beatsPerChord: 4,
     sections: [
-      Section(lines: [
-        Line(lyric: '[C]Well I [G]see trees of [Am]green, [F]red roses too'),
-        Line(lyric: '[C]I [G]watch them [Am]bloom for [F]me and you'),
-        Line(
+      Section(
+        lines: [
+          Line(lyric: '[C]Well I [G]see trees of [Am]green, [F]red roses too'),
+          Line(lyric: '[C]I [G]watch them [Am]bloom for [F]me and you'),
+          Line(
+            lyric: '[Am]And I [F]think to my[C]self, [G]what a wonderful world',
+          ),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🎹 Let It Be',
+    tempo: 70,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: '[C]When I [G]find myself [Am]in [F]times of trouble'),
+          Line(lyric: '[C]Mother [G]Mary [F]comes to [C]me'),
+          Line(lyric: '[C]Speaking [G]words of [Am]wisdom, [F]let it be'),
+          Line(
             lyric:
-                '[Am]And I [F]think to my[C]self, [G]what a wonderful world'),
-      ]),
+                '[C]And in my [G]hour of [F]darkness, she is standing right in front of [C]me',
+          ),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(
+            lyric: '[Am]Let it be, [G]let it be, [F]let it be, [C]let it be',
+          ),
+          Line(lyric: '[Am]Whisper [G]words of [F]wisdom, [C]let it be'),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '☀️ You Are My Sunshine',
+    tempo: 88,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: '[C]You are my [G]sunshine, my only sunshine'),
+          Line(lyric: '[C]You make me happy when [G]skies are gray'),
+          Line(lyric: "[C]You'll never know dear, [G]how much I love you"),
+          Line(lyric: "[C]Please don't take my [G]sunshine [C]away"),
+        ],
+      ),
     ],
   ),
 ];

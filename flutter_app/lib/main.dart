@@ -1,9 +1,9 @@
 // 尤克里里弹唱练习 —— Flutter 版主入口 + 歌曲页。
 //
-// 这一版:歌曲页展示"歌词 + 和弦",顶栏下拉框选歌,底部 ▶ 按一下就按 BPM 嗒嗒响(节拍器)。
+// 这一版:歌曲页展示"歌词 + 和弦",顶栏下拉框选歌,练习栏调速行最左的 ▶ 按一下就按 BPM 嗒嗒响(节拍器)。
 // 节拍器一边打拍、一边把"当前和弦"按拍数往前推进:顶部练习栏显示现在弹哪个、扫到第几下、下一个是什么;
 // 歌词里当前和弦贴片反色点亮、当前行微微高亮并自动滚到屏幕中间。播到末尾循环回开头。
-// 还没做:和弦指法图(下一切片)。
+// 练习栏里:一排和弦卡 = 当前这一行的和弦,弹到哪个、那张就变大指法图高亮,其余小参考;卡跟当前行一一对应。
 import 'dart:async'; // Timer(定时器)在这
 
 import 'package:flutter/material.dart';
@@ -67,10 +67,17 @@ class _SongScreenState extends State<SongScreen> {
   List<String> _flat = [];
   // 和 _flat 等长:每个和弦属于第几行(用来知道该高亮哪行歌词、滚到哪行)。
   List<int> _lineOfChord = [];
+  // 每一行歌词的和弦(按出现顺序、含重复),按"全局行下标"取。给练习栏那一排卡用——
+  // 那一排只显示【当前这一行】用到的和弦,跟正在唱的词一一对应,不掺别的行的和弦。
+  List<List<String>> _lineChords = [];
+  // 每一行第 1 个和弦在 _flat 里的起始下标。用来把全局 _idx 折算成"当前行内的第几个和弦"。
+  List<int> _lineStartFlat = [];
   // 每一行歌词一个 GlobalKey,自动滚动时靠它定位"滚到这一行"。
   List<GlobalKey> _lineKeys = [];
   // 上一次高亮的是第几行;变了才滚动,避免每拍都抖一下。
   int _lastLine = 0;
+  // 已完整练了几遍:引擎从末尾循环回开头一次就 +1。给练习一点"打了多少卡"的反馈。
+  int _loops = 0;
 
   // SoLoud:把两个嗒声各加载成一个"声源(AudioSource)"。每拍 play(src) 起一个全新实例从头播 →
   // 低延迟、每次从头响、连播不会变小声、第一拍也不会被吞(专为这种场景设计)。
@@ -86,17 +93,22 @@ class _SongScreenState extends State<SongScreen> {
     _initAudio(); // 后台初始化引擎 + 加载两个音频(不 await,不卡界面)
   }
 
-  /// 把当前选中的歌拍扁成练习用的三个数组:_flat / _lineOfChord / _lineKeys。
+  /// 把当前选中的歌拍扁成练习用的数组:_flat / _lineOfChord / _lineKeys,
+  /// 外加"每行的和弦 + 每行在 _flat 的起点"(给练习栏按"当前行"画那一排卡用)。
   /// 对齐 Web 版 buildSong() 里的 flat / lineOfChord 逻辑(逐行、按出现顺序)。
   void _rebuildFlat() {
     final song = songs[_selected];
     _flat = [];
     _lineOfChord = [];
     final keys = <GlobalKey>[];
+    _lineChords = [];
+    _lineStartFlat = [];
     var lineIdx = 0;
     for (final section in song.sections) {
       for (final line in section.lines) {
         keys.add(GlobalKey()); // 每行一个 key,自动滚动定位用
+        _lineChords.add(line.chords); // 这行的和弦(顺序、含重复)
+        _lineStartFlat.add(_flat.length); // 这行第 1 个和弦在 _flat 里的位置
         for (final c in line.chords) {
           _flat.add(c);
           _lineOfChord.add(lineIdx);
@@ -162,6 +174,7 @@ class _SongScreenState extends State<SongScreen> {
       _selected = i;
       _idx = 0;
       _beat = 0;
+      _loops = 0; // 换歌重新计数
       _tempo = songs[i].tempo; // 新歌用新歌的原速,免得还按上一首调出来的慢速走
       _rebuildFlat();
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
@@ -201,7 +214,13 @@ class _SongScreenState extends State<SongScreen> {
     if (_beat >= beatsPerChord) {
       _beat = 0;
       if (_flat.isNotEmpty) {
-        _idx = (_idx + 1) % _flat.length; // 下一个和弦;到末尾循环回开头
+        // 到末尾就循环回开头;走到头一次 = 又练完一遍,_loops +1。
+        if (_idx + 1 >= _flat.length) {
+          _idx = 0;
+          _loops++;
+        } else {
+          _idx++;
+        }
       }
     }
   }
@@ -234,6 +253,12 @@ class _SongScreenState extends State<SongScreen> {
   Widget build(BuildContext context) {
     final song = songs[_selected];
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    // 整首歌走到哪了(0~1):当前第几个和弦 + 这和弦里第几拍,折算成百分比。空歌算 0。
+    // 公式天然落在 [0, 1) 内(末尾和弦最后一拍 ≈ 0.94,循环回开头归 0),不用再钳位。
+    final progress = _flat.isEmpty
+        ? 0.0
+        : (_idx + _beat / song.beatsPerChord) / _flat.length;
 
     // 把"段落标题 + 每一行"拍平成列表,同时数出每个和弦/每行的全局下标,
     // 用来标记"当前该高亮哪个和弦贴片、哪行歌词"。
@@ -241,6 +266,14 @@ class _SongScreenState extends State<SongScreen> {
     final currentLine = (_flat.isEmpty || _idx >= _lineOfChord.length)
         ? 0
         : _lineOfChord[_idx];
+    // 练习栏那一排卡 =【当前这一行】的和弦(顺序、含重复);当前弹到行内第几个由 _idx 折算。
+    // 这样那一排永远跟正在唱的词一一对应,不会掺入别行的和弦(如 Let It Be 唱到 C G F C 那行就不该有 Am)。
+    final lineChords = currentLine < _lineChords.length
+        ? _lineChords[currentLine]
+        : <String>[];
+    final currentChordIndex = currentLine < _lineStartFlat.length
+        ? _idx - _lineStartFlat[currentLine]
+        : 0;
     var chordCursor = 0; // 走到第几个和弦(全局)
     var lineCursor = 0; // 走到第几行(全局)
     for (final section in song.sections) {
@@ -248,13 +281,15 @@ class _SongScreenState extends State<SongScreen> {
         items.add(_SectionHeader(section.name!));
       }
       for (final line in section.lines) {
-        items.add(_LineView(
-          line: line,
-          lineKey: _lineKeys[lineCursor],
-          isCurrentLine: lineCursor == currentLine,
-          chordStart: chordCursor, // 这一行第 1 个和弦的全局下标
-          currentChord: _idx,
-        ));
+        items.add(
+          _LineView(
+            line: line,
+            lineKey: _lineKeys[lineCursor],
+            isCurrentLine: lineCursor == currentLine,
+            chordStart: chordCursor, // 这一行第 1 个和弦的全局下标
+            currentChord: _idx,
+          ),
+        );
         chordCursor += line.chords.length;
         lineCursor++;
       }
@@ -289,8 +324,9 @@ class _SongScreenState extends State<SongScreen> {
           },
           dropdownColor: theme.colorScheme.surface,
           // 下面这个 style 是"下拉框里当前显示的那行歌名"的文字样式。
-          style: theme.textTheme.titleMedium
-              ?.copyWith(color: theme.colorScheme.onSurface),
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.onSurface,
+          ),
           icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurface),
         ),
         // 第二行:速度信息。用 AppBar 的 bottom 槽放,跟标题各占一行,互不重叠。
@@ -300,26 +336,38 @@ class _SongScreenState extends State<SongScreen> {
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 第1拍重音',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 第1拍重音${_loops > 0 ? ' · 已练 $_loops 遍' : ''}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ),
       ),
       body: Column(
         children: [
-          // 顶部练习栏:吸顶(在可滚动歌词上方),显示"现在弹哪个、扫到第几下、下一个是什么"。
+          // 顶部练习栏(吸顶):一排和弦卡 =【当前这一行】的和弦(弹到哪个、那张变大图高亮,其余小参考)+
+          // 这一组扫到第几下(一排 ↓)+ 下一个和弦 + 调速滑块。卡跟当前行一一对应,不掺别行的和弦。
           _PracticeBar(
-            chord: _flat.isEmpty ? '—' : _flat[_idx],
+            lineChords: lineChords,
+            currentChordIndex: currentChordIndex,
             beat: _beat,
             beatsPerChord: song.beatsPerChord,
-            nextChord:
-                _flat.isEmpty ? '—' : _flat[(_idx + 1) % _flat.length],
+            nextChord: _flat.isEmpty ? '—' : _flat[(_idx + 1) % _flat.length],
             tempo: _tempo,
             minTempo: (song.tempo / 2).round(), // 最慢到原速一半
             maxTempo: (song.tempo * 2).round(), // 最快到原速两倍——放开加速练
             onTempoChanged: _setTempo,
+            isPlaying: _playing,
+            canPlay: _ready,
+            onTogglePlay: _togglePlay,
+          ),
+          // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 3,
+            backgroundColor: cs.surfaceContainerHighest,
+            valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
           ),
           // 歌词区:可滚动,当前行会自动滚到屏幕中间。
           Expanded(
@@ -330,12 +378,7 @@ class _SongScreenState extends State<SongScreen> {
           ),
         ],
       ),
-      // 右下角大圆按钮:▶ 开始打拍 / ⏸ 停。节拍器的总开关。
-      // 音频还没加载好时 onPressed=null,按钮变灰按不动;加载好(几乎瞬间)就能用。
-      floatingActionButton: FloatingActionButton(
-        onPressed: _ready ? _togglePlay : null,
-        child: Icon(_playing ? Icons.pause : Icons.play_arrow),
-      ),
+      // ▶/⏸ 已挪进练习栏的调速行(最左小图标),不再用右下大圆按钮——它会在歌长时挡住歌词。
     );
   }
 }
@@ -401,7 +444,9 @@ class _LineView extends StatelessWidget {
       key: lineKey,
       padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
       decoration: BoxDecoration(
-        color: isCurrentLine ? cs.primaryContainer.withValues(alpha: 0.3) : null,
+        color: isCurrentLine
+            ? cs.primaryContainer.withValues(alpha: 0.3)
+            : null,
         borderRadius: BorderRadius.circular(6),
       ),
       // Wrap:词单元横向排开、窄屏自动换行。crossAxisAlignment=end → 所有词同基线,
@@ -567,10 +612,12 @@ class _ChordPainter extends CustomPainter {
       old.frets != frets || old.scale != scale;
 }
 
-/// 顶部练习栏(吸顶):现在弹哪个和弦(大指法图)+ 这一组扫到第几下(一排 ↓)+ 下一个和弦。
+/// 顶部练习栏(吸顶):一排和弦卡 =【当前这一行】的和弦,弹到哪个、那张就变大指法图并高亮,其余当小参考。
+/// 下面:这一组扫到第几下(一排 ↓)+ 下一个和弦 + 调速滑块。
 /// 数据全是父级算好传进来的;它自己没状态,只负责显示。对齐 Web 版 .panel。
 class _PracticeBar extends StatelessWidget {
-  final String chord; // 当前和弦名
+  final List<String> lineChords; // 当前这一行的和弦(顺序、含重复)
+  final int currentChordIndex; // 当前弹到这一行的第几个(0 起)
   final int beat; // 当前第几拍(0 起)
   final int beatsPerChord; // 一组几拍
   final String nextChord; // 下一个和弦名
@@ -578,9 +625,13 @@ class _PracticeBar extends StatelessWidget {
   final int minTempo; // 滑块最慢一档(约原速一半)
   final int maxTempo; // 滑块最快一档(原速)
   final ValueChanged<int> onTempoChanged; // 拖滑块时回调父级 _setTempo
+  final bool isPlaying; // 现在在打拍吗(决定显示 ⏸ 还是 ▶)
+  final bool canPlay; // 音频加载好了吗(没好就灰掉、按不动)
+  final VoidCallback onTogglePlay; // 按一下 ▶/⏸
 
   const _PracticeBar({
-    required this.chord,
+    required this.lineChords,
+    required this.currentChordIndex,
     required this.beat,
     required this.beatsPerChord,
     required this.nextChord,
@@ -588,11 +639,23 @@ class _PracticeBar extends StatelessWidget {
     required this.minTempo,
     required this.maxTempo,
     required this.onTempoChanged,
+    required this.isPlaying,
+    required this.canPlay,
+    required this.onTogglePlay,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // 这一行的和弦卡:按行内顺序排,弹到第几个(currentChordIndex)那张就变大图高亮,其余小参考。
+    // 第 1 张前面不留间距,之后每张前面塞 8px 间隙(Row 没有 spacing 参数,这是常见写法)。
+    final refCards = <Widget>[];
+    for (var i = 0; i < lineChords.length; i++) {
+      if (i > 0) refCards.add(const SizedBox(width: 8));
+      refCards.add(
+        _ChordRefCard(name: lineChords[i], isCurrent: i == currentChordIndex),
+      );
+    }
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -602,26 +665,15 @@ class _PracticeBar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(
-            '现在弹 $chord',
-            style: TextStyle(
-              fontSize: 13,
-              color: cs.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
+          // 一排和弦卡:这首歌所有和弦各一张,弹到哪个、那张就自动变大图并高亮,其余当小参考。
+          // 不再单独画大图——"现在弹哪个"由这一排里被放大的那张直接表达。横向可滚,和弦多也不撑爆。
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: refCards,
             ),
           ),
-          const SizedBox(height: 2),
-          // 大指法图:这和弦在 chordShapes 里有数据就画图;没有就退回显示字母(防以后加新和弦没数据)。
-          chordShapes.containsKey(chord)
-              ? ChordDiagram(frets: chordShapes[chord]!, scale: 1.3)
-              : Text(
-                  chord,
-                  style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.bold,
-                    color: cs.primary,
-                  ),
-                ),
           const SizedBox(height: 6),
           // 扫弦点:一组几拍就画几个 ↓,当前那下用主色,其余暗淡。
           Row(
@@ -646,10 +698,27 @@ class _PracticeBar extends StatelessWidget {
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          // 调速滑块:左"调速"字、中间滑块、右边实时 BPM。范围约 = 原速的一半 ~ 两倍。
+          // 调速行:最左 ▶/⏸ 小图标(节拍器总开关)+ "调速"字 + 中间滑块 + 右边实时 BPM。
+          // ▶/⏸ 从右下大圆按钮挪到这里当小图标,免得歌长时挡住歌词。
           // clamp 是保险:万一 tempo 落在 [min,max] 外(理论上不会),Slider 会断言报错,钳一下就稳。
           Row(
             children: [
+              IconButton(
+                onPressed: canPlay ? onTogglePlay : null,
+                tooltip: isPlaying ? '暂停' : '开始打拍',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                icon: Icon(
+                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                ),
+                style: IconButton.styleFrom(
+                  foregroundColor: cs.primary,
+                  disabledForegroundColor: cs.onSurfaceVariant.withValues(
+                    alpha: 0.4,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
               Text(
                 '调速',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
@@ -678,6 +747,64 @@ class _PracticeBar extends StatelessWidget {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 练习栏那一排里的和弦卡:和弦名(上)+ 指法图(下)。
+/// isCurrent(现在弹的这个)时:指法图放大、字号变大 + 主色高亮边框/底色——一排里被放大的那张就是"现在弹哪个"。
+/// 其余和弦用小一号指法图当参考。和弦在 chordShapes 里有数据就画图;没有(以后加了没录指法的)退回不崩。
+class _ChordRefCard extends StatelessWidget {
+  static const _currentScale = 1.0; // 当前和弦的大图
+  static const _otherScale = 0.65; // 其余参考和弦的小图
+
+  final String name;
+  final bool isCurrent;
+
+  const _ChordRefCard({required this.name, this.isCurrent = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final scale = isCurrent ? _currentScale : _otherScale;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 4, 6, 2),
+      decoration: BoxDecoration(
+        color: isCurrent
+            ? cs.primaryContainer.withValues(alpha: 0.55)
+            : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isCurrent ? cs.primary : cs.outlineVariant,
+          width: isCurrent ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            name,
+            style: TextStyle(
+              fontSize: isCurrent ? 15 : 12,
+              fontWeight: FontWeight.bold,
+              color: cs.primary,
+            ),
+          ),
+          // 有指法数据就画图(当前和弦用大图、其余小图);没数据时:当前和弦退回大字母、其余占位保高。
+          chordShapes.containsKey(name)
+              ? ChordDiagram(frets: chordShapes[name]!, scale: scale)
+              : isCurrent
+              ? Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: cs.primary,
+                  ),
+                )
+              : const SizedBox(height: 52),
         ],
       ),
     );
