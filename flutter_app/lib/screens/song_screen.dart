@@ -8,6 +8,7 @@
 import 'dart:async'; // Timer(定时器)在这
 
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../audio/audio_engine.dart';
 import '../models.dart';
@@ -197,6 +198,7 @@ class _SongScreenState extends State<SongScreen> {
     _accumulateSec(); // 把正在播放的尾段时间结进 _totalSec(没在播就是 no-op)
     _prefs?.setTempo(_selected, _tempo);
     _saveStats(); // 兜底存累计遍数 + 秒数
+    _setWakelock(false); // 离开页面:释放屏幕常亮,别一直亮着耗电
     // 页面销毁时收尾:停闹钟、释放音频声源,否则占资源。
     _timer?.cancel();
     _audio.dispose();
@@ -261,6 +263,17 @@ class _SongScreenState extends State<SongScreen> {
     return AbMarker.none;
   }
 
+  /// 屏幕(键盘)常亮开关:练琴(播放)时开,暂停/换歌/退出时关。
+  /// 包 try/catch:wakelock_plus 走平台通道,无头测试等环境没接好时 toggle 会抛
+  /// MissingPluginException——不能让它崩界面(测试里 _onSongChanged 也会走到这)。
+  Future<void> _setWakelock(bool on) async {
+    try {
+      await WakelockPlus.toggle(enable: on);
+    } catch (e) {
+      debugPrint('屏幕常亮切换失败: $e');
+    }
+  }
+
   /// 按一下 ▶/⏸:正在响就停,没响就接着弹。
   /// 对齐 Web:不归零、resume——暂停后再按 ▶ 接着上次停的地方继续;只有换歌才从头(见 _onSongChanged)。
   void _togglePlay() {
@@ -288,6 +301,7 @@ class _SongScreenState extends State<SongScreen> {
       _tick();
       _startTimer();
     }
+    _setWakelock(!_playing); // 要播就屏幕常亮、要停就恢复正常(_playing 还没翻,!它 = 新状态)
     setState(() => _playing = !_playing);
   }
 
@@ -295,6 +309,7 @@ class _SongScreenState extends State<SongScreen> {
   void _onSongChanged(int i) {
     _timer?.cancel();
     _timer = null;
+    _setWakelock(false); // 换歌 = 停下,屏幕恢复正常(新歌默认不播,要按 ▶ 才再亮)
     _accumulateSec(); // 把正在播放的这段时间结进【旧歌】的 _totalSec
     final p = _prefs;
     // 切走前先把【当前这首】(还没换的 _selected)的速度、AB、累计打卡都存下来——下次回来才接得上。

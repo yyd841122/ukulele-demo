@@ -38,6 +38,9 @@ dependencies:
   # 持久化用户偏好(上次选的歌、每首歌的速度、节奏型、AB 区间、扫弦声开关)。
   # 跨 app 重启记住"上次练到哪、调到多快",下次打开直接接上。
   shared_preferences: ^2.3.0
+  # 屏幕常亮:练琴(播放)时不让屏幕自动锁屏。只开"屏幕常亮"、不开 CPU wake_lock,
+  # 所以【不需要任何安卓权限 / Manifest 改动】。
+  wakelock_plus: ^1.7.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
