@@ -46,6 +46,7 @@ class LineView extends StatelessWidget {
   final AbMarker marker; // 这行的 AB 标记(none/a/b)
   final bool inRange; // 这行在 AB 区间内吗(区间内的行加左边框、淡底色)
   final VoidCallback? onTap; // 点这行 → 设 AB 循环点
+  final double fontScale; // 歌词字号缩放(1.0 = 默认):同时缩歌词词文字和上方和弦贴片字号
 
   const LineView({
     super.key,
@@ -57,6 +58,7 @@ class LineView extends StatelessWidget {
     this.marker = AbMarker.none,
     this.inRange = false,
     this.onTap,
+    this.fontScale = 1.0,
   });
 
   @override
@@ -70,7 +72,12 @@ class LineView extends StatelessWidget {
       final isCurrent = u.hasChord && chordStart + localChord == currentChord;
       if (u.hasChord) localChord++;
       children.add(
-        _WordUnitView(chord: u.chord, word: u.word, isCurrent: isCurrent),
+        _WordUnitView(
+          chord: u.chord,
+          word: u.word,
+          isCurrent: isCurrent,
+          fontScale: fontScale,
+        ),
       );
     }
     return GestureDetector(
@@ -151,22 +158,37 @@ class _WordUnitView extends StatelessWidget {
   final String? chord;
   final String word;
   final bool isCurrent;
+  final double fontScale;
 
-  const _WordUnitView({this.chord, required this.word, this.isCurrent = false});
+  const _WordUnitView({
+    this.chord,
+    required this.word,
+    this.isCurrent = false,
+    this.fontScale = 1.0,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // 在主题正文字号上乘 fontScale:保留主题的行高/字重,只动字号大小。
+    final wordStyle = theme.textTheme.bodyLarge?.copyWith(
+      fontSize: (theme.textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
+    );
     if (chord == null) {
-      return Text(word, style: theme.textTheme.bodyLarge);
+      return Text(word, style: wordStyle);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _ChordChip(chord!, isCurrent: isCurrent, compact: true),
+        _ChordChip(
+          chord!,
+          isCurrent: isCurrent,
+          compact: true,
+          fontScale: fontScale,
+        ),
         const SizedBox(height: 3),
-        Text(word, style: theme.textTheme.bodyLarge),
+        Text(word, style: wordStyle),
       ],
     );
   }
@@ -179,8 +201,14 @@ class _ChordChip extends StatelessWidget {
   final String chord;
   final bool isCurrent;
   final bool compact;
+  final double fontScale;
 
-  const _ChordChip(this.chord, {this.isCurrent = false, this.compact = false});
+  const _ChordChip(
+    this.chord, {
+    this.isCurrent = false,
+    this.compact = false,
+    this.fontScale = 1.0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +228,8 @@ class _ChordChip extends StatelessWidget {
         style: TextStyle(
           color: isCurrent ? cs.onPrimary : cs.onPrimaryContainer,
           fontWeight: FontWeight.bold,
-          fontSize: compact ? 12 : 14,
+          // 跟着歌词字号一起缩,贴片和词才协调(词放大贴片不跟着会显小)。
+          fontSize: (compact ? 12 : 14) * fontScale,
         ),
       ),
     );

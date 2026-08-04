@@ -77,4 +77,15 @@ void main() {
     expect(p2.getLoops(1), 0); // 别的歌没存 → 0
     expect(p2.getSec(1), 0);
   });
+
+  test('歌词字号:存了能读回,没存过给默认 1.0', () async {
+    final p = await AppPreferences.load();
+    expect(p.getLyricScale(), 1.0); // 没存过 → 默认
+
+    await p.setLyricScale(1.4);
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getLyricScale(), 1.4);
+    expect(p2.getLyricScale(0.9), 1.4); // 存过就忽略 fallback
+  });
 }

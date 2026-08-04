@@ -85,6 +85,9 @@ class _SongScreenState extends State<SongScreen> {
   // 自动提速开关:开 = 每过一遍(整曲到尾 / AB 到 B)+3 BPM、到原速停(渐进提速练法)。跨歌保留。
   bool _rampOn = false;
 
+  // 歌词字号缩放(1.0 = 默认;界面 Slider 限定 0.8~1.8)。全局偏好——跟哪首歌无关。
+  double _lyricScale = 1.0;
+
   // —— 分段 AB 循环 ——
   // _markerA / _markerB:用户在歌词上点的两个"循环点"(行下标)。两个都标好 → 引擎到 B 行末尾跳回 A 行开头反复。
   // 只标了 A(_markerB 仍 null)= 还没成区间,只在那一行显示 A 徽标。换歌清空(行下标是按某首歌的行算的,不能跨歌保留)。
@@ -123,6 +126,7 @@ class _SongScreenState extends State<SongScreen> {
           .clamp(0, patternsFor(songs[_selected].beatsPerChord).length - 1);
       _strumSoundOn = p.getStrumSound(true);
       _rampOn = p.getRamp();
+      _lyricScale = p.getLyricScale(1.0).clamp(0.8, 1.8); // Slider 区间,防存了个越界值
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
       _tempo = p.getTempo(_selected) ?? songs[_selected].tempo;
       _totalLoops = p.getLoops(_selected); // 上次这首歌累计练的遍数
@@ -473,6 +477,71 @@ class _SongScreenState extends State<SongScreen> {
     _prefs?.setSec(_selected, _totalSec);
   }
 
+  /// 字号对话框:Slider 实时拖、歌词背后跟着变,松手就存(跨重启保留)。复位一键回 1.0。
+  /// 用 StatefulBuilder 让对话框自己的 Slider 文字/百分比跟着拖动刷新;
+  /// 同时调本页 setState,歌词区实时缩放(所见即所得,不用关对话框才看到效果)。
+  void _showFontScaleDialog() {
+    var v = _lyricScale;
+    void apply(double nv) {
+      v = nv;
+      setState(() => _lyricScale = nv);
+      _prefs?.setLyricScale(nv);
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSt) {
+            return AlertDialog(
+              title: const Text('歌词字号'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 预览一行带和弦的词,用当前缩放,直观看到调完多大
+                  Text(
+                    '[C]Somewhere [G]over the [Am]rainbow',
+                    style: Theme.of(ctx).textTheme.bodyLarge?.copyWith(
+                      fontSize:
+                          (Theme.of(ctx).textTheme.bodyLarge?.fontSize ?? 16) *
+                          v,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${(v * 100).round()}%',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Slider(
+                    min: 0.8,
+                    max: 1.8,
+                    divisions: 10, // 0.1 一档
+                    value: v,
+                    label: '${(v * 100).round()}%',
+                    onChanged: (nv) => setSt(() => apply(nv)),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => setSt(() => apply(1.0)),
+                  child: const Text('复位'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('完成'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   /// 秒数 → "Xs" / "Xm" / "XhYm",给顶栏显示用(<60s 显示秒,够 1 分钟显示分,够 1 小时显示时分)。
   String _fmtSec(int sec) {
     if (sec < 60) return '${sec}s';
@@ -548,6 +617,7 @@ class _SongScreenState extends State<SongScreen> {
             currentChord: _idx,
             marker: marker,
             inRange: inRange,
+            fontScale: _lyricScale,
             onTap: () => _onLineTapped(lineIdx),
           ),
         );
@@ -609,8 +679,13 @@ class _SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
-        // 顶栏右侧"和弦速查"图标:点开进速查页(大图 + 点听声)。复用本页的 AudioEngine,不二次 init。
+        // 顶栏右侧图标:字号(调歌词大小)+ 和弦速查(大图 + 点听声)。复用本页 AudioEngine,不二次 init。
         actions: [
+          IconButton(
+            icon: const Icon(Icons.format_size_rounded),
+            tooltip: '歌词字号',
+            onPressed: _showFontScaleDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.library_music_rounded),
             tooltip: '和弦速查',

@@ -35,6 +35,12 @@ class AppPreferences {
       _prefs.getBool(_kRamp) ?? fallback;
   Future<void> setRamp(bool v) => _prefs.setBool(_kRamp, v);
 
+  // 歌词字号缩放(1.0 = 默认大小;>1 放大、<1 缩小)。全局偏好——一个人看歌词的习惯跟哪首歌无关。
+  // 调用方负责 clamp 到合理区间(界面 Slider 限定 0.8~1.8);这里只管原样存/读,跟 tempo 一个套路。
+  double getLyricScale([double fallback = 1.0]) =>
+      _prefs.getDouble(_kLyricScale) ?? fallback;
+  Future<void> setLyricScale(double v) => _prefs.setDouble(_kLyricScale, v);
+
   // —— 按歌存的偏好(key 带歌曲下标)——
   // 某首歌上次调到的速度(BPM);没存过返回 null → 用原速。
   int? getTempo(int songIndex) => _prefs.getInt('$_kTempoPrefix$songIndex');
@@ -81,6 +87,7 @@ class AppPreferences {
   static const _kPatternIndex = 'pref_pattern_index';
   static const _kStrumSound = 'pref_strum_sound';
   static const _kRamp = 'pref_ramp';
+  static const _kLyricScale = 'pref_lyric_scale';
   static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲下标,如 pref_tempo_2
   static const _kAbAPrefix = 'pref_ab_a_'; // 后接歌曲下标
   static const _kAbBPrefix = 'pref_ab_b_';
