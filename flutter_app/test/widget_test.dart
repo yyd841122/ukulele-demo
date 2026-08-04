@@ -39,4 +39,16 @@ void main() {
     // 切完后顶栏变成第二首的歌名
     expect(find.textContaining('What a Wonderful World'), findsOneWidget);
   });
+
+  testWidgets('下拉框里有新加的 3 首歌', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    // 点开顶栏下拉框
+    await tester.tap(find.byType(DropdownButton<int>));
+    await tester.pumpAndSettle();
+
+    // 第20步新追加的 3 首歌都在列表里(用已有和弦 C/G/Am/F/D/Em,不动音频)
+    expect(find.textContaining('Hey Soul Sister'), findsOneWidget);
+    expect(find.textContaining('Zombie'), findsOneWidget);
+    expect(find.textContaining('Counting Stars'), findsOneWidget);
+  });
 }

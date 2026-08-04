@@ -129,8 +129,10 @@ class StrumPattern {
 /// 「全下」:每个正拍一个下扫(最简单,跟节拍器一拍一下一样)——新手起步用它。
 /// 「下上」:每个 8 分音符都扫(偶数槽下、奇数槽上)——稳的密集伴奏。
 /// 「海岛」(Island/Calypso):D - D U - U D U——尤克里里最招牌的节奏,练熟它能弹一大半流行歌。
-///   注:海岛按 4 拍和弦(8 槽)写的;别的拍数会自动截断(grid 会忽略越界槽),不崩但形状会怪。
-///   现有 4 首歌都是 4 拍,所以没问题。
+/// 「民谣」(Folk):D - D U U - D U——民谣弹唱常用,比海岛多一个正拍下扫、更稳。
+/// 「摇滚」:D - D U D U D U——密集连续扫,鼓点感强、推得动。
+///   注:海岛/民谣/摇滚都按 4 拍和弦(8 槽)写的;别的拍数会自动截断(grid 会忽略越界槽),不崩但形状会怪。
+///   现有歌曲都是 4 拍,所以没问题。
 List<StrumPattern> patternsFor(int beatsPerChord) {
   return [
     StrumPattern(
@@ -153,6 +155,29 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
         Strum(0, StrumDir.down),
         Strum(2, StrumDir.down),
         Strum(3, StrumDir.up),
+        Strum(5, StrumDir.up),
+        Strum(6, StrumDir.down),
+        Strum(7, StrumDir.up),
+      ],
+    ),
+    const StrumPattern(
+      name: '民谣',
+      strums: [
+        Strum(0, StrumDir.down),
+        Strum(2, StrumDir.down),
+        Strum(3, StrumDir.up),
+        Strum(4, StrumDir.up),
+        Strum(6, StrumDir.down),
+        Strum(7, StrumDir.up),
+      ],
+    ),
+    const StrumPattern(
+      name: '摇滚',
+      strums: [
+        Strum(0, StrumDir.down),
+        Strum(2, StrumDir.down),
+        Strum(3, StrumDir.up),
+        Strum(4, StrumDir.down),
         Strum(5, StrumDir.up),
         Strum(6, StrumDir.down),
         Strum(7, StrumDir.up),
@@ -367,6 +392,106 @@ const List<Song> songs = [
           Line(lyric: "[C]So darlin', [Am]darlin' [F]stand, by [G]me"),
           Line(
             lyric: "[C]Oh [Am]stand, [F]by me, oh [G]stand, stand by me",
+          ),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🚂 Hey Soul Sister',
+    tempo: 104,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(
+            lyric:
+                '[C]Your lipstick stains, on the [G]front lobe of my left side [Am]brains [F]',
+          ),
+          Line(
+            lyric:
+                "[C]I knew I wouldn't [G]forget you, and so I went and [Am]let you blow my [F]mind",
+          ),
+          Line(
+            lyric:
+                '[C]Your sweet moon beam, the [G]smell of you in every [Am]single dream I [F]dream',
+          ),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(
+            lyric:
+                "[C]He-e-ey, soul sister, [G]ain't that Mr. Mister [Am]on the radio, [F]stereo",
+          ),
+          Line(
+            lyric:
+                "[C]He-e-ey, soul sister, [G]I don't wanna miss a [Am]single thing you [F]do, [C]tonight",
+          ),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🧟 Zombie',
+    tempo: 82,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(
+            lyric:
+                '[Em]Another head hangs [C]lowly, child is [G]slowly taken [D]',
+          ),
+          Line(
+            lyric:
+                '[Em]And the violence [C]caused such silence, who are [G]we mistaken [D]',
+          ),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(
+            lyric:
+                '[Em]In your head, in your [C]head, [G]zombie, [D]zombie',
+          ),
+          Line(
+            lyric:
+                "[Em]What's in your head, in your [C]head, [G]zombie, [D]zombie",
+          ),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🌅 Counting Stars',
+    tempo: 122,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(
+            lyric:
+                '[Am]I see this life, like a [C]swinging vine, swing my [G]heart across the [F]line',
+          ),
+          Line(
+            lyric:
+                '[Am]In my face is flashing signs, [C]seek it out and ye shall [G]find [F]',
+          ),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(
+            lyric:
+                "[Am]Lately I've been, I've been [C]losing sleep, [G]dreaming about the things that we [F]could be",
+          ),
+          Line(
+            lyric:
+                "[Am]Baby I've been, I've been [C]praying hard, said no more [G]counting dollars, we'll be [F]counting stars",
           ),
         ],
       ),

@@ -105,8 +105,10 @@ class _SongScreenState extends State<SongScreen> {
     setState(() {
       _prefs = p;
       _selected = p.getSongIndex(_selected).clamp(0, songs.length - 1);
-      // patternsFor 现在固定返回 3 个节奏型;clamp 防万一存了个越界值。
-      _patternIndex = p.getPatternIndex(_patternIndex).clamp(0, 2);
+      // clamp 防万一存了个越界值(节奏型以后还会加);上界按当前歌的节奏型数量动态取,别写死成数字。
+      _patternIndex = p
+          .getPatternIndex(_patternIndex)
+          .clamp(0, patternsFor(songs[_selected].beatsPerChord).length - 1);
       _strumSoundOn = p.getStrumSound(true);
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
       _tempo = p.getTempo(_selected) ?? songs[_selected].tempo;
