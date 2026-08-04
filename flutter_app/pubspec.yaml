@@ -35,6 +35,9 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_soloud: ^4.1.4
+  # 持久化用户偏好(上次选的歌、每首歌的速度、节奏型、AB 区间、扫弦声开关)。
+  # 跨 app 重启记住"上次练到哪、调到多快",下次打开直接接上。
+  shared_preferences: ^2.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

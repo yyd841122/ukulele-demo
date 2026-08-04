@@ -1,0 +1,584 @@
+// 歌曲页:顶栏下拉选歌,正文铺出当前歌的每一段、每一行;节拍器一边打拍、一边推进"当前和弦"。
+// 从 main.dart 拆出(第19步重构)。这里只放 SongScreen + 它的状态;界面部件在 widgets/,音频在 audio/。
+//
+// 这一版:歌曲页展示"歌词 + 和弦",顶栏下拉框选歌,练习栏调速行最左的 ▶ 按一下就按 BPM 嗒嗒响(节拍器)。
+// 节拍器一边打拍、一边把"当前和弦"按拍数往前推进:顶部练习栏显示现在弹哪个、扫到第几下、下一个是什么;
+// 歌词里当前和弦贴片反色点亮、当前行微微高亮并自动滚到屏幕中间。播到末尾循环回开头。
+// 练习栏里:一排和弦卡 = 当前这一行的和弦,弹到哪个、那张就变大指法图高亮,其余小参考;卡跟当前行一一对应。
+import 'dart:async'; // Timer(定时器)在这
+
+import 'package:flutter/material.dart';
+
+import '../audio/audio_engine.dart';
+import '../models.dart';
+import '../prefs/app_preferences.dart';
+import '../widgets/lyric_view.dart';
+import '../widgets/practice_bar.dart';
+
+/// 歌曲页:顶栏下拉选歌,正文铺出当前歌的每一段、每一行。
+/// 因为要"记住当前选的是哪首"+ 节拍器状态,这里用 StatefulWidget(带状态)。
+class SongScreen extends StatefulWidget {
+  const SongScreen({super.key});
+
+  @override
+  State<SongScreen> createState() => _SongScreenState();
+}
+
+class _SongScreenState extends State<SongScreen> {
+  // 当前选中的歌在 songs 列表里的下标。默认第 0 首(Over the Rainbow)。
+  int _selected = 0;
+
+  // —— 节拍器状态 ——
+  // _playing:现在正在打拍子吗;_timer:每隔多久响一次的"闹钟"。
+  bool _playing = false;
+  // 当前是这一组和弦里的第几个【8分音符槽位】(0 = 第1拍正拍 = 要播重音;1 = 第1拍的"&"……)。
+  // 一组共 beatsPerChord×2 个槽。用半拍粒度定时,是为了让"上扫↑"这种落在拍间的扫弦(海岛节奏)能逐下高亮。
+  // 第几拍 = _slot ~/ 2;偶数槽 = 正拍(响节拍器)、奇数槽 = 后半拍(不响,留给上扫)。
+  int _slot = 0;
+  // 当前按到"拍扁的和弦序列"里的第几个(0 = 第一个和弦)。每数够一组拍就前进一个。
+  int _idx = 0;
+  Timer? _timer;
+  // 可调速度(BPM)。默认 = 当前歌的原速;拖练习栏的滑块能放慢来练。换歌时重置回原速。
+  // 单独搞一个字段、不直接改 song.tempo:song.tempo 是"原速"这个只读事实,_tempo 才是"现在实际用多快"。
+  late int _tempo;
+
+  // —— 拍扁后的歌曲数据(换歌时重建)——
+  // 这首歌所有和弦按顺序拍成一条线,跨所有行。例:[C, G, Am, F, C, G, Am, F, ...]
+  List<String> _flat = [];
+  // 和 _flat 等长:每个和弦属于第几行(用来知道该高亮哪行歌词、滚到哪行)。
+  List<int> _lineOfChord = [];
+  // 每一行歌词的和弦(按出现顺序、含重复),按"全局行下标"取。给练习栏那一排卡用——
+  // 那一排只显示【当前这一行】用到的和弦,跟正在唱的词一一对应,不掺别的行的和弦。
+  List<List<String>> _lineChords = [];
+  // 每一行第 1 个和弦在 _flat 里的起始下标。用来把全局 _idx 折算成"当前行内的第几个和弦"。
+  List<int> _lineStartFlat = [];
+  // 每一行歌词一个 GlobalKey,自动滚动时靠它定位"滚到这一行"。
+  List<GlobalKey> _lineKeys = [];
+  // 上一次高亮的是第几行;变了才滚动,避免每拍都抖一下。
+  int _lastLine = 0;
+  // 已完整练了几遍:引擎从末尾循环回开头一次就 +1。给练习一点"打了多少卡"的反馈。
+  int _loops = 0;
+
+  // —— 预备拍(倒计时)——
+  // _inCountIn:正在数预备拍吗。从头第一次按 ▶ 时置 true,数完一小节(beatsPerChord×2 个槽)置 false。
+  // _everPlayed:这首歌这一轮"正式开始播"过了吗。只在"从头第一次按 ▶"给一轮预备拍;
+  // 暂停后恢复、以及自动循环回开头都不重复数——预备拍是给"人"准备手用的,机器自己循环不需要。
+  bool _inCountIn = false;
+  bool _everPlayed = false;
+
+  // —— 扫弦节奏型 ——
+  // 当前选的第几个节奏型(patternsFor 返回的那几个)。换歌不重置——节奏型是练习偏好,跨歌保留。
+  int _patternIndex = 0;
+
+  // 扫弦声开关:开 = 播放时按节奏型播真扫弦声(代替嗒声);关 = 只敲节拍器嗒声。跨歌保留。
+  bool _strumSoundOn = true;
+
+  // —— 分段 AB 循环 ——
+  // _markerA / _markerB:用户在歌词上点的两个"循环点"(行下标)。两个都标好 → 引擎到 B 行末尾跳回 A 行开头反复。
+  // 只标了 A(_markerB 仍 null)= 还没成区间,只在那一行显示 A 徽标。换歌清空(行下标是按某首歌的行算的,不能跨歌保留)。
+  int? _markerA;
+  int? _markerB;
+
+  // 音频引擎:统一管 SoLoud(嗒声;后面加扫弦声)。SongScreen 只持有它、调它的方法。
+  final AudioEngine _audio = AudioEngine();
+  bool _ready = false; // 引擎和音频都加载好了吗(没好之前 ▶ 按钮变灰、按了也不出声)
+
+  // 持久化:记住上次的歌 / 速度 / 节奏型 / AB 区间。initState 里异步加载(_loadPrefs),
+  // 没加载好之前是 null —— 各保存点都用 ?. 守住,加载好才真写。
+  AppPreferences? _prefs;
+
+  @override
+  void initState() {
+    super.initState();
+    _rebuildFlat(); // 先把当前歌拍扁,界面第一次画就能显示"现在弹 第1个和弦"
+    _tempo = songs[_selected].tempo; // 默认原速(late 字段必须在第一次被读之前赋上值)
+    _initAudio(); // 后台初始化引擎 + 加载音频(不 await,不卡界面)
+    _loadPrefs(); // 异步读上次的歌/速度/节奏型/AB,读好再 reconcile(不卡首帧:首帧先用默认值画)
+  }
+
+  /// 异步读持久化偏好,读好把状态 reconcile 到上次的值(上次的歌、那首歌的速度、节奏型、AB)。
+  /// 不阻塞首帧:首帧用默认值(歌0 / 原速)先画,这里读完再 setState 切过去。
+  /// 测试环境 SharedPreferences 是自动 mock 的空库 → 读出来都是默认值,reconcile 等于没动。
+  Future<void> _loadPrefs() async {
+    final p = await AppPreferences.load();
+    if (!mounted) return;
+    setState(() {
+      _prefs = p;
+      _selected = p.getSongIndex(_selected).clamp(0, songs.length - 1);
+      // patternsFor 现在固定返回 3 个节奏型;clamp 防万一存了个越界值。
+      _patternIndex = p.getPatternIndex(_patternIndex).clamp(0, 2);
+      _strumSoundOn = p.getStrumSound(true);
+      _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
+      _tempo = p.getTempo(_selected) ?? songs[_selected].tempo;
+      _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
+      // AB 是按歌存的行下标:万一 songs 改过、行数变了,越界的丢弃(否则后面 _loopStartLine 会越界)。
+      final ab = p.getAb(_selected);
+      _markerA = _validLine(ab?.a);
+      _markerB = _validLine(ab?.b);
+    });
+  }
+
+  /// 校验一个载入的 AB 行下标是否还在当前歌的合法行范围内;不在就返回 null(丢弃)。
+  int? _validLine(int? l) {
+    if (l == null) return null;
+    final total = _lineKeys.length; // 当前歌总行数
+    return (l >= 0 && l < total) ? l : null;
+  }
+
+  /// 把当前 AB 区间写回持久化(成对存/清)。只在区间【成段】(两点都设好)或【清除】时存;
+  /// A-only(刚开始标、还没成段)不存——重启不该恢复个半成品。
+  void _saveAb() {
+    final p = _prefs;
+    if (p == null) return;
+    if (_abActive) {
+      p.setAb(_selected, _markerA, _markerB);
+    } else {
+      p.setAb(_selected, null, null);
+    }
+  }
+
+  /// 把当前选中的歌拍扁成练习用的数组:_flat / _lineOfChord / _lineKeys,
+  /// 外加"每行的和弦 + 每行在 _flat 的起点"(给练习栏按"当前行"画那一排卡用)。
+  /// 对齐 Web 版 buildSong() 里的 flat / lineOfChord 逻辑(逐行、按出现顺序)。
+  void _rebuildFlat() {
+    final song = songs[_selected];
+    _flat = [];
+    _lineOfChord = [];
+    final keys = <GlobalKey>[];
+    _lineChords = [];
+    _lineStartFlat = [];
+    var lineIdx = 0;
+    for (final section in song.sections) {
+      for (final line in section.lines) {
+        keys.add(GlobalKey()); // 每行一个 key,自动滚动定位用
+        _lineChords.add(line.chords); // 这行的和弦(顺序、含重复)
+        _lineStartFlat.add(_flat.length); // 这行第 1 个和弦在 _flat 里的位置
+        for (final c in line.chords) {
+          _flat.add(c);
+          _lineOfChord.add(lineIdx);
+        }
+        lineIdx++;
+      }
+    }
+    _lineKeys = keys;
+  }
+
+  /// 后台初始化音频引擎(加载嗒声)。加载好了 _ready=true。失败(如测试环境)打日志、_ready 保持 false。
+  Future<void> _initAudio() async {
+    final ok = await _audio.init();
+    if (!mounted) return;
+    if (ok) setState(() => _ready = true);
+  }
+
+  @override
+  void dispose() {
+    // 页面销毁前最后存一次当前歌的速度(滑块拖动时不存、怕写太勤;走这里兜底)。
+    _prefs?.setTempo(_selected, _tempo);
+    // 页面销毁时收尾:停闹钟、释放音频声源,否则占资源。
+    _timer?.cancel();
+    _audio.dispose();
+    super.dispose();
+  }
+
+  /// 两个【8分音符槽位】之间的间隔(= 半拍)。BPM = 每分钟多少拍,一拍 = 60000/BPM 毫秒,半拍再 ÷2。
+  /// 例:72 BPM → 一拍 ≈ 833 毫秒,半拍 ≈ 417 毫秒。读 _tempo(可调),不读 song.tempo(原速)。
+  /// 用半拍粒度定时,是为了让"上扫"这种落在拍间的扫弦(海岛节奏)也能逐下高亮、跟得上。
+  Duration get _halfBeat =>
+      Duration(milliseconds: (30000 / _tempo).round());
+
+  // —— AB 循环的只读折算(仅在 _abActive 时调用才合法)——
+  bool get _abActive => _markerA != null && _markerB != null;
+  // A、B 谁先点不一定(可能先点后面的行),取小当起点、大当终点。
+  int get _loopStartLine => _markerA! <= _markerB! ? _markerA! : _markerB!;
+  int get _loopEndLine => _markerA! >= _markerB! ? _markerA! : _markerB!;
+  // AB 区间在 _flat 里的和弦范围:从起点行第 1 个和弦,到终点行最后一个和弦。
+  int get _loopFirstChord => _lineStartFlat[_loopStartLine];
+  int get _loopLastChord =>
+      _lineStartFlat[_loopEndLine] + _lineChords[_loopEndLine].length - 1;
+
+  /// 点一行歌词:设 A,再点一行设 B(成区间、立刻把位置拉到 A 开头好让循环起跑);
+  /// 两个都标过后再点 = 重新开始(把这次点的当新 A)。给 LineView 的 onTap 用。
+  void _onLineTapped(int lineIdx) {
+    setState(() {
+      if (_markerA == null) {
+        _markerA = lineIdx;
+      } else if (_markerB == null) {
+        _markerB = lineIdx;
+        // 两点成区间 → 立刻跳到起点行第 1 个和弦、槽归 0,循环马上从 A 起跑。
+        _idx = _lineStartFlat[_loopStartLine];
+        _slot = 0;
+        _lastLine = (_lineOfChord.isNotEmpty && _idx < _lineOfChord.length)
+            ? _lineOfChord[_idx]
+            : _lastLine;
+      } else {
+        // 都标过了 → 重新开始:这次点的当新 A,清掉 B。
+        _markerA = lineIdx;
+        _markerB = null;
+      }
+    });
+    _saveAb(); // 区间变了就存(成段存、半成品/清除就清掉)
+  }
+
+  /// 清除 AB 区间,回到整曲循环。位置不动,让它自然走到下一处。
+  void _clearAb() {
+    setState(() {
+      _markerA = null;
+      _markerB = null;
+    });
+    _saveAb(); // 清掉了,把存的也清掉
+  }
+
+  /// 某一行该显示什么 AB 标记:none / a / b。给 LineView 画徽标用。
+  AbMarker _markerForLine(int l) {
+    if (_markerA == l && _markerB == null) return AbMarker.a; // 只标了 A
+    if (_abActive) {
+      if (l == _loopStartLine) return AbMarker.a;
+      if (l == _loopEndLine) return AbMarker.b;
+    }
+    return AbMarker.none;
+  }
+
+  /// 按一下 ▶/⏸:正在响就停,没响就接着弹。
+  /// 对齐 Web:不归零、resume——暂停后再按 ▶ 接着上次停的地方继续;只有换歌才从头(见 _onSongChanged)。
+  void _togglePlay() {
+    if (_playing) {
+      _timer?.cancel();
+      _timer = null;
+    } else {
+      // 从头第一次按 ▶:先数一小节预备拍(beatsPerChord 拍"1-2-3-4"),给新手把手指放好的时间。
+      // 已经正式开始过(暂停后恢复)就不重复数。预备拍借用 _slot 走一小节,数完进正式播放。
+      if (!_everPlayed) {
+        _inCountIn = true;
+        _slot = 0; // 预备拍从槽0(第1拍)开始
+        // 设了 AB 区间的话,"从头开始" = 从 A 行开头开始(而不是歌曲第1和弦),好让练习聚焦在指定段。
+        if (_abActive) {
+          _idx = _loopFirstChord;
+          _lastLine = (_lineOfChord.isNotEmpty && _idx < _lineOfChord.length)
+              ? _lineOfChord[_idx]
+              : _lastLine;
+        }
+      }
+      // 立刻响当下这一下(预备拍第1下 或 恢复处的槽),不用干等半拍。
+      _tick();
+      _startTimer();
+    }
+    setState(() => _playing = !_playing);
+  }
+
+  /// 换歌:速度可能变了,先停掉节拍器、把位置归零,再按新歌拍扁数据,免得还按上一首的旧结构走。
+  void _onSongChanged(int i) {
+    _timer?.cancel();
+    _timer = null;
+    final p = _prefs;
+    // 切走前先把【当前这首】(还没换的 _selected)的速度和 AB 存下来——下次回来才接得上。
+    if (p != null) {
+      p.setTempo(_selected, _tempo);
+      p.setAb(_selected, _markerA, _markerB);
+    }
+    setState(() {
+      _playing = false;
+      _selected = i;
+      _idx = 0;
+      _slot = 0;
+      _loops = 0; // 换歌重新计数
+      _inCountIn = false; // 换歌取消可能进行中的预备拍
+      _everPlayed = false; // 新歌从头算"还没正式开始",下次按 ▶ 会重新数预备拍
+      _markerA = null; // 换歌清空 AB(行下标按某首歌的行算,不能跨歌保留;AB 只在启动时恢复,不随切换蹦出来吓人)
+      _markerB = null;
+      // 切到新歌:用它【上次调到的速度】(没调过就原速)——每首歌记住自己的速度,来回切不丢。
+      _tempo = p?.getTempo(i) ?? songs[i].tempo;
+      _rebuildFlat();
+      _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
+    });
+    // 切完记下新的歌下标(下次启动直接进这首)。
+    p?.setSongIndex(i);
+  }
+
+  /// 拖滑块调速。正在播放时,旧 Timer.periodic 的间隔是【创建那一刻】就定死的、改 _tempo 它不知道,
+  /// 所以必须 cancel 掉、用新的 _halfBeat 再起一个(下一个槽就按新速度来)。
+  /// 不归零位置(_idx/_slot 不动)、也不立刻补响一声——否则会跟刚才那下叠在一起。
+  /// 暂停时调也没事:只更新 _tempo,下次按 ▶ 自然用新速度。
+  void _setTempo(int v) {
+    if (v == _tempo) return;
+    setState(() => _tempo = v);
+    if (_playing) {
+      _timer?.cancel();
+      _startTimer();
+    }
+  }
+
+  /// 起/重启半拍定时器:每个槽(8分音符)推进一下 + 响 + 刷新。按▶、调速都走它,推进逻辑只此一份。
+  void _startTimer() {
+    _timer = Timer.periodic(_halfBeat, (_) => _onTimerTick());
+  }
+
+  /// 定时器每一下(一个8分音符槽):先推进位置,再 _tick 响+刷新。推进放前面,重画读到的才是"正在响"那下。
+  /// 预备拍期间:_slot 走满一小节 = 预备拍结束 → 进正式播放。
+  /// 正式播放:一小节(= 一个和弦)走完 → 进下一个和弦,末尾循环回开头。
+  void _onTimerTick() {
+    final slotsPerBar = songs[_selected].beatsPerChord * 2;
+    _slot++;
+    if (_slot >= slotsPerBar) {
+      _slot = 0;
+      if (_inCountIn) {
+        // 预备拍数完一小节 → 正式开始(_idx 本就是 0,从第一和弦第一拍开始)
+        _inCountIn = false;
+        _everPlayed = true;
+      } else if (_flat.isNotEmpty) {
+        // AB 循环优先:到 B 行末尾就跳回 A 行开头(单独计一遍);否则正常推进 / 整曲末尾循环回开头。
+        if (_abActive && _idx >= _loopLastChord) {
+          _idx = _loopFirstChord;
+          _loops++;
+        } else if (_idx + 1 >= _flat.length) {
+          _idx = 0;
+          _loops++;
+        } else {
+          _idx++;
+        }
+      }
+    }
+    _tick();
+  }
+
+  /// 走一下:该响就响 + 刷新界面。这里【不】改 _slot/_idx/_inCountIn —— 推进放 _onTimerTick 里、在"下一槽"之前做。
+  /// 因为 setState 延迟到下一帧才重画:若这边 setState 完就改值,重画读到的会是改后的值,扫弦会比声音快半拍(踩过的坑)。
+  /// 节拍器只在【正拍】(偶数槽)响:槽0 重音(第1拍)、槽 2/4/6 普通嗒;后半拍(奇数槽)不响——那是给"上扫"留的空,节拍器不抢。
+  /// 预备拍期间:同样的正拍响法(_slot 走的是预备那一小节),位置不动、不滚动。
+  /// 走一下:该响就响 + 刷新界面。这里【不】改 _slot/_idx/_inCountIn —— 推进放 _onTimerTick 里、在"下一槽"之前做。
+  /// 因为 setState 延迟到下一帧才重画:若这边 setState 完就改值,重画读到的会是改后的值,扫弦会比声音快半拍(踩过的坑)。
+  ///
+  /// 响声策略(三态):
+  /// - 预备拍(_inCountIn):只敲嗒声倒计时(要清晰,不掺扫弦声)。
+  /// - 正式播放 + 扫弦声开:按这一槽的扫弦方向(下/上)播【当前和弦】的扫弦声,代替嗒声
+  ///   (下扫那下本身就是每个正拍的标记,再叠嗒声会糊成一片;休止槽静音)。
+  /// - 正式播放 + 扫弦声关:退回节拍器(正拍嗒、槽0 重音)——老行为。
+  void _tick() {
+    if (_inCountIn) {
+      if (_slot.isEven) _audio.playClick(accent: _slot == 0);
+    } else if (_strumSoundOn && _flat.isNotEmpty && _idx < _flat.length) {
+      final dir = _strumDirForCurrentSlot();
+      if (dir == StrumDir.down) {
+        _audio.playChord(_flat[_idx]); // 当前和弦=_flat[_idx](推进已在 _onTimerTick 里做完)
+      } else if (dir == StrumDir.up) {
+        _audio.playChord(_flat[_idx], up: true);
+      }
+      // StrumDir.rest:休止,静音不响
+    } else {
+      if (_slot.isEven) _audio.playClick(accent: _slot == 0);
+    }
+    setState(() {}); // 刷新:练习栏(倒计时数字 / 扫弦型)、和弦贴片、当前行高亮
+    if (!_inCountIn) _maybeScrollToCurrentLine();
+  }
+
+  /// 当前节奏型在当前槽(_slot)该往哪个方向扫。每拍现算(不缓存):节奏型是 build 里能改的,
+  /// 缓存了容易跟界面对不上;这里几微秒的事,现算最稳。
+  StrumDir _strumDirForCurrentSlot() {
+    final bpc = songs[_selected].beatsPerChord;
+    final patterns = patternsFor(bpc);
+    final pattern = patterns[_patternIndex.clamp(0, patterns.length - 1)];
+    final grid = pattern.grid(bpc);
+    if (_slot >= 0 && _slot < grid.length) return grid[_slot];
+    return StrumDir.rest;
+  }
+
+  /// 切"扫弦声"开关。播放中切也立刻生效(下一槽就按新状态响)。同时存下来(跨歌偏好)。
+  void _toggleStrumSound() {
+    setState(() => _strumSoundOn = !_strumSoundOn);
+    _prefs?.setStrumSound(_strumSoundOn);
+  }
+
+  /// 当前行变了,就把它滚到屏幕中间。每拍都调,但只有跨行才真滚,不会一拍一抖。
+  void _maybeScrollToCurrentLine() {
+    if (_flat.isEmpty || _idx >= _lineOfChord.length) return;
+    final li = _lineOfChord[_idx];
+    if (li == _lastLine) return;
+    _lastLine = li;
+    if (li >= _lineKeys.length) return;
+    final ctx = _lineKeys[li].currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5, // 居中
+        duration: const Duration(milliseconds: 250),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final song = songs[_selected];
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    // 进度条:整曲模式按整首歌走;AB 模式只走 AB 区间那一段(到 B 回 0)。空歌算 0。
+    final double progress;
+    if (_flat.isEmpty) {
+      progress = 0.0;
+    } else if (_abActive) {
+      final span = _loopLastChord - _loopFirstChord + 1;
+      progress =
+          ((_idx - _loopFirstChord) + _slot / (song.beatsPerChord * 2)) / span;
+    } else {
+      progress = (_idx + _slot / (song.beatsPerChord * 2)) / _flat.length;
+    }
+
+    // 预备拍当前数到第几拍(1..beatsPerChord);0 = 不在数预备拍。
+    // _slot 走一小节:槽 0/1→第1拍、2/3→第2拍 …… 偶数槽=刚敲到这拍、奇数槽=这拍的"&(数字不变)。
+    final countInNumber = _inCountIn ? _slot ~/ 2 + 1 : 0;
+
+    // 当前节奏型 + 它拍成的"按槽位取方向"网格(长度 = beatsPerChord×2)。给练习栏逐槽高亮、画 ↓/↑ 用。
+    final patterns = patternsFor(song.beatsPerChord);
+    final pattern = patterns[_patternIndex.clamp(0, patterns.length - 1)];
+    final strumGrid = pattern.grid(song.beatsPerChord);
+
+    // 把"段落标题 + 每一行"拍平成列表,同时数出每个和弦/每行的全局下标,
+    // 用来标记"当前该高亮哪个和弦贴片、哪行歌词"。
+    final List<Widget> items = [];
+    final currentLine = (_flat.isEmpty || _idx >= _lineOfChord.length)
+        ? 0
+        : _lineOfChord[_idx];
+    // 练习栏那一排卡 =【当前这一行】的和弦(顺序、含重复);当前弹到行内第几个由 _idx 折算。
+    // 这样那一排永远跟正在唱的词一一对应,不会掺入别行的和弦(如 Let It Be 唱到 C G F C 那行就不该有 Am)。
+    final lineChords = currentLine < _lineChords.length
+        ? _lineChords[currentLine]
+        : <String>[];
+    final currentChordIndex = currentLine < _lineStartFlat.length
+        ? _idx - _lineStartFlat[currentLine]
+        : 0;
+    var chordCursor = 0; // 走到第几个和弦(全局)
+    var lineCursor = 0; // 走到第几行(全局)
+    for (final section in song.sections) {
+      if (section.name != null) {
+        items.add(SectionHeader(section.name!));
+      }
+      for (final line in section.lines) {
+        // 关键:lineCursor 是循环【外】的变量、每轮 +1。onTap 是【以后点的时候】才执行的闭包,
+        // 若直接写 () => _onLineTapped(lineCursor),它捕获的是 lineCursor 这个变量本身——
+        // 等点的时候 lineCursor 早变成"总行数"了,点哪行都传同一个越界值(就是这次的 RangeError)。
+        // 所以每轮单独存一份 final lineIdx,让闭包捕获这份固定的值。
+        // (注:Dart 的 C 式 for(var i)循环变量倒是每轮独立的,这里 lineCursor 不是循环变量才中招。)
+        final lineIdx = lineCursor;
+        final marker = _markerForLine(lineIdx);
+        final inRange = _abActive &&
+            lineIdx >= _loopStartLine &&
+            lineIdx <= _loopEndLine;
+        items.add(
+          LineView(
+            line: line,
+            lineKey: _lineKeys[lineIdx],
+            isCurrentLine: lineIdx == currentLine,
+            chordStart: chordCursor, // 这一行第 1 个和弦的全局下标
+            currentChord: _idx,
+            marker: marker,
+            inRange: inRange,
+            onTap: () => _onLineTapped(lineIdx),
+          ),
+        );
+        chordCursor += line.chords.length;
+        lineCursor++;
+      }
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        // 标题行:选歌下拉框(独占整行宽度,不再和 BPM 抢,就不会重叠出斑马纹)。
+        title: DropdownButton<int>(
+          value: _selected,
+          // 下拉框默认会在选中值下面画一条横线,顶栏里很难看,这里用空部件去掉。
+          underline: const SizedBox.shrink(),
+          // 让下拉框占满整行宽度:歌名才有地方放,而且下面的 FittedBox 才知道往多窄缩。
+          isExpanded: true,
+          items: [
+            for (var i = 0; i < songs.length; i++)
+              DropdownMenuItem(
+                value: i,
+                // FittedBox(scaleDown):歌名短就原样大小;太长就自动缩小字号塞进去,绝不溢出。
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    songs[i].title,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                  ),
+                ),
+              ),
+          ],
+          onChanged: (i) {
+            if (i != null) _onSongChanged(i);
+          },
+          dropdownColor: theme.colorScheme.surface,
+          // 下面这个 style 是"下拉框里当前显示的那行歌名"的文字样式。
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.onSurface,
+          ),
+          icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurface),
+        ),
+        // 第二行:速度信息。用 AppBar 的 bottom 槽放,跟标题各占一行,互不重叠。
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(24),
+          child: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 第1拍重音${_loops > 0 ? ' · 已练 $_loops 遍' : ''}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
+          // 顶部练习栏(吸顶):一排和弦卡 =【当前这一行】的和弦(弹到哪个、那张变大图高亮,其余小参考)+
+          // 这一组扫到第几下(一排 ↓)+ 下一个和弦 + 调速滑块。卡跟当前行一一对应,不掺别行的和弦。
+          PracticeBar(
+            lineChords: lineChords,
+            currentChordIndex: currentChordIndex,
+            slot: _slot,
+            beatsPerChord: song.beatsPerChord,
+            strumGrid: strumGrid,
+            patternNames: [for (final p in patterns) p.name],
+            patternIndex: _patternIndex,
+            onPatternChanged: (i) {
+              setState(() => _patternIndex = i);
+              _prefs?.setPatternIndex(i); // 节奏型是跨歌偏好,切了就存
+            },
+            abActive: _abActive,
+            onClearAb: _clearAb,
+            countInNumber: countInNumber,
+            nextChord: _flat.isEmpty
+                ? '—'
+                : (_abActive && _idx >= _loopLastChord
+                    ? _flat[_loopFirstChord] // AB 到 B 末尾:下一个就是跳回 A 的那个和弦
+                    : _flat[(_idx + 1) % _flat.length]),
+            tempo: _tempo,
+            minTempo: (song.tempo / 2).round(), // 最慢到原速一半
+            maxTempo: (song.tempo * 2).round(), // 最快到原速两倍——放开加速练
+            onTempoChanged: _setTempo,
+            isPlaying: _playing,
+            canPlay: _ready,
+            onTogglePlay: _togglePlay,
+            strumSoundOn: _strumSoundOn,
+            onToggleStrumSound: _toggleStrumSound,
+            onChordTap: (c) => _audio.playChord(c), // 点和弦卡 → 听这个和弦的扫弦声
+          ),
+          // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 3,
+            backgroundColor: cs.surfaceContainerHighest,
+            valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
+          ),
+          // 歌词区:可滚动,当前行会自动滚到屏幕中间。
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: items,
+            ),
+          ),
+        ],
+      ),
+      // ▶/⏸ 已挪进练习栏的调速行(最左小图标),不再用右下大圆按钮——它会在歌长时挡住歌词。
+    );
+  }
+}

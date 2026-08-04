@@ -1,32 +1,42 @@
 // 测试:默认显示第一首歌;顶栏下拉框能切到第二首。
-// 这一步不连手机也能跑(flutter test),是"代码真能跑 + 切歌真能切"的快速证据。
+// 这一步不连手机也能跑(flutter test),是"界面真能渲染 + 切歌真能切"的快速证据。
+//
+// 注:SoLoud 的原生库(libflutter_soloud_plugin.so)在 flutter test 无头环境里加载不了,
+// _initAudio 会把这个异常 catch 掉、只打一条日志,不影响界面。所以这里只验证界面/切歌,
+// 不碰音频路径(音频得装机听)。
+//
+// 断言只查"歌名标题"和"和弦名"这类稳定的东西——不查具体歌词短语:第12步起歌词按词渲染
+// (每个词一个 Text,好让和弦浮在具体词上方),像 "way up high" 这种短语会拆成 3 个 Text,
+// 用 textContaining 找整串会扑空。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ukulele_demo/main.dart';
 
 void main() {
-  testWidgets('默认显示 Over the Rainbow', (tester) async {
+  testWidgets('默认显示第一首歌', (tester) async {
     await tester.pumpWidget(const UkuleleApp());
 
+    // 顶栏下拉框当前显示第一首的歌名
     expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
+    // 这首歌用到的 Am 和弦贴片在界面上
     expect(find.text('Am'), findsWidgets);
-    expect(find.textContaining('way up high'), findsOneWidget);
   });
 
-  testWidgets('下拉框能切换到 What a Wonderful World', (tester) async {
+  testWidgets('下拉框能切换到第二首歌', (tester) async {
     await tester.pumpWidget(const UkuleleApp());
+    // 起点确认是第一首
+    expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
 
-    // 点顶栏的歌名下拉框,打开列表
+    // 点顶栏歌名下拉框,打开列表
     await tester.tap(find.byType(DropdownButton<int>));
     await tester.pumpAndSettle();
 
-    // 选中第二首
-    await tester.tap(find.textContaining('What a Wonderful World'));
+    // 在展开的列表里点第二首(列表项;用 .last 取列表里那一项,避开可能的重复)
+    await tester.tap(find.textContaining('What a Wonderful World').last);
     await tester.pumpAndSettle();
 
-    // 现在应该看到第二首的歌词,且看不到第一首的歌词了
-    expect(find.textContaining('what a wonderful world'), findsOneWidget);
-    expect(find.textContaining('way up high'), findsNothing);
+    // 切完后顶栏变成第二首的歌名
+    expect(find.textContaining('What a Wonderful World'), findsOneWidget);
   });
 }
