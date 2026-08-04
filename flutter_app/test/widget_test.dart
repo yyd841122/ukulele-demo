@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ukulele_demo/main.dart';
+import 'package:ukulele_demo/screens/chord_library_screen.dart';
+import 'package:ukulele_demo/widgets/chord_diagram.dart';
 
 void main() {
   testWidgets('默认显示第一首歌', (tester) async {
@@ -50,5 +52,18 @@ void main() {
     expect(find.textContaining('Hey Soul Sister'), findsOneWidget);
     expect(find.textContaining('Zombie'), findsOneWidget);
     expect(find.textContaining('Counting Stars'), findsOneWidget);
+  });
+
+  testWidgets('顶栏图标能进和弦速查页', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    // 点顶栏右侧"和弦速查"图标(按 tooltip 找,稳)
+    await tester.tap(find.byTooltip('和弦速查'));
+    await tester.pumpAndSettle();
+
+    // 跳到了速查页:ChordLibraryScreen 挂上来了
+    expect(find.byType(ChordLibraryScreen), findsOneWidget);
+    // 速查页里有大和弦名 + 指法图(ChordDiagram)
+    expect(find.text('Am'), findsWidgets);
+    expect(find.byType(ChordDiagram), findsWidgets);
   });
 }

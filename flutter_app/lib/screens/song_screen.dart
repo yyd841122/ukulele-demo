@@ -14,6 +14,7 @@ import '../models.dart';
 import '../prefs/app_preferences.dart';
 import '../widgets/lyric_view.dart';
 import '../widgets/practice_bar.dart';
+import 'chord_library_screen.dart';
 
 /// 歌曲页:顶栏下拉选歌,正文铺出当前歌的每一段、每一行。
 /// 因为要"记住当前选的是哪首"+ 节拍器状态,这里用 StatefulWidget(带状态)。
@@ -528,6 +529,19 @@ class _SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
+        // 顶栏右侧"和弦速查"图标:点开进速查页(大图 + 点听声)。复用本页的 AudioEngine,不二次 init。
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.library_music_rounded),
+            tooltip: '和弦速查',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => ChordLibraryScreen(audio: _audio),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
