@@ -60,6 +60,14 @@ class _SongScreenState extends State<SongScreen> {
   // 已完整练了几遍:引擎从末尾循环回开头一次就 +1。给练习一点"打了多少卡"的反馈。
   int _loops = 0;
 
+  // —— 练琴打卡(累计、持久化,跨会话)——
+  // _totalLoops:【当前这首歌】累计完整练了多少遍(本次会话的 _loops 换歌清零,这个跨重启保留)。
+  // _totalSec:【当前这首歌】累计练了多少秒(只在播放中计时)。
+  int _totalLoops = 0;
+  int _totalSec = 0;
+  // 正在播放时记下开始时刻;暂停/换歌/销毁时把它结成秒数加进 _totalSec(见 _accumulateSec)。
+  DateTime? _playStart;
+
   // —— 预备拍(倒计时)——
   // _inCountIn:正在数预备拍吗。从头第一次按 ▶ 时置 true,数完一小节(beatsPerChord×2 个槽)置 false。
   // _everPlayed:这首歌这一轮"正式开始播"过了吗。只在"从头第一次按 ▶"给一轮预备拍;
@@ -113,6 +121,8 @@ class _SongScreenState extends State<SongScreen> {
       _strumSoundOn = p.getStrumSound(true);
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
       _tempo = p.getTempo(_selected) ?? songs[_selected].tempo;
+      _totalLoops = p.getLoops(_selected); // 上次这首歌累计练的遍数
+      _totalSec = p.getSec(_selected); // 上次这首歌累计练的秒数
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
       // AB 是按歌存的行下标:万一 songs 改过、行数变了,越界的丢弃(否则后面 _loopStartLine 会越界)。
       final ab = p.getAb(_selected);
@@ -176,7 +186,9 @@ class _SongScreenState extends State<SongScreen> {
   @override
   void dispose() {
     // 页面销毁前最后存一次当前歌的速度(滑块拖动时不存、怕写太勤;走这里兜底)。
+    _accumulateSec(); // 把正在播放的尾段时间结进 _totalSec(没在播就是 no-op)
     _prefs?.setTempo(_selected, _tempo);
+    _saveStats(); // 兜底存累计遍数 + 秒数
     // 页面销毁时收尾:停闹钟、释放音频声源,否则占资源。
     _timer?.cancel();
     _audio.dispose();
@@ -247,6 +259,8 @@ class _SongScreenState extends State<SongScreen> {
     if (_playing) {
       _timer?.cancel();
       _timer = null;
+      _accumulateSec(); // 暂停:把这段播放时间结进 _totalSec
+      _saveStats(); // 暂停时存一次累计(遍数 + 秒数),免得退出丢失
     } else {
       // 从头第一次按 ▶:先数一小节预备拍(beatsPerChord 拍"1-2-3-4"),给新手把手指放好的时间。
       // 已经正式开始过(暂停后恢复)就不重复数。预备拍借用 _slot 走一小节,数完进正式播放。
@@ -261,6 +275,7 @@ class _SongScreenState extends State<SongScreen> {
               : _lastLine;
         }
       }
+      _playStart = DateTime.now(); // 记下开始播放的时刻(计时用)
       // 立刻响当下这一下(预备拍第1下 或 恢复处的槽),不用干等半拍。
       _tick();
       _startTimer();
@@ -272,11 +287,14 @@ class _SongScreenState extends State<SongScreen> {
   void _onSongChanged(int i) {
     _timer?.cancel();
     _timer = null;
+    _accumulateSec(); // 把正在播放的这段时间结进【旧歌】的 _totalSec
     final p = _prefs;
-    // 切走前先把【当前这首】(还没换的 _selected)的速度和 AB 存下来——下次回来才接得上。
+    // 切走前先把【当前这首】(还没换的 _selected)的速度、AB、累计打卡都存下来——下次回来才接得上。
     if (p != null) {
       p.setTempo(_selected, _tempo);
       p.setAb(_selected, _markerA, _markerB);
+      p.setLoops(_selected, _totalLoops);
+      p.setSec(_selected, _totalSec);
     }
     setState(() {
       _playing = false;
@@ -284,6 +302,9 @@ class _SongScreenState extends State<SongScreen> {
       _idx = 0;
       _slot = 0;
       _loops = 0; // 换歌重新计数
+      _totalLoops = p?.getLoops(i) ?? 0; // 新歌的累计遍数(没练过 = 0)
+      _totalSec = p?.getSec(i) ?? 0; // 新歌的累计秒数
+      _playStart = null; // 不在播,清掉计时起点
       _inCountIn = false; // 换歌取消可能进行中的预备拍
       _everPlayed = false; // 新歌从头算"还没正式开始",下次按 ▶ 会重新数预备拍
       _markerA = null; // 换歌清空 AB(行下标按某首歌的行算,不能跨歌保留;AB 只在启动时恢复,不随切换蹦出来吓人)
@@ -332,9 +353,11 @@ class _SongScreenState extends State<SongScreen> {
         if (_abActive && _idx >= _loopLastChord) {
           _idx = _loopFirstChord;
           _loops++;
+          _totalLoops++; // 累计打卡也 +1(跨会话)
         } else if (_idx + 1 >= _flat.length) {
           _idx = 0;
           _loops++;
+          _totalLoops++; // 累计打卡也 +1(跨会话)
         } else {
           _idx++;
         }
@@ -405,6 +428,30 @@ class _SongScreenState extends State<SongScreen> {
         duration: const Duration(milliseconds: 250),
       );
     }
+  }
+
+  /// 把"从 _playStart 到现在"的秒数结进 _totalSec,然后清掉 _playStart。
+  /// _playStart 为 null(没在播)就是 no-op。暂停 / 换歌 / 销毁时调,把计时落袋。
+  void _accumulateSec() {
+    final start = _playStart;
+    if (start == null) return;
+    _totalSec += DateTime.now().difference(start).inSeconds;
+    _playStart = null;
+  }
+
+  /// 把当前歌的累计遍数 + 秒数存进持久化。跟 tempo 一个套路:暂停 / 换歌 / 销毁时兜底存,不在每拍写(怕写太勤)。
+  void _saveStats() {
+    _prefs?.setLoops(_selected, _totalLoops);
+    _prefs?.setSec(_selected, _totalSec);
+  }
+
+  /// 秒数 → "Xs" / "Xm" / "XhYm",给顶栏显示用(<60s 显示秒,够 1 分钟显示分,够 1 小时显示时分)。
+  String _fmtSec(int sec) {
+    if (sec < 60) return '${sec}s';
+    final m = sec ~/ 60;
+    if (m < 60) return '${m}m';
+    final h = m ~/ 60;
+    return '${h}h${m % 60}m';
   }
 
   @override
@@ -521,10 +568,15 @@ class _SongScreenState extends State<SongScreen> {
           child: Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 第1拍重音${_loops > 0 ? ' · 已练 $_loops 遍' : ''}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            // FittedBox(scaleDown):文字太长(累计/时长一加就长)就自动缩字号塞进 24px 高的条,绝不溢出。
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${_fmtSec(_totalSec)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),

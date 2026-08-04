@@ -60,6 +60,17 @@ class AppPreferences {
     }
   }
 
+  // —— 练琴打卡(按歌存)——
+  // 累计遍数:这首歌跨会话总共完整练了多少遍(_loops 只算本次会话,换歌清零;这个是持久累计)。
+  int getLoops(int songIndex) => _prefs.getInt('$_kLoopsPrefix$songIndex') ?? 0;
+  Future<void> setLoops(int songIndex, int n) =>
+      _prefs.setInt('$_kLoopsPrefix$songIndex', n);
+
+  // 累计练习秒数:这首歌总共练了多少秒(只在播放中计时,暂停/换歌/退出时结算)。
+  int getSec(int songIndex) => _prefs.getInt('$_kSecPrefix$songIndex') ?? 0;
+  Future<void> setSec(int songIndex, int n) =>
+      _prefs.setInt('$_kSecPrefix$songIndex', n);
+
   // key 常量:集中放一处,免得读写各处拼字符串拼错。
   static const _kSongIndex = 'pref_song_index';
   static const _kPatternIndex = 'pref_pattern_index';
@@ -67,4 +78,6 @@ class AppPreferences {
   static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲下标,如 pref_tempo_2
   static const _kAbAPrefix = 'pref_ab_a_'; // 后接歌曲下标
   static const _kAbBPrefix = 'pref_ab_b_';
+  static const _kLoopsPrefix = 'pref_loops_'; // 后接歌曲下标
+  static const _kSecPrefix = 'pref_sec_'; // 后接歌曲下标
 }

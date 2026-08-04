@@ -62,4 +62,19 @@ void main() {
     expect(p2.getAb(0)!.a, 1);
     expect(p2.getAb(3)!.b, 7);
   });
+
+  test('练琴打卡:累计遍数 + 秒数,存了能读回、按歌不串', () async {
+    final p = await AppPreferences.load();
+    expect(p.getLoops(0), 0); // 没存过 → 0
+    expect(p.getSec(0), 0);
+
+    await p.setLoops(0, 5);
+    await p.setSec(0, 320);
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getLoops(0), 5);
+    expect(p2.getSec(0), 320);
+    expect(p2.getLoops(1), 0); // 别的歌没存 → 0
+    expect(p2.getSec(1), 0);
+  });
 }
