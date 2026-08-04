@@ -16,6 +16,7 @@ import '../prefs/app_preferences.dart';
 import '../widgets/lyric_view.dart';
 import '../widgets/practice_bar.dart';
 import 'chord_library_screen.dart';
+import 'stats_screen.dart';
 
 /// 歌曲页:顶栏下拉选歌,正文铺出当前歌的每一段、每一行。
 /// 因为要"记住当前选的是哪首"+ 节拍器状态,这里用 StatefulWidget(带状态)。
@@ -492,6 +493,18 @@ class _SongScreenState extends State<SongScreen> {
     _prefs?.setSec(_selected, _totalSec);
   }
 
+  /// 打开练习统计页。先把当前会话还没落盘的打卡补存一下(_accumulateSec 把这段时间结进 _totalSec、
+  /// 还在播就重置 _playStart 让计时不停),统计页读到的才是最新值;再 push 统计页(它自己 load prefs)。
+  void _openStats() {
+    _accumulateSec();
+    if (_playing) _playStart = DateTime.now(); // 计时不停:补完这段后重新起算
+    _saveStats();
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const StatsScreen()),
+    );
+  }
+
   /// 字号对话框:Slider 实时拖、歌词背后跟着变,松手就存(跨重启保留)。复位一键回 1.0。
   /// 用 StatefulBuilder 让对话框自己的 Slider 文字/百分比跟着拖动刷新;
   /// 同时调本页 setState,歌词区实时缩放(所见即所得,不用关对话框才看到效果)。
@@ -557,14 +570,7 @@ class _SongScreenState extends State<SongScreen> {
     );
   }
 
-  /// 秒数 → "Xs" / "Xm" / "XhYm",给顶栏显示用(<60s 显示秒,够 1 分钟显示分,够 1 小时显示时分)。
-  String _fmtSec(int sec) {
-    if (sec < 60) return '${sec}s';
-    final m = sec ~/ 60;
-    if (m < 60) return '${m}m';
-    final h = m ~/ 60;
-    return '${h}h${m % 60}m';
-  }
+  /// 秒数格式化已上移为 models.dart 的 formatPracticeSec(顶栏 + 统计页共用)。
 
   @override
   Widget build(BuildContext context) {
@@ -686,7 +692,7 @@ class _SongScreenState extends State<SongScreen> {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${_fmtSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
+                '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${formatPracticeSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -694,12 +700,17 @@ class _SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
-        // 顶栏右侧图标:字号(调歌词大小)+ 和弦速查(大图 + 点听声)。复用本页 AudioEngine,不二次 init。
+        // 顶栏右侧图标:字号(调歌词大小)+ 练习统计(累计遍数/时长)+ 和弦速查(大图 + 点听声)。
         actions: [
           IconButton(
             icon: const Icon(Icons.format_size_rounded),
             tooltip: '歌词字号',
             onPressed: _showFontScaleDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.insights_rounded),
+            tooltip: '练习统计',
+            onPressed: _openStats,
           ),
           IconButton(
             icon: const Icon(Icons.library_music_rounded),

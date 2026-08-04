@@ -195,6 +195,17 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
 int nextRampTempo(int current, int cap, {int step = 3}) =>
     current < cap ? min(current + step, cap) : current;
 
+/// 秒数 → "Xs" / "Xm" / "XhYm",给"练了多久"显示用。
+/// <60s 显示秒,够 1 分钟显示分,够 1 小时显示"时分"(如 1h12m)。
+/// 抽成纯函数放这:SongScreen 顶栏和统计页都要格式化时长,共用一份;也能在无头测试里直接锁它。
+String formatPracticeSec(int sec) {
+  if (sec < 60) return '${sec}s';
+  final m = sec ~/ 60;
+  if (m < 60) return '${m}m';
+  final h = m ~/ 60;
+  return '${h}h${m % 60}m';
+}
+
 /// 一行歌词,和弦用 [C] 标在"该弹的那个词"前面(行内和弦)。
 /// chords 是从歌词里解析出来的(按出现顺序),给节拍器拍扁成一条线往前推进用。
 @immutable

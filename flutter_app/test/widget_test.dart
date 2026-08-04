@@ -10,12 +10,21 @@
 // 用 textContaining 找整串会扑空。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ukulele_demo/main.dart';
 import 'package:ukulele_demo/screens/chord_library_screen.dart';
+import 'package:ukulele_demo/screens/stats_screen.dart';
 import 'package:ukulele_demo/widgets/chord_diagram.dart';
 
 void main() {
+  // widget 测试里 SharedPreferences 的平台通道没接,getInstance() 会挂住不返回;
+  // 给个空 mock 库,读出来都是默认值(跟单元测试 prefs_test 同一套路)。
+  // 也让 SongScreen._loadPrefs / StatsScreen._load 能正常完成、不卡 pumpAndSettle。
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('默认显示第一首歌', (tester) async {
     await tester.pumpWidget(const UkuleleApp());
 
@@ -65,5 +74,19 @@ void main() {
     // 速查页里有大和弦名 + 指法图(ChordDiagram)
     expect(find.text('Am'), findsWidgets);
     expect(find.byType(ChordDiagram), findsWidgets);
+  });
+
+  testWidgets('顶栏图标能进练习统计页', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    // 点顶栏"练习统计"图标(按 tooltip 找)
+    await tester.tap(find.byTooltip('练习统计'));
+    await tester.pumpAndSettle();
+
+    // 跳到了统计页:StatsScreen 挂上来了,有"全部练习"总计卡 + "按歌曲"分组标题
+    expect(find.byType(StatsScreen), findsOneWidget);
+    expect(find.text('全部练习'), findsOneWidget);
+    expect(find.text('按歌曲'), findsOneWidget);
+    // 总计里至少显示一遍数和时长(空库下是 "0 遍 · 0s")
+    expect(find.textContaining('0 遍'), findsOneWidget);
   });
 }
