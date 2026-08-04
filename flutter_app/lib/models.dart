@@ -9,6 +9,8 @@
 // 和弦位置:歌词里用 [C] 这种方括号标在"该弹的那个词"前面(行内和弦 / ChordPro 风格)。
 // 例:"[C]Somewhere over the [G]rainbow" = 弹 C 时唱 Somewhere、弹 G 时唱 rainbow。
 // 这比 Web 版(和弦单独一排、不和具体词挂钩)对新手更友好,是 Flutter 版刻意改的。
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 /// 行内解析出来的一段:要么是一个和弦(chord 非空),要么是一截歌词文字。
@@ -185,6 +187,13 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
     ),
   ];
 }
+
+/// 自动提速(渐进提速):每过一遍 +step BPM,封顶 cap 就不再涨。
+/// 本应用里 cap = 歌的原速——_tempo 练到原速就停,符合"从慢练到原速"的练法;
+/// 已经等于/超过 cap(手动加过速)的不再往上加。
+/// 纯函数、无副作用:单独抽出来是为了能在无头测试里直接锁它的边界行为,不依赖 Timer / setState。
+int nextRampTempo(int current, int cap, {int step = 3}) =>
+    current < cap ? min(current + step, cap) : current;
 
 /// 一行歌词,和弦用 [C] 标在"该弹的那个词"前面(行内和弦)。
 /// chords 是从歌词里解析出来的(按出现顺序),给节拍器拍扁成一条线往前推进用。

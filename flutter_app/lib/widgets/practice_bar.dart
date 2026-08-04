@@ -30,6 +30,8 @@ class PracticeBar extends StatelessWidget {
   final VoidCallback onTogglePlay; // 按一下 ▶/⏸
   final bool strumSoundOn; // 扫弦声开吗(播放时播真扫弦声 vs 只嗒声)
   final VoidCallback onToggleStrumSound; // 切扫弦声开关
+  final bool rampOn; // 自动提速开吗(每遍+3 BPM、到原速停)
+  final VoidCallback onToggleRamp; // 切自动提速开关
   final void Function(String chord)? onChordTap; // 点某个和弦卡 → 听这个和弦的扫弦声(可空)
 
   const PracticeBar({
@@ -55,6 +57,8 @@ class PracticeBar extends StatelessWidget {
     required this.onTogglePlay,
     required this.strumSoundOn,
     required this.onToggleStrumSound,
+    required this.rampOn,
+    required this.onToggleRamp,
     this.onChordTap,
   });
 
@@ -236,6 +240,20 @@ class PracticeBar extends StatelessWidget {
                 style: IconButton.styleFrom(
                   foregroundColor:
                       strumSoundOn ? cs.primary : cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 4),
+              // 自动提速开关:开 = 每过一遍 +3 BPM、到原速停(渐进提速练法);关 = 速度只手动调。
+              IconButton(
+                onPressed: onToggleRamp,
+                tooltip: rampOn
+                    ? '自动提速:开 · 每遍+3、到原速停(点关)'
+                    : '自动提速:关 · 每遍+3、到原速停(点开)',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                icon: const Icon(Icons.trending_up_rounded),
+                style: IconButton.styleFrom(
+                  foregroundColor: rampOn ? cs.primary : cs.onSurfaceVariant,
                 ),
               ),
               const SizedBox(width: 4),

@@ -82,6 +82,9 @@ class _SongScreenState extends State<SongScreen> {
   // 扫弦声开关:开 = 播放时按节奏型播真扫弦声(代替嗒声);关 = 只敲节拍器嗒声。跨歌保留。
   bool _strumSoundOn = true;
 
+  // 自动提速开关:开 = 每过一遍(整曲到尾 / AB 到 B)+3 BPM、到原速停(渐进提速练法)。跨歌保留。
+  bool _rampOn = false;
+
   // —— 分段 AB 循环 ——
   // _markerA / _markerB:用户在歌词上点的两个"循环点"(行下标)。两个都标好 → 引擎到 B 行末尾跳回 A 行开头反复。
   // 只标了 A(_markerB 仍 null)= 还没成区间,只在那一行显示 A 徽标。换歌清空(行下标是按某首歌的行算的,不能跨歌保留)。
@@ -119,6 +122,7 @@ class _SongScreenState extends State<SongScreen> {
           .getPatternIndex(_patternIndex)
           .clamp(0, patternsFor(songs[_selected].beatsPerChord).length - 1);
       _strumSoundOn = p.getStrumSound(true);
+      _rampOn = p.getRamp();
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
       _tempo = p.getTempo(_selected) ?? songs[_selected].tempo;
       _totalLoops = p.getLoops(_selected); // 上次这首歌累计练的遍数
@@ -325,10 +329,32 @@ class _SongScreenState extends State<SongScreen> {
   void _setTempo(int v) {
     if (v == _tempo) return;
     setState(() => _tempo = v);
+    _restartTimerIfPlaying(); // 速度变了,定时器间隔也要跟着换
+  }
+
+  /// 正在播放时重启定时器:cancel 旧的、按当前 _halfBeat 起新的。
+  /// 手动调速(_setTempo)和自动提速(_applyRamp)共用——改了 _tempo 都得这么换一下间隔。
+  void _restartTimerIfPlaying() {
     if (_playing) {
       _timer?.cancel();
       _startTimer();
     }
+  }
+
+  /// 自动提速:每过一遍 +3 BPM、封顶原速(nextRampTempo 算)。到原速不再涨。改了 _tempo 要重启定时器。
+  /// 只在 _rampOn 开着、且循环真正完成一遍(整曲到尾 / AB 到 B)时调。
+  void _applyRamp() {
+    final nt = nextRampTempo(_tempo, songs[_selected].tempo);
+    if (nt != _tempo) {
+      _tempo = nt;
+      _restartTimerIfPlaying();
+    }
+  }
+
+  /// 切"自动提速"开关。播放中切也立刻生效(下一遍循环完成时就提速)。同时存下来(跨歌偏好)。
+  void _toggleRamp() {
+    setState(() => _rampOn = !_rampOn);
+    _prefs?.setRamp(_rampOn);
   }
 
   /// 起/重启半拍定时器:每个槽(8分音符)推进一下 + 响 + 刷新。按▶、调速都走它,推进逻辑只此一份。
@@ -354,10 +380,12 @@ class _SongScreenState extends State<SongScreen> {
           _idx = _loopFirstChord;
           _loops++;
           _totalLoops++; // 累计打卡也 +1(跨会话)
+          if (_rampOn) _applyRamp(); // 自动提速:每过一遍 +3、到原速停
         } else if (_idx + 1 >= _flat.length) {
           _idx = 0;
           _loops++;
           _totalLoops++; // 累计打卡也 +1(跨会话)
+          if (_rampOn) _applyRamp(); // 自动提速:每过一遍 +3、到原速停
         } else {
           _idx++;
         }
@@ -573,7 +601,7 @@ class _SongScreenState extends State<SongScreen> {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${_fmtSec(_totalSec)}',
+                '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${_fmtSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -628,6 +656,8 @@ class _SongScreenState extends State<SongScreen> {
             onTogglePlay: _togglePlay,
             strumSoundOn: _strumSoundOn,
             onToggleStrumSound: _toggleStrumSound,
+            rampOn: _rampOn,
+            onToggleRamp: _toggleRamp,
             onChordTap: (c) => _audio.playChord(c), // 点和弦卡 → 听这个和弦的扫弦声
           ),
           // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。

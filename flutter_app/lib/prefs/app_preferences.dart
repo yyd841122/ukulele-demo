@@ -30,6 +30,11 @@ class AppPreferences {
       _prefs.getBool(_kStrumSound) ?? fallback;
   Future<void> setStrumSound(bool v) => _prefs.setBool(_kStrumSound, v);
 
+  // 自动提速开关(每过一遍 +3 BPM、到原速停的渐进提速练法)。跨歌保留的练习偏好。
+  bool getRamp([bool fallback = false]) =>
+      _prefs.getBool(_kRamp) ?? fallback;
+  Future<void> setRamp(bool v) => _prefs.setBool(_kRamp, v);
+
   // —— 按歌存的偏好(key 带歌曲下标)——
   // 某首歌上次调到的速度(BPM);没存过返回 null → 用原速。
   int? getTempo(int songIndex) => _prefs.getInt('$_kTempoPrefix$songIndex');
@@ -75,6 +80,7 @@ class AppPreferences {
   static const _kSongIndex = 'pref_song_index';
   static const _kPatternIndex = 'pref_pattern_index';
   static const _kStrumSound = 'pref_strum_sound';
+  static const _kRamp = 'pref_ramp';
   static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲下标,如 pref_tempo_2
   static const _kAbAPrefix = 'pref_ab_a_'; // 后接歌曲下标
   static const _kAbBPrefix = 'pref_ab_b_';
