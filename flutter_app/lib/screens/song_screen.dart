@@ -41,6 +41,9 @@ class _SongScreenState extends State<SongScreen> {
   // 当前按到"拍扁的和弦序列"里的第几个(0 = 第一个和弦)。每数够一组拍就前进一个。
   int _idx = 0;
   Timer? _timer;
+  // 节奏型试听用的独立一次性定时器(跟主节拍器 _timer 互不干扰)。点节奏型芯片时起、走完一小节自停。
+  Timer? _previewTimer;
+  int _previewSlot = 0;
   // 可调速度(BPM)。默认 = 当前歌的原速;拖练习栏的滑块能放慢来练。换歌时重置回原速。
   // 单独搞一个字段、不直接改 song.tempo:song.tempo 是"原速"这个只读事实,_tempo 才是"现在实际用多快"。
   late int _tempo;
@@ -202,6 +205,7 @@ class _SongScreenState extends State<SongScreen> {
     _setWakelock(false); // 离开页面:释放屏幕常亮,别一直亮着耗电
     // 页面销毁时收尾:停闹钟、释放音频声源,否则占资源。
     _timer?.cancel();
+    _previewTimer?.cancel();
     _audio.dispose();
     super.dispose();
   }
@@ -284,6 +288,9 @@ class _SongScreenState extends State<SongScreen> {
       _accumulateSec(); // 暂停:把这段播放时间结进 _totalSec
       _saveStats(); // 暂停时存一次累计(遍数 + 秒数),免得退出丢失
     } else {
+      // 正式播放开始:打断可能正在放的节奏型试听,免得两串扫弦叠着响。
+      _previewTimer?.cancel();
+      _previewTimer = null;
       // 从头第一次按 ▶:先数一小节预备拍(beatsPerChord 拍"1-2-3-4"),给新手把手指放好的时间。
       // 已经正式开始过(暂停后恢复)就不重复数。预备拍借用 _slot 走一小节,数完进正式播放。
       if (!_everPlayed) {
@@ -310,6 +317,8 @@ class _SongScreenState extends State<SongScreen> {
   void _onSongChanged(int i) {
     _timer?.cancel();
     _timer = null;
+    _previewTimer?.cancel(); // 换歌打断试听(和弦上下文变了)
+    _previewTimer = null;
     _setWakelock(false); // 换歌 = 停下,屏幕恢复正常(新歌默认不播,要按 ▶ 才再亮)
     _accumulateSec(); // 把正在播放的这段时间结进【旧歌】的 _totalSec
     final p = _prefs;
@@ -453,6 +462,46 @@ class _SongScreenState extends State<SongScreen> {
     final grid = pattern.grid(bpc);
     if (_slot >= 0 && _slot < grid.length) return grid[_slot];
     return StrumDir.rest;
+  }
+
+  /// 试听一段节奏型:用独立定时器按固定 90 BPM 半拍粒度,把所选节奏型的 grid 走一遍,
+  /// 播【当前和弦】(或第一个和弦)的扫弦(下/上,休止静音)。没在播放时点节奏型芯片触发——
+  /// 播放中不试听(那时你直接就听到它了)。换节奏型 / 开始正式播放 / 换歌 / 退出都会打断它。
+  void _previewPattern(int patternIndex) {
+    _previewTimer?.cancel(); // 上一段没放完又点新的:打断、重放新的
+    final bpc = songs[_selected].beatsPerChord;
+    final patterns = patternsFor(bpc);
+    final pat = patterns[patternIndex.clamp(0, patterns.length - 1)];
+    final grid = pat.grid(bpc);
+    // 用当前和弦试听(弹到哪听哪个);_flat 万一空就退回 C(总在 chordShapes 里)。
+    final chord = _flat.isNotEmpty
+        ? _flat[_idx.clamp(0, _flat.length - 1)]
+        : 'C';
+    final halfBeat = Duration(milliseconds: (30000 / 90).round()); // 试听固定 90 BPM,清楚不赶
+    _previewSlot = 0;
+    _playPreviewSlot(grid, chord); // 立刻响第 0 槽,不用干等半拍
+    _previewTimer = Timer.periodic(halfBeat, (_) {
+      _previewSlot++;
+      if (_previewSlot >= grid.length) {
+        // 走完一小节:自停(一次性试听,不循环)。
+        _previewTimer?.cancel();
+        _previewTimer = null;
+        return;
+      }
+      _playPreviewSlot(grid, chord);
+    });
+  }
+
+  /// 试听里响一下当前槽:下扫 / 上扫播和弦声,休止静音。跟正式播放的扫弦响法一致。
+  void _playPreviewSlot(List<StrumDir> grid, String chord) {
+    if (_previewSlot < 0 || _previewSlot >= grid.length) return;
+    final dir = grid[_previewSlot];
+    if (dir == StrumDir.down) {
+      _audio.playChord(chord);
+    } else if (dir == StrumDir.up) {
+      _audio.playChord(chord, up: true);
+    }
+    // StrumDir.rest:休止,静音不响
   }
 
   /// 切"扫弦声"开关。播放中切也立刻生效(下一槽就按新状态响)。同时存下来(跨歌偏好)。
@@ -739,6 +788,8 @@ class _SongScreenState extends State<SongScreen> {
             onPatternChanged: (i) {
               setState(() => _patternIndex = i);
               _prefs?.setPatternIndex(i); // 节奏型是跨歌偏好,切了就存
+              // 没在播放时点一下 → 试听一段这个节奏型(播放中能直接听到,不用试听)。
+              if (_ready && !_playing) _previewPattern(i);
             },
             abActive: _abActive,
             onClearAb: _clearAb,
