@@ -63,30 +63,41 @@ void main() {
     expect(find.textContaining('Counting Stars'), findsOneWidget);
   });
 
-  testWidgets('顶栏图标能进和弦速查页', (tester) async {
+  testWidgets('底导航能切到和弦页', (tester) async {
     await tester.pumpWidget(const UkuleleApp());
-    // 点顶栏右侧"和弦速查"图标(按 tooltip 找,稳)
-    await tester.tap(find.byTooltip('和弦速查'));
     await tester.pumpAndSettle();
 
-    // 跳到了速查页:ChordLibraryScreen 挂上来了
+    // 点底导航"和弦"
+    await tester.tap(find.text('和弦'));
+    await tester.pumpAndSettle();
+
+    // 底导航当前选中 = 和弦(index 1)
+    final bnb1 = tester.widget<BottomNavigationBar>(
+      find.byType(BottomNavigationBar),
+    );
+    expect(bnb1.currentIndex, 1);
+    // 和弦页挂在树里:AppBar 标题 + 指法图
     expect(find.byType(ChordLibraryScreen), findsOneWidget);
-    // 速查页里有大和弦名 + 指法图(ChordDiagram)
-    expect(find.text('Am'), findsWidgets);
+    expect(find.text('和弦速查'), findsOneWidget);
     expect(find.byType(ChordDiagram), findsWidgets);
   });
 
-  testWidgets('顶栏图标能进练习统计页', (tester) async {
+  testWidgets('底导航能切到统计页', (tester) async {
     await tester.pumpWidget(const UkuleleApp());
-    // 点顶栏"练习统计"图标(按 tooltip 找)
-    await tester.tap(find.byTooltip('练习统计'));
     await tester.pumpAndSettle();
 
-    // 跳到了统计页:StatsScreen 挂上来了,有"全部练习"总计卡 + "按歌曲"分组标题
+    // 点底导航"统计"
+    await tester.tap(find.text('统计'));
+    await tester.pumpAndSettle();
+
+    // 底导航当前选中 = 统计(index 2)
+    final bnb2 = tester.widget<BottomNavigationBar>(
+      find.byType(BottomNavigationBar),
+    );
+    expect(bnb2.currentIndex, 2);
+    // 统计页挂在树里:有"全部练习"总计卡 + "按歌曲"分组标题
     expect(find.byType(StatsScreen), findsOneWidget);
     expect(find.text('全部练习'), findsOneWidget);
     expect(find.text('按歌曲'), findsOneWidget);
-    // 总计里至少显示一遍数和时长(空库下是 "0 遍 · 0s")
-    expect(find.textContaining('0 遍'), findsOneWidget);
   });
 }

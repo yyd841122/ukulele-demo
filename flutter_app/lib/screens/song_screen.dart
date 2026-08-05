@@ -15,19 +15,23 @@ import '../models.dart';
 import '../prefs/app_preferences.dart';
 import '../widgets/lyric_view.dart';
 import '../widgets/practice_bar.dart';
-import 'chord_library_screen.dart';
-import 'stats_screen.dart';
 
 /// 歌曲页:顶栏下拉选歌,正文铺出当前歌的每一段、每一行。
 /// 因为要"记住当前选的是哪首"+ 节拍器状态,这里用 StatefulWidget(带状态)。
+///
+/// audio 由外层 MainScaffold 注入并拥有(第28步:多个 tab 共用一份引擎,不在本页自建/自释放)。
 class SongScreen extends StatefulWidget {
-  const SongScreen({super.key});
+  final AudioEngine audio;
+
+  const SongScreen({required this.audio, super.key});
 
   @override
-  State<SongScreen> createState() => _SongScreenState();
+  State<SongScreen> createState() => SongScreenState();
 }
 
-class _SongScreenState extends State<SongScreen> {
+/// public:MainScaffold 持 `GlobalKey<SongScreenState>`,切走练习 tab 时调 flushStats()
+/// 把当前会话打卡刷盘,这样平级的统计 tab 才读得到含本次练习的最新值。
+class SongScreenState extends State<SongScreen> {
   // 当前选中的歌在 songs 列表里的下标。默认第 0 首(Over the Rainbow)。
   int _selected = 0;
 
@@ -99,10 +103,6 @@ class _SongScreenState extends State<SongScreen> {
   int? _markerA;
   int? _markerB;
 
-  // 音频引擎:统一管 SoLoud(嗒声;后面加扫弦声)。SongScreen 只持有它、调它的方法。
-  final AudioEngine _audio = AudioEngine();
-  bool _ready = false; // 引擎和音频都加载好了吗(没好之前 ▶ 按钮变灰、按了也不出声)
-
   // 持久化:记住上次的歌 / 速度 / 节奏型 / AB 区间。initState 里异步加载(_loadPrefs),
   // 没加载好之前是 null —— 各保存点都用 ?. 守住,加载好才真写。
   AppPreferences? _prefs;
@@ -112,7 +112,7 @@ class _SongScreenState extends State<SongScreen> {
     super.initState();
     _rebuildFlat(); // 先把当前歌拍扁,界面第一次画就能显示"现在弹 第1个和弦"
     _tempo = songs[_selected].tempo; // 默认原速(late 字段必须在第一次被读之前赋上值)
-    _initAudio(); // 后台初始化引擎 + 加载音频(不 await,不卡界面)
+    // 音频引擎由 MainScaffold 在 app 启动时统一 init(本页只调它的方法),这里不再 _initAudio。
     _loadPrefs(); // 异步读上次的歌/速度/节奏型/AB,读好再 reconcile(不卡首帧:首帧先用默认值画)
   }
 
@@ -189,13 +189,6 @@ class _SongScreenState extends State<SongScreen> {
     _lineKeys = keys;
   }
 
-  /// 后台初始化音频引擎(加载嗒声)。加载好了 _ready=true。失败(如测试环境)打日志、_ready 保持 false。
-  Future<void> _initAudio() async {
-    final ok = await _audio.init();
-    if (!mounted) return;
-    if (ok) setState(() => _ready = true);
-  }
-
   @override
   void dispose() {
     // 页面销毁前最后存一次当前歌的速度(滑块拖动时不存、怕写太勤;走这里兜底)。
@@ -203,10 +196,9 @@ class _SongScreenState extends State<SongScreen> {
     _prefs?.setTempo(_selected, _tempo);
     _saveStats(); // 兜底存累计遍数 + 秒数
     _setWakelock(false); // 离开页面:释放屏幕常亮,别一直亮着耗电
-    // 页面销毁时收尾:停闹钟、释放音频声源,否则占资源。
+    // 页面销毁时收尾:停闹钟、释放预览定时器。_audio 不在这释放——它归 MainScaffold 拥有。
     _timer?.cancel();
     _previewTimer?.cancel();
-    _audio.dispose();
     super.dispose();
   }
 
@@ -437,17 +429,17 @@ class _SongScreenState extends State<SongScreen> {
   /// - 正式播放 + 扫弦声关:退回节拍器(正拍嗒、槽0 重音)——老行为。
   void _tick() {
     if (_inCountIn) {
-      if (_slot.isEven) _audio.playClick(accent: _slot == 0);
+      if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
     } else if (_strumSoundOn && _flat.isNotEmpty && _idx < _flat.length) {
       final dir = _strumDirForCurrentSlot();
       if (dir == StrumDir.down) {
-        _audio.playChord(_flat[_idx]); // 当前和弦=_flat[_idx](推进已在 _onTimerTick 里做完)
+        widget.audio.playChord(_flat[_idx]); // 当前和弦=_flat[_idx](推进已在 _onTimerTick 里做完)
       } else if (dir == StrumDir.up) {
-        _audio.playChord(_flat[_idx], up: true);
+        widget.audio.playChord(_flat[_idx], up: true);
       }
       // StrumDir.rest:休止,静音不响
     } else {
-      if (_slot.isEven) _audio.playClick(accent: _slot == 0);
+      if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
     }
     setState(() {}); // 刷新:练习栏(倒计时数字 / 扫弦型)、和弦贴片、当前行高亮
     if (!_inCountIn) _maybeScrollToCurrentLine();
@@ -497,9 +489,9 @@ class _SongScreenState extends State<SongScreen> {
     if (_previewSlot < 0 || _previewSlot >= grid.length) return;
     final dir = grid[_previewSlot];
     if (dir == StrumDir.down) {
-      _audio.playChord(chord);
+      widget.audio.playChord(chord);
     } else if (dir == StrumDir.up) {
-      _audio.playChord(chord, up: true);
+      widget.audio.playChord(chord, up: true);
     }
     // StrumDir.rest:休止,静音不响
   }
@@ -542,16 +534,13 @@ class _SongScreenState extends State<SongScreen> {
     _prefs?.setSec(_selected, _totalSec);
   }
 
-  /// 打开练习统计页。先把当前会话还没落盘的打卡补存一下(_accumulateSec 把这段时间结进 _totalSec、
-  /// 还在播就重置 _playStart 让计时不停),统计页读到的才是最新值;再 push 统计页(它自己 load prefs)。
-  void _openStats() {
+  /// 把当前会话还没落盘的打卡补存:把 _playStart 到现在的秒数结进 _totalSec(还在播就重置 _playStart
+  /// 让计时不停)、再 _saveStats 落盘。给 MainScaffold 在【切走练习 tab】时调——统计页现在是平级 tab,
+  /// 不再靠"进页前 push"触发刷盘;不刷的话切过去读到的是旧值,会漏算刚练的这段。
+  void flushStats() {
     _accumulateSec();
     if (_playing) _playStart = DateTime.now(); // 计时不停:补完这段后重新起算
     _saveStats();
-    Navigator.push(
-      context,
-      MaterialPageRoute<void>(builder: (_) => const StatsScreen()),
-    );
   }
 
   /// 字号对话框:Slider 实时拖、歌词背后跟着变,松手就存(跨重启保留)。复位一键回 1.0。
@@ -749,27 +738,12 @@ class _SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
-        // 顶栏右侧图标:字号(调歌词大小)+ 练习统计(累计遍数/时长)+ 和弦速查(大图 + 点听声)。
+        // 顶栏右侧图标:字号(调歌词大小)。统计、和弦速查挪成底导航 tab 了(第28步),不再占这。
         actions: [
           IconButton(
             icon: const Icon(Icons.format_size_rounded),
             tooltip: '歌词字号',
             onPressed: _showFontScaleDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.insights_rounded),
-            tooltip: '练习统计',
-            onPressed: _openStats,
-          ),
-          IconButton(
-            icon: const Icon(Icons.library_music_rounded),
-            tooltip: '和弦速查',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => ChordLibraryScreen(audio: _audio),
-              ),
-            ),
           ),
         ],
       ),
@@ -789,7 +763,7 @@ class _SongScreenState extends State<SongScreen> {
               setState(() => _patternIndex = i);
               _prefs?.setPatternIndex(i); // 节奏型是跨歌偏好,切了就存
               // 没在播放时点一下 → 试听一段这个节奏型(播放中能直接听到,不用试听)。
-              if (_ready && !_playing) _previewPattern(i);
+              if (widget.audio.isReady && !_playing) _previewPattern(i);
             },
             abActive: _abActive,
             onClearAb: _clearAb,
@@ -804,13 +778,13 @@ class _SongScreenState extends State<SongScreen> {
             maxTempo: (song.tempo * 2).round(), // 最快到原速两倍——放开加速练
             onTempoChanged: _setTempo,
             isPlaying: _playing,
-            canPlay: _ready,
+            canPlay: widget.audio.isReady,
             onTogglePlay: _togglePlay,
             strumSoundOn: _strumSoundOn,
             onToggleStrumSound: _toggleStrumSound,
             rampOn: _rampOn,
             onToggleRamp: _toggleRamp,
-            onChordTap: (c) => _audio.playChord(c), // 点和弦卡 → 听这个和弦的扫弦声
+            onChordTap: (c) => widget.audio.playChord(c), // 点和弦卡 → 听这个和弦的扫弦声
           ),
           // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。
           LinearProgressIndicator(

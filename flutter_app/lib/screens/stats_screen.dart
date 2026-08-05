@@ -1,25 +1,30 @@
 // 练习统计页:把每首歌、以及全部歌的「累计遍数 / 累计时长 / 最近练到多快」列出来。
-// 从 SongScreen 顶栏图标 Navigator.push 进来。数据全是 AppPreferences 里【已经存着的】
+// 第28步起是底导航的一个 tab(和练习页平级)。数据全是 AppPreferences 里【已经存着的】
 // (第22步打卡在按歌存累计遍数 + 累计秒数),这里只读、不写——所以自己 load 一份 prefs:
 // SharedPreferences 是单例,读到的就是 SongScreen 写下去的最新值。
 //
-// 关键:进页前 SongScreen._openStats 会先把当前会话还没落盘的打卡补存
+// 关键:练习页切走时 MainScaffold 会调它的 flushStats 把当前会话还没落盘的打卡补存
 // (_accumulateSec 把这段时间结进 _totalSec、还在播就重置 _playStart 让计时不停,_saveStats 落盘),
-// 这里读到的才是含「本次」的最新值,不会少算刚练的这段。
+// 再调本页 reload() 重读——这样读到的才是含「本次」的最新值,不会少算刚练的这段。
 import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../prefs/app_preferences.dart';
 
 /// 练习统计页:总计卡(跨所有歌)+ 每首歌一张卡(累计遍数 / 时长 / 原速·最近速度)。
+///
+/// 第28步起和练习页是底导航的平级 tab(IndexedStack 保活):一次 initState 后 State 常驻,
+/// 切回统计 tab 不会重跑 initState。所以 MainScaffold 在切到统计 tab 时会调 reload() 重读 prefs,
+/// 读到的才是含「本次练习」的最新值(练习 tab 切走时已先 flushStats 把当前会话刷盘)。
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
 
   @override
-  State<StatsScreen> createState() => _StatsScreenState();
+  State<StatsScreen> createState() => StatsScreenState();
 }
 
-class _StatsScreenState extends State<StatsScreen> {
+/// public:MainScaffold 持 `GlobalKey<StatsScreenState>`,切到统计 tab 时调 reload()。
+class StatsScreenState extends State<StatsScreen> {
   AppPreferences? _prefs;
 
   @override
@@ -33,6 +38,10 @@ class _StatsScreenState extends State<StatsScreen> {
     if (!mounted) return; // 异步回来页面可能已经没了
     setState(() => _prefs = p);
   }
+
+  /// 重新读一遍 prefs。给 MainScaffold 在切到统计 tab 时调:tab 平级后 initState 只跑一次,
+  /// 不 reload 的话读到的还是上次切来时的旧值,漏算这期间在练习 tab 刚练的量。
+  void reload() => _load();
 
   @override
   Widget build(BuildContext context) {
