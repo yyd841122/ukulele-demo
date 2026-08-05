@@ -14,6 +14,7 @@ import 'audio/audio_engine.dart';
 import 'screens/chord_library_screen.dart';
 import 'screens/song_screen.dart';
 import 'screens/stats_screen.dart';
+import 'screens/tuner_screen.dart';
 
 /// 主框架:底导航 + 共享 AudioEngine。UkuleleApp 的 home 指向它(替原来的 SongScreen)。
 class MainScaffold extends StatefulWidget {
@@ -31,7 +32,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   final GlobalKey<SongScreenState> _songKey = GlobalKey<SongScreenState>();
   final GlobalKey<StatsScreenState> _statsKey = GlobalKey<StatsScreenState>();
 
-  int _index = 0; // 当前选中第几个 tab(0 练习 / 1 和弦 / 2 统计)
+  int _index = 0; // 当前选中第几个 tab(0 练习 / 1 和弦 / 2 统计 / 3 调音)
 
   @override
   void initState() {
@@ -77,11 +78,12 @@ class _MainScaffoldState extends State<MainScaffold> {
           SongScreen(key: _songKey, audio: _audio),
           ChordLibraryScreen(audio: _audio),
           StatsScreen(key: _statsKey),
+          TunerScreen(audio: _audio),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
-        // fixed:选中/未选中的 label 都常显(默认 ≤3 才 fixed;以后加第 4 个 tab 会变 shifting,
-        // 显式 fixed 省得第29步加调音 tab 时 label 忽隐忽现)。
+        // fixed:选中/未选中的 label 都常显。底导航有 4 个 tab,默认会变 shifting(label 忽隐忽现),
+        // 显式 fixed 让 4 个 label 都常显。
         type: BottomNavigationBarType.fixed,
         currentIndex: _index,
         onTap: _onTabTapped,
@@ -97,6 +99,10 @@ class _MainScaffoldState extends State<MainScaffold> {
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart_outlined),
             label: '统计',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.graphic_eq_outlined),
+            label: '调音',
           ),
         ],
       ),

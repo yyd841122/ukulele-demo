@@ -32,14 +32,15 @@ class StrumSynth {
     return (openTuning[stringIndex] * pow(2, fret / 12)).toDouble();
   }
 
-  /// Karplus-Strong 拨一根频率为 [freq] 的弦,返回该弦的衰减波形(Float64,长度 = clipDuration×sampleRate)。
-  Float64List _pluck(double freq) {
+  /// Karplus-Strong 拨一根频率为 [freq] 的弦,返回该弦的衰减波形(Float64,长度 = durationSec×sampleRate)。
+  /// [durationSec] 默认跟扫弦一样(0.8s);调音参考音会传更长的(余音多响一会儿、好边听边拧弦钮)。
+  Float64List _pluck(double freq, {double durationSec = clipDuration}) {
     final n = max(1, (sampleRate / freq).round()); // 环形缓冲长 = 一个周期采样数(至少 1)
     final buf = Float64List(n);
     for (var i = 0; i < n; i++) {
       buf[i] = _random.nextDouble() * 2 - 1; // 白噪声起振
     }
-    final total = (clipDuration * sampleRate).round();
+    final total = (durationSec * sampleRate).round();
     final out = Float64List(total);
     var idx = 0;
     for (var s = 0; s < total; s++) {
@@ -90,6 +91,27 @@ class StrumSynth {
     }
 
     return buildWav(mix, sampleRate: sampleRate);
+  }
+
+  /// 合成【单根空弦】的拨弦声(给"调音参考音"用):拨第 stringIndex 根空弦(fret=0),套 WAV 头返回。
+  /// 和扫弦用的是同一个 _pluck 引擎 + 同一个 buildWav 头——区别只在扫弦拨四根错开叠起来,
+  /// 这边只拨一根,听上去是"叮——"的单音,正好拿来做调音基准(拿你琴上拨出的声跟它对)。
+  /// [durationSec] 默认跟扫弦一样;调音页在 AudioEngine 里传更长的(见 referenceToneSec)。
+  Uint8List synthesizeOpenStringWav(int stringIndex, {double durationSec = clipDuration}) {
+    final tone = _pluck(openTuning[stringIndex], durationSec: durationSec);
+    // 单弦没叠 4 根、峰值约 1.0;归一化到 0.99 顶满音量 + 防意外削顶(跟扫弦同一套保险)。
+    var peak = 0.0;
+    for (final v in tone) {
+      final a = v.abs();
+      if (a > peak) peak = a;
+    }
+    if (peak > 0) {
+      final g = 0.99 / peak;
+      for (var i = 0; i < tone.length; i++) {
+        tone[i] *= g;
+      }
+    }
+    return buildWav(tone, sampleRate: sampleRate);
   }
 
   /// 把 Float64 样本(-1..1)套上标准 WAV 头(44字节)+ 单声道 16位 PCM,返回完整 WAV 字节。

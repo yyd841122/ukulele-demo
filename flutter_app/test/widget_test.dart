@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ukulele_demo/main.dart';
 import 'package:ukulele_demo/screens/chord_library_screen.dart';
 import 'package:ukulele_demo/screens/stats_screen.dart';
+import 'package:ukulele_demo/screens/tuner_screen.dart';
 import 'package:ukulele_demo/widgets/chord_diagram.dart';
 
 void main() {
@@ -99,5 +100,28 @@ void main() {
     expect(find.byType(StatsScreen), findsOneWidget);
     expect(find.text('全部练习'), findsOneWidget);
     expect(find.text('按歌曲'), findsOneWidget);
+  });
+
+  testWidgets('底导航能切到调音页', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+
+    // 点底导航"调音"
+    await tester.tap(find.text('调音'));
+    await tester.pumpAndSettle();
+
+    // 底导航当前选中 = 调音(index 3)
+    final bnb = tester.widget<BottomNavigationBar>(
+      find.byType(BottomNavigationBar),
+    );
+    expect(bnb.currentIndex, 3);
+    // 调音页挂在树里:四根弦的按钮都在(音符字母 + "X 弦"标题)
+    expect(find.byType(TunerScreen), findsOneWidget);
+    expect(find.text('G 弦'), findsOneWidget);
+    expect(find.text('C 弦'), findsOneWidget);
+    expect(find.text('E 弦'), findsOneWidget);
+    expect(find.text('A 弦'), findsOneWidget);
+    // A 弦频率显示在界面上(440.00 Hz)
+    expect(find.textContaining('440.00'), findsOneWidget);
   });
 }

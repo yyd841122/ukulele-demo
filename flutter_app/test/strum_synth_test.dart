@@ -105,4 +105,45 @@ void main() {
       expect(down, isNot(equals(up)));
     });
   });
+
+  group('空弦参考音 synthesizeOpenStringWav', () {
+    test('4 根空弦都能合成、WAV 自洽(RIFF/fmt/data 头 + data 长度对)', () {
+      for (var i = 0; i < 4; i++) {
+        final wav = StrumSynth(seed: 1).synthesizeOpenStringWav(i);
+        final bd = wav.buffer.asByteData();
+        expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF', reason: '第 $i 弦');
+        expect(String.fromCharCodes(wav.sublist(12, 16)), 'fmt ', reason: '第 $i 弦');
+        expect(bd.getUint32(40, Endian.little), wav.length - 44,
+            reason: '第 $i 弦 data 长度不自洽');
+      }
+    });
+
+    test('默认时长 = 扫弦同一档(clipDuration),没偷偷改老行为', () {
+      // 单弦总长 = 44 头 + per 个样本(没有扫弦那 3 个错开间隔)。
+      final wav = StrumSynth(seed: 1).synthesizeOpenStringWav(0); // 不传 durationSec
+      final per = (StrumSynth.clipDuration * StrumSynth.sampleRate).round();
+      expect(wav.length, 44 + per * 2);
+    });
+
+    test('durationSec 越长 WAV 越长(扣掉头后采样数 ≈ 线性)', () {
+      final short = StrumSynth(seed: 1).synthesizeOpenStringWav(0, durationSec: 0.5);
+      final long = StrumSynth(seed: 1).synthesizeOpenStringWav(0, durationSec: 2.0);
+      expect(long.length, greaterThan(short.length));
+      final shortSamples = (short.length - 44) ~/ 2;
+      final longSamples = (long.length - 44) ~/ 2;
+      expect(longSamples, closeTo(shortSamples * 4, 4)); // 2.0s ≈ 0.5s 的 4 倍
+    });
+
+    test('不爆音:单弦也归一化到接近满刻度、又不削顶', () {
+      final wav = StrumSynth(seed: 1).synthesizeOpenStringWav(2);
+      final bd = wav.buffer.asByteData();
+      var peak = 0;
+      for (var p = 44; p + 1 < wav.length; p += 2) {
+        final v = bd.getInt16(p, Endian.little).abs();
+        if (v > peak) peak = v;
+      }
+      expect(peak, greaterThan(30000)); // 归一化到 0.99 → 该在 3 万以上
+      expect(peak, lessThanOrEqualTo(32767)); // 不能超 int16 上限(削顶=爆音)
+    });
+  });
 }
