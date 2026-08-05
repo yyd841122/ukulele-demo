@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 真调音器要听麦克风:录音权限。运行时还要用 permission_handler 再申请一次(危险权限)。
+         只加在 main manifest 里(它会被合并进所有 build 类型:debug/profile/release)。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="ukulele_demo"
         android:name="${applicationName}"

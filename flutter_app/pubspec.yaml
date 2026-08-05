@@ -41,6 +41,8 @@ dependencies:
   # 屏幕常亮:练琴(播放)时不让屏幕自动锁屏。只开"屏幕常亮"、不开 CPU wake_lock,
   # 所以【不需要任何安卓权限 / Manifest 改动】。
   wakelock_plus: ^1.7.0
+  record: ^7.1.1
+  permission_handler: ^12.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
