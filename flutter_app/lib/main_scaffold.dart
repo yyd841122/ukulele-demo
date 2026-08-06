@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import 'audio/audio_engine.dart';
 import 'screens/chord_library_screen.dart';
+import 'screens/chord_trainer_screen.dart';
 import 'screens/song_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/tuner_screen.dart';
@@ -28,13 +29,14 @@ class _MainScaffoldState extends State<MainScaffold> {
   // 各 tab 共用的音频引擎(嗒声 + 扫弦声)。本页拥有 / init / dispose;各 tab 收引用、只调方法。
   final AudioEngine _audio = AudioEngine();
 
-  // 练习页 / 统计页 / 调音页的 key:用来在切 tab 时"戳一下"它们的状态
-  // (flushStats / reload / 调音页 pause 停麦)。
+  // 练习页 / 统计页 / 调音页 / 换和弦训练页的 key:用来在切 tab 时"戳一下"它们的状态
+  // (flushStats / reload / 调音页 pause 停麦 / 训练页 stop 停节拍器)。
   final GlobalKey<SongScreenState> _songKey = GlobalKey<SongScreenState>();
   final GlobalKey<StatsScreenState> _statsKey = GlobalKey<StatsScreenState>();
   final GlobalKey<TunerScreenState> _tunerKey = GlobalKey<TunerScreenState>();
+  final GlobalKey<ChordTrainerState> _trainerKey = GlobalKey<ChordTrainerState>();
 
-  int _index = 0; // 当前选中第几个 tab(0 练习 / 1 和弦 / 2 统计 / 3 调音)
+  int _index = 0; // 当前选中第几个 tab(0 练习 / 1 和弦 / 2 统计 / 3 调音 / 4 换和弦)
 
   @override
   void initState() {
@@ -51,10 +53,12 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 
   /// 切 tab。离开练习 tab(0→别的)时先把当前会话打卡刷盘(统计 tab 才读得到最新);
-  /// 进统计 tab 时让它 reload 重读。两个戳都靠 key 找到对应 State,空安全。
+  /// 进统计 tab 时让它 reload 重读;离开调音 tab 停麦、离开换和弦 tab 停节拍器
+  /// (都是 IndexedStack 保活、不停会一直在后台响)。几个戳都靠 key 找到对应 State,空安全。
   void _onTabTapped(int i) {
     final leavingPractice = _index == 0 && i != 0;
     final leavingTuner = _index == 3 && i != 3;
+    final leavingTrainer = _index == 4 && i != 4;
     setState(() => _index = i);
     if (leavingPractice) {
       _songKey.currentState?.flushStats();
@@ -62,6 +66,10 @@ class _MainScaffoldState extends State<MainScaffold> {
     if (leavingTuner) {
       // 切走调音 tab → 停麦(隐私 + 省电;IndexedStack 保活,不停会一直录)。
       _tunerKey.currentState?.pause();
+    }
+    if (leavingTrainer) {
+      // 切走换和弦 tab → 停节拍器(不然嗒声会在别的 tab 继续响)。
+      _trainerKey.currentState?.stop();
     }
     if (i == 2) {
       // 统计 tab:tab 平级后 initState 只跑一次,这里手动让它重读最新 prefs。
@@ -86,6 +94,7 @@ class _MainScaffoldState extends State<MainScaffold> {
           ChordLibraryScreen(audio: _audio),
           StatsScreen(key: _statsKey),
           TunerScreen(key: _tunerKey, audio: _audio),
+          ChordTrainerScreen(key: _trainerKey, audio: _audio),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -110,6 +119,10 @@ class _MainScaffoldState extends State<MainScaffold> {
           BottomNavigationBarItem(
             icon: Icon(Icons.graphic_eq_outlined),
             label: '调音',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.fitness_center),
+            label: '换和弦',
           ),
         ],
       ),

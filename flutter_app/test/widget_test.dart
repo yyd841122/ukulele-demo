@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ukulele_demo/main.dart';
 import 'package:ukulele_demo/screens/chord_library_screen.dart';
+import 'package:ukulele_demo/screens/chord_trainer_screen.dart';
 import 'package:ukulele_demo/screens/stats_screen.dart';
 import 'package:ukulele_demo/screens/tuner_screen.dart';
 import 'package:ukulele_demo/widgets/chord_diagram.dart';
@@ -123,5 +124,26 @@ void main() {
     expect(find.text('A 弦'), findsOneWidget);
     // A 弦频率显示在界面上(440.00 Hz)
     expect(find.textContaining('440.00'), findsOneWidget);
+  });
+
+  testWidgets('底导航能切到换和弦页', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+
+    // 点底导航"换和弦"
+    await tester.tap(find.text('换和弦'));
+    await tester.pumpAndSettle();
+
+    // 底导航当前选中 = 换和弦(index 4)
+    final bnb = tester.widget<BottomNavigationBar>(
+      find.byType(BottomNavigationBar),
+    );
+    expect(bnb.currentIndex, 4);
+    // 换和弦页挂在树里:AppBar 标题 + 两张选择卡的"和弦 A / 和弦 B"标签 + 计数"已换"
+    expect(find.byType(ChordTrainerScreen), findsOneWidget);
+    expect(find.text('换和弦训练'), findsOneWidget);
+    expect(find.text('和弦 A'), findsOneWidget);
+    expect(find.text('和弦 B'), findsOneWidget);
+    expect(find.text('已换'), findsOneWidget);
   });
 }
