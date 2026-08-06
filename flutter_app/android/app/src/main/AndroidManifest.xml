@@ -2,6 +2,10 @@
     <!-- 真调音器要听麦克风:录音权限。运行时还要用 permission_handler 再申请一次(危险权限)。
          只加在 main manifest 里(它会被合并进所有 build 类型:debug/profile/release)。 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- 调音"准了"震动反馈:自己写的平台通道(MainActivity)直接驱动 Vibrator 马达(普通权限,
+         装时自动授予、不用运行时申请)。不用 HapticFeedback——后者走系统"触感反馈"通道,
+         被 ColorOS 等 OEM 的设置 / 省电策略压掉(实测调准不震);直接 VIBRATE 才稳。 -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
     <application
         android:label="ukulele_demo"
         android:name="${applicationName}"

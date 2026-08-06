@@ -43,6 +43,8 @@ dependencies:
   wakelock_plus: ^1.7.0
   record: ^7.1.1
   permission_handler: ^12.0.0
+  # 调音"准了"震动:不走第三方包,自己写平台通道(MainActivity)直接驱动 Vibrator。
+  # 不用 HapticFeedback——后者走系统"触感反馈"通道,被 ColorOS 等 OEM 的设置 / 省电压掉(实测调准不震)。
 dev_dependencies:
   flutter_test:
     sdk: flutter

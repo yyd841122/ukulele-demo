@@ -16,10 +16,10 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // HapticFeedback:进入"准"区震一下,调弦时不用盯屏
 import 'package:permission_handler/permission_handler.dart';
 
 import '../audio/audio_engine.dart';
+import '../audio/haptics.dart'; // 进入"准"区震一下:平台通道直接驱动马达,不受系统触感设置影响
 import '../audio/mic_capture.dart';
 import '../audio/pitch_detector.dart';
 import '../audio/strum_synth.dart';
@@ -196,7 +196,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     // 只在"从不准→准"的跳变触发(一直准只震一次);_wasInTune 在漏检清读数 / 停麦 / 重新开麦时复位。
     final inTune = note.cents.abs() < 5;
     if (inTune && !_wasInTune) {
-      HapticFeedback.mediumImpact();
+      Haptics.buzz(); // 短促一下(30ms):准区震动,调弦时不用盯屏
     }
     _wasInTune = inTune;
     if (mounted) setState(() { _freq = smoothed; _note = note; });
