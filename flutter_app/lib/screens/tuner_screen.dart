@@ -12,6 +12,9 @@
 // _a4,"准"的参照点整体平移、指针按此判准(交响音高 442 等就调高);参考音 / 琴弦按钮频率仍按标准 440
 // (跟合成出来的参考音一致,不混淆)。②【震动反馈】指针从不准进入"准"区(|cents|<5)时震一下——
 // 调弦时两手忙着拧弦钮、没法一直盯屏,震一下就知道"这根准了"。
+//
+// 第37步(弦距过滤):选了目标弦时,检测音离目标超过 600 音分(三全音)就当没听到——挡 YIN 偶发的八度
+// 误报(如 A4 被听成低八度 A3)。第30步承诺、原本留给"第32步"做的 UI 层兜底,本步补上(_closeToTarget)。
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -58,6 +61,10 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   // —— 判"准"的音分门槛:指针绿带 / 颜色 / 状态文字 / 震动触发都看这两个,集中一处改 ——
   static const double _inTuneCents = 5; // |cents| < 这值算"准"(绿)
   static const double _closeCents = 25; // |cents| < 这值算"稍偏"(主题色);再大就红
+
+  // —— 弦距过滤:选了目标弦时,检测音离目标超过这值就当没听到,挡 YIN 八度误报 ——
+  // 600 音分 = 三全音:比相邻弦最宽间距(纯四度 500)宽——弦很跑调也接;比八度(1200)窄——误报挡掉。
+  static const double _maxTargetCents = 600;
 
   StreamSubscription<Float64List>? _sub; // 订阅 MicCapture 的样本流
 
@@ -165,7 +172,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 来了一段麦样本:攒进缓冲,满一窗(4096)测一次音高 → 平滑 → 刷读数。
+  /// 来了一段麦样本:攒进缓冲,满一窗(4096)测一次音高 → 弦距过滤 → 平滑 → 刷读数。
   void _onSamples(Float64List chunk) {
     _buf.addAll(chunk);
     if (_buf.length < _window) return;
@@ -174,13 +181,15 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     final f = _detector.detect(window, kAudioSampleRate);
 
     if (f == null) {
-      // 这一窗没测到清晰音。连续 3 次(≈0.3s)才清读数,容忍偶发漏检、指针不闪。
-      _misses++;
-      if (_misses >= 3 && _freq != null) {
-        _recent.clear();
-        _wasInTune = false; // 读数清了,下次再进准区重新震一下
-        if (mounted) setState(() { _freq = null; _note = null; });
-      }
+      _registerMiss(); // 这一窗没测到清晰音
+      return;
+    }
+
+    // 弦距过滤(第30步承诺、本步补):选了目标弦时,检测音离目标太远就当没听到——典型是 YIN
+    // 把 A4 听成低八度 A3(差 1200 音分),不挡的话指针会乱跳、还可能误触发"准了震动"。
+    // 没选弦(全自动)不过滤:没目标就没法分辨八度误报,放行让它按测到的音走。
+    if (_target != null && !_closeToTarget(f, _target!)) {
+      _registerMiss();
       return;
     }
 
@@ -204,6 +213,25 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     }
     _wasInTune = inTune;
     if (mounted) setState(() { _freq = smoothed; _note = note; });
+  }
+
+  /// 把"这一窗当作没测到清晰音"处理:连续 3 次(≈0.3s)才清读数,容忍偶发漏检、指针不闪。
+  /// 没测到音 / 被弦距过滤挡掉,都走这里(抽出来免得两处抄一遍)。
+  void _registerMiss() {
+    _misses++;
+    if (_misses >= 3 && _freq != null) {
+      _recent.clear();
+      _wasInTune = false; // 读数清了,下次再进准区重新震一下
+      if (mounted) setState(() { _freq = null; _note = null; });
+    }
+  }
+
+  /// 选了目标弦 [target] 时,检测频率 [freq] 是否"够近"——挡 YIN 八度误报。
+  /// 判据:与目标空弦频率的音分差 < _maxTargetCents(三全音 600)。
+  bool _closeToTarget(double freq, String target) {
+    final idx = _strings.firstWhere((s) => s.name == target).idx;
+    final targetFreq = StrumSynth.openTuning[idx];
+    return centsBetween(freq, targetFreq).abs() < _maxTargetCents;
   }
 
   /// 取最近几次检测的中位数(抗偶然离群值:比平均值更不容易被一次测飞带偏)。

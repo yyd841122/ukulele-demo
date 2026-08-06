@@ -60,7 +60,8 @@ void main() {
 
     // 注:频率【范围外】的纯正弦不保证返回 null —— YIN 在卡死的 τ 窗口里可能撞上谐波周期、
     // 报出一个窗口内的乱真音高。这是有界搜索的固有行为,不算 bug;所以这里不测范围外 → null。
-    // 范围外的【真信号】由 UI 层用"和最近目标弦差太多就忽略"再挡一道(第32步)。
+    // 范围外的【真信号】由 UI 层用"和目标弦差太多就忽略"再挡一道(第37步已补:见 TunerScreen
+    // _closeToTarget + 这里的 centsBetween)。
   });
 
   group('frequencyToNote 音名/八度/音分', () {
@@ -115,6 +116,22 @@ void main() {
       // 442Hz 在 a4=442 → 准(≈0);在 a4=440 → 偏高约 +7.9
       expect(frequencyToNote(442, a4: 442).cents, closeTo(0, 0.5));
       expect(frequencyToNote(442, a4: 440).cents, greaterThan(5));
+    });
+  });
+
+  group('centsBetween(弦距过滤用)', () {
+    test('同频 = 0 音分', () {
+      expect(centsBetween(440, 440), closeTo(0, 0.01));
+    });
+
+    test('高八度 = +1200、低八度 = -1200(八度误报典型:把 A4 听成 A3)', () {
+      expect(centsBetween(880, 440), closeTo(1200, 0.01)); // A5 vs A4
+      expect(centsBetween(220, 440), closeTo(-1200, 0.01)); // A3 vs A4 ← 八度误报
+    });
+
+    test('相邻空弦间距:纯四度 ≈ 500、大三度 ≈ 400(都比 600 阈值小,该放行)', () {
+      expect(centsBetween(261.63, 196.00), closeTo(500, 5)); // C4 vs G3:纯四度
+      expect(centsBetween(329.63, 261.63), closeTo(400, 5)); // E4 vs C4:大三度
     });
   });
 }

@@ -136,3 +136,8 @@ NoteResult frequencyToNote(double freq, {double a4 = 440}) {
     cents: cents,
   );
 }
+
+/// 两个频率相差多少音分(可正可负):1200 音分 = 一个八度(频率 2 倍)。
+/// 给调音器的【弦距过滤】用——选了目标弦后,检测音离目标超过阈值(如 600 音分)就当没听到,
+/// 挡 YIN 偶发的八度误报(如 A4=440 被听成低八度 A3=220,差 1200 音分)。纯函数、无头可测。
+double centsBetween(double f1, double f2) => 1200 * log(f1 / f2) / log(2);
