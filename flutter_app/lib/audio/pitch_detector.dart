@@ -120,10 +120,13 @@ const _noteNames = [
   'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
 ];
 
-/// 频率 → 最近音名 + 八度 + 音分偏差。A4=440Hz 为基准(MIDI 69)。
-NoteResult frequencyToNote(double freq) {
-  // 距 A4 的半音数 = 12·log2(freq/440)。
-  final semis = 12 * log(freq / 440) / log(2);
+/// 频率 → 最近音名 + 八度 + 音分偏差。[a4] = A4 的基准频率(默认 440Hz,标准音高);
+/// 调音页可传 442 等做【校准】(交响音高)→ "准"的参照点整体平移,cents 跟着重算
+/// (同一频率在 a4 不同时读出的音分不同:440Hz 在 a4=442 时读成约 -8 音分偏低)。
+/// 音名 / 八度基本不变(只在恰好卡在两音正中间的边界上才可能跳),变的主要是 cents。
+NoteResult frequencyToNote(double freq, {double a4 = 440}) {
+  // 距 A4 的半音数 = 12·log2(freq/a4)。
+  final semis = 12 * log(freq / a4) / log(2);
   final midi = (69 + semis).round(); // 最近 MIDI 音高(整数)
   final cents = (semis - (midi - 69)) * 100; // 小数部分 × 100 = 音分
   final nameOctave = ((midi % 12) + 12) % 12; // 安全取模(MIDI 理论上 ≥0,兜底防负)

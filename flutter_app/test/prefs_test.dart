@@ -105,4 +105,14 @@ void main() {
     final p2 = await AppPreferences.load();
     expect(p2.getPracticeDays().length, 1);
   });
+
+  test('A4 校准:存了能读回,没存过给默认 440', () async {
+    final p = await AppPreferences.load();
+    expect(p.getA4(), 440); // 没存过 → 默认标准音高
+
+    await p.setA4(442); // 调成交响音高
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getA4(), 442);
+  });
 }

@@ -43,6 +43,11 @@ class AppPreferences {
       _prefs.getDouble(_kLyricScale) ?? fallback;
   Future<void> setLyricScale(double v) => _prefs.setDouble(_kLyricScale, v);
 
+  // A4 校准(调音器"准"的基准频率)。全局偏好——一个人的调音基准跟哪首歌无关。
+  // 默认 440(标准音高);调交响音高(442 等)时调高。界面 Slider 限定 430~450。
+  double getA4([double fallback = 440]) => _prefs.getDouble(_kA4) ?? fallback;
+  Future<void> setA4(double v) => _prefs.setDouble(_kA4, v);
+
   // —— 按歌存的偏好(key 带歌曲下标)——
   // 某首歌上次调到的速度(BPM);没存过返回 null → 用原速。
   int? getTempo(int songIndex) => _prefs.getInt('$_kTempoPrefix$songIndex');
@@ -104,6 +109,7 @@ class AppPreferences {
   static const _kStrumSound = 'pref_strum_sound';
   static const _kRamp = 'pref_ramp';
   static const _kLyricScale = 'pref_lyric_scale';
+  static const _kA4 = 'pref_a4'; // 调音器 A4 校准基准(Hz)
   static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲下标,如 pref_tempo_2
   static const _kAbAPrefix = 'pref_ab_a_'; // 后接歌曲下标
   static const _kAbBPrefix = 'pref_ab_b_';

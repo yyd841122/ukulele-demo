@@ -99,5 +99,22 @@ void main() {
       expect(bb.octave, 4);
       expect(bb.cents, closeTo(0, 0.5));
     });
+
+    test('A4 校准:同一频率在不同 a4 下音分不同、音名不变', () {
+      // 440Hz 在 a4=440(标准)→ A4,准(≈0 音分)
+      final std = frequencyToNote(440, a4: 440);
+      expect(std.name, 'A');
+      expect(std.octave, 4);
+      expect(std.cents, closeTo(0, 0.5));
+      // 440Hz 在 a4=442(交响音高)→ 比 442 低约 -7.9 音分(偏低),仍认作 A4
+      final flat = frequencyToNote(440, a4: 442);
+      expect(flat.name, 'A');
+      expect(flat.octave, 4);
+      expect(flat.cents, lessThan(-5));
+      expect(flat.cents, greaterThan(-15));
+      // 442Hz 在 a4=442 → 准(≈0);在 a4=440 → 偏高约 +7.9
+      expect(frequencyToNote(442, a4: 442).cents, closeTo(0, 0.5));
+      expect(frequencyToNote(442, a4: 440).cents, greaterThan(5));
+    });
   });
 }

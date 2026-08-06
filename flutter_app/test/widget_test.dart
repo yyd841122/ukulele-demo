@@ -127,6 +127,8 @@ void main() {
     expect(find.text('A 弦'), findsOneWidget);
     // A 弦频率显示在界面上(440.00 Hz)
     expect(find.textContaining('440.00'), findsOneWidget);
+    // 第35步:校准滑块行也在(默认 440,基准音 A4 标签常显)
+    expect(find.textContaining('基准音 A4'), findsOneWidget);
   });
 
   testWidgets('底导航能切到换和弦页', (tester) async {

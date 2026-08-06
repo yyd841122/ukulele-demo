@@ -7,16 +7,23 @@
 // 第32步:在文本读数基础上做正式调音器——加【指针表】(cents 偏离)、【平滑】(中位数 + 漏检容忍,
 // 指针不抖)、点琴弦【选目标弦】(高亮 + "这就是 X 弦/你选的是 X 但听到的是 Y" 判对)。MainScaffold
 // 切走本 tab 时调 pause() 自动停麦(见 main_scaffold)。app 进后台也停(WidgetsBindingObserver)。
+//
+// 第35步(校准 / 打磨):①【A4 校准】滑块(430~450Hz,默认 440,持久化)——frequencyToNote 传校准后的
+// _a4,"准"的参照点整体平移、指针按此判准(交响音高 442 等就调高);参考音 / 琴弦按钮频率仍按标准 440
+// (跟合成出来的参考音一致,不混淆)。②【震动反馈】指针从不准进入"准"区(|cents|<5)时震一下——
+// 调弦时两手忙着拧弦钮、没法一直盯屏,震一下就知道"这根准了"。
 import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // HapticFeedback:进入"准"区震一下,调弦时不用盯屏
 import 'package:permission_handler/permission_handler.dart';
 
 import '../audio/audio_engine.dart';
 import '../audio/mic_capture.dart';
 import '../audio/pitch_detector.dart';
 import '../audio/strum_synth.dart';
+import '../prefs/app_preferences.dart';
 
 /// 四根空弦:名字 + 在 openTuning 里的下标。显示顺序 = 标准 GCEA。
 const _strings = [
@@ -61,10 +68,31 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 
   String? _target; // 用户选中的"正在调这根弦":G/C/E/A;null=全自动(指针按测到的音走)
 
+  double _a4 = 440; // A4 校准基准(调音器"准"的参照频率)。默认 440;从 prefs 读、滑块改、存回。
+  bool _wasInTune = false; // 上一帧是否已在"准"区(|cents|<5);用于只在"从不准→准"这一下震一次。
+  AppPreferences? _prefs; // 读 / 存 _a4 用(initState 异步加载)
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this); // 监听 app 前后台:进后台要停麦
+    _loadA4(); // 异步读校准值;没好之前先用默认 440,不卡首帧
+  }
+
+  /// 异步读 A4 校准。SharedPreferences 在无头测试里 mock 了,getInstance 不会挂。
+  Future<void> _loadA4() async {
+    final p = await AppPreferences.load();
+    if (!mounted) return; // 异步回来页面可能已经没了
+    setState(() {
+      _prefs = p;
+      _a4 = p.getA4();
+    });
+  }
+
+  /// 改 A4 校准:记下 + 存。频率→音名用新的 _a4 重算,指针立刻按新基准判准。
+  void _setA4(double v) {
+    setState(() => _a4 = v.roundToDouble());
+    _prefs?.setA4(_a4);
   }
 
   @override
@@ -111,6 +139,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
         _note = null;
         _recent.clear();
         _misses = 0;
+        _wasInTune = false; // 重新开麦:准区震动从零起算
       });
     }
   }
@@ -122,6 +151,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     await _mic.stop();
     _recent.clear();
     _misses = 0;
+    _wasInTune = false;
     if (mounted) {
       setState(() {
         _listening = false;
@@ -144,6 +174,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
       _misses++;
       if (_misses >= 3 && _freq != null) {
         _recent.clear();
+        _wasInTune = false; // 读数清了,下次再进准区重新震一下
         if (mounted) setState(() { _freq = null; _note = null; });
       }
       return;
@@ -160,7 +191,14 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     if (_recent.length > 7) _recent.removeAt(0);
 
     final smoothed = _median(_recent);
-    final note = frequencyToNote(smoothed);
+    final note = frequencyToNote(smoothed, a4: _a4);
+    // 进入"准"区(|cents|<5)的这一下震一下——调弦时两手忙着拧弦钮、没法盯屏,震了就知道这根准了。
+    // 只在"从不准→准"的跳变触发(一直准只震一次);_wasInTune 在漏检清读数 / 停麦 / 重新开麦时复位。
+    final inTune = note.cents.abs() < 5;
+    if (inTune && !_wasInTune) {
+      HapticFeedback.mediumImpact();
+    }
+    _wasInTune = inTune;
     if (mounted) setState(() { _freq = smoothed; _note = note; });
   }
 
@@ -174,7 +212,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   /// 某根弦"应该是什么音"(用空弦标准频率反推音名),给"选的目标弦 vs 听到的"判对用。
   NoteResult _expectedNoteFor(String name) {
     final idx = _strings.firstWhere((s) => s.name == name).idx;
-    return frequencyToNote(StrumSynth.openTuning[idx]);
+    return frequencyToNote(StrumSynth.openTuning[idx], a4: _a4);
   }
 
   /// 点一根琴弦:选它做"正在调的目标"(高亮)+ 顺便播参考音(原功能)。再点同一根取消选择。
@@ -194,6 +232,8 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _liveCard(cs),
+            const SizedBox(height: 16),
+            _calibrationRow(cs),
             const SizedBox(height: 20),
             Text(
               '选弦 · 点琴弦选「正在调这根」(也播参考音)',
@@ -219,6 +259,48 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// A4 校准滑块:430~450Hz,默认 440。改了指针按新基准判准(参考音 / 琴弦按钮仍是标准 440)。
+  Widget _calibrationRow(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Text('基准音 A4', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Text(
+                '${_a4.round()} Hz',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.primary),
+              ),
+            ],
+          ),
+          Slider(
+            min: 430,
+            max: 450,
+            divisions: 20, // 430~450 一档 1Hz
+            value: _a4,
+            label: '${_a4.round()} Hz',
+            onChanged: _setA4,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 10),
+            child: Text(
+              '标准 440。调交响音高(442 等)时调高——指针按此判"准";参考音仍是标准 440。',
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+          ),
+        ],
       ),
     );
   }
