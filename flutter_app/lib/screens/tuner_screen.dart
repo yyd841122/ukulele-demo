@@ -1,11 +1,12 @@
-// 调音页:【真调音器】听麦克风 → 测出拨弦的音高,实时显示音名/Hz/偏高偏低;外加 G/C/E/A 参考音按钮。
+// 调音页:【真调音器】听麦克风 → 测拨弦音高 → 指针表显示偏低/准/偏高;外加 G/C/E/A 参考音按钮。
 //
 // 两套独立的音频设备,别混:
-//   - 输出(参考音):复用 MainScaffold 共享的 AudioEngine(SoLoud),点琴弦按钮听标准音 —— 跟和弦速查页同套。
+//   - 输出(参考音):复用 MainScaffold 共享的 AudioEngine(SoLoud),点琴弦按钮听标准音。
 //   - 输入(麦克风):本页自己拥有的 MicCapture(record 包),开麦后把 PCM 喂 PitchDetector(YIN)测音高。
 //
-// 第31步:先把"听得到、显示音高"跑通(文本读数:音名 + Hz + 偏高/偏低)。指针表、选弦自动对齐、
-// 切走 tab 自动停麦等打磨放第32步。State 类公开 + 有 pause():第32步让 MainScaffold 切 tab 时调它停麦。
+// 第32步:在文本读数基础上做正式调音器——加【指针表】(cents 偏离)、【平滑】(中位数 + 漏检容忍,
+// 指针不抖)、点琴弦【选目标弦】(高亮 + "这就是 X 弦/你选的是 X 但听到的是 Y" 判对)。MainScaffold
+// 切走本 tab 时调 pause() 自动停麦(见 main_scaffold)。app 进后台也停(WidgetsBindingObserver)。
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -51,8 +52,14 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 
   bool _listening = false; // 正在开麦听吗
   bool _permDenied = false; // 麦克风权限被永久拒绝了吗(只能去系统设置开)
-  double? _freq; // 最近一次测到的频率
-  NoteResult? _note; // 最近一次测到的音名/八度/音分
+  double? _freq; // 最近一次【平滑后】的频率
+  NoteResult? _note; // 最近一次【平滑后】的音名/八度/音分
+
+  // —— 平滑用 —— 取最近几次检测的中位数当显示值,指针不抖;换弦(大跳)时清空历史、立刻跟上。
+  final List<double> _recent = <double>[];
+  int _misses = 0; // 连续没测到音的次数(容忍短暂漏检,免得指针一卡一显)
+
+  String? _target; // 用户选中的"正在调这根弦":G/C/E/A;null=全自动(指针按测到的音走)
 
   @override
   void initState() {
@@ -102,15 +109,19 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
         _permDenied = false;
         _freq = null;
         _note = null;
+        _recent.clear();
+        _misses = 0;
       });
     }
   }
 
-  /// 停麦(给本页 toggle 用,也给第32步 MainScaffold 切走 tab 时调)。幂等。
+  /// 停麦(给本页 toggle 用,也给 MainScaffold 切走 tab 时调)。幂等。
   Future<void> pause() async {
     await _sub?.cancel();
     _sub = null;
     await _mic.stop();
+    _recent.clear();
+    _misses = 0;
     if (mounted) {
       setState(() {
         _listening = false;
@@ -120,22 +131,56 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 来了一段麦样本:攒进缓冲,满一窗(4096)就测一次音高、刷读数。
+  /// 来了一段麦样本:攒进缓冲,满一窗(4096)测一次音高 → 平滑 → 刷读数。
   void _onSamples(Float64List chunk) {
     _buf.addAll(chunk);
     if (_buf.length < _window) return;
-    final window = Float64List.fromList(
-      _buf.sublist(_buf.length - _window),
-    );
+    final window = Float64List.fromList(_buf.sublist(_buf.length - _window));
     _buf.clear();
     final f = _detector.detect(window, _sampleRate);
-    final note = f == null ? null : frequencyToNote(f);
-    if (mounted) {
-      setState(() {
-        _freq = f;
-        _note = note;
-      });
+
+    if (f == null) {
+      // 这一窗没测到清晰音。连续 3 次(≈0.3s)才清读数,容忍偶发漏检、指针不闪。
+      _misses++;
+      if (_misses >= 3 && _freq != null) {
+        _recent.clear();
+        if (mounted) setState(() { _freq = null; _note = null; });
+      }
+      return;
     }
+
+    _misses = 0;
+    // 换弦(频率大跳 >~5 半音)→ 清空历史,中位数立刻跟到新弦,不拖。
+    if (_recent.isNotEmpty) {
+      final med = _median(_recent);
+      final ratio = f > med ? f / med : med / f;
+      if (ratio > 1.3) _recent.clear();
+    }
+    _recent.add(f);
+    if (_recent.length > 7) _recent.removeAt(0);
+
+    final smoothed = _median(_recent);
+    final note = frequencyToNote(smoothed);
+    if (mounted) setState(() { _freq = smoothed; _note = note; });
+  }
+
+  /// 取最近几次检测的中位数(抗偶然离群值:比平均值更不容易被一次测飞带偏)。
+  double _median(List<double> xs) {
+    final s = List<double>.from(xs)..sort();
+    final n = s.length;
+    return n.isOdd ? s[n ~/ 2] : (s[n ~/ 2 - 1] + s[n ~/ 2]) / 2;
+  }
+
+  /// 某根弦"应该是什么音"(用空弦标准频率反推音名),给"选的目标弦 vs 听到的"判对用。
+  NoteResult _expectedNoteFor(String name) {
+    final idx = _strings.firstWhere((s) => s.name == name).idx;
+    return frequencyToNote(StrumSynth.openTuning[idx]);
+  }
+
+  /// 点一根琴弦:选它做"正在调的目标"(高亮)+ 顺便播参考音(原功能)。再点同一根取消选择。
+  void _selectString(String name, int idx) {
+    widget.audio.playOpenString(idx);
+    setState(() => _target = (_target == name) ? null : name);
   }
 
   @override
@@ -151,7 +196,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
             _liveCard(cs),
             const SizedBox(height: 20),
             Text(
-              '参考音(点琴弦听标准音)',
+              '选弦 · 点琴弦选「正在调这根」(也播参考音)',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -163,12 +208,13 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
               _StringButton(
                 name: s.name,
                 freq: StrumSynth.openTuning[s.idx],
-                onTap: () => widget.audio.playOpenString(s.idx),
+                isSelected: _target == s.name,
+                onTap: () => _selectString(s.name, s.idx),
               ),
               const SizedBox(height: 10),
             ],
             Text(
-              '标准定弦 GCEA(高 G)。参考音是拨弦声会衰减,没听清再点一下。',
+              '标准定弦 GCEA(高 G)。不选弦也行——指针按测到的音自动走。',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ],
@@ -177,7 +223,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// 实时调音卡:开始/停止按钮 + 读数(音名/Hz/偏高偏低,或权限提示)。
+  /// 实时调音卡:开始/停止按钮 + (权限提示 / 未开 / 读数+指针表)。
   Widget _liveCard(ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -187,6 +233,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
         border: Border.all(color: cs.outlineVariant),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FilledButton.icon(
             onPressed: _toggleListening,
@@ -199,68 +246,178 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
             ),
           ),
           const SizedBox(height: 16),
-          _readout(cs),
+          if (_permDenied)
+            _permissionPrompt(cs)
+          else if (!_listening)
+            Text(
+              '点「开始监听」,然后拨一下琴弦。',
+              style: TextStyle(color: cs.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            )
+          else
+            _listeningContent(cs),
         ],
       ),
     );
   }
 
-  /// 读数区:按 当前状态(权限/没在听/听不清/测到了)显示不同内容。
-  Widget _readout(ColorScheme cs) {
-    if (_permDenied) {
-      return Column(
-        children: [
-          Text(
-            '麦克风权限被永久拒绝',
-            style: TextStyle(color: cs.error, fontSize: 15),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () => openAppSettings(),
-            icon: const Icon(Icons.settings),
-            label: const Text('去系统设置开启'),
-          ),
-        ],
-      );
-    }
-    if (!_listening) {
-      return Text(
-        '点「开始监听」,然后拨一下琴弦。',
-        style: TextStyle(color: cs.onSurfaceVariant),
-        textAlign: TextAlign.center,
-      );
-    }
-    if (_note == null) {
-      return Text(
-        '正在听… 没听到清晰的音,拨一下弦试试。',
-        style: TextStyle(color: cs.onSurfaceVariant),
-        textAlign: TextAlign.center,
-      );
-    }
-    final cents = _note!.cents;
+  Widget _permissionPrompt(ColorScheme cs) {
     return Column(
       children: [
-        Text(
-          '${_note!.name}${_note!.octave}',
-          style: TextStyle(
-            fontSize: 56,
-            fontWeight: FontWeight.bold,
-            color: cs.primary,
-          ),
+        Text('麦克风权限被永久拒绝', style: TextStyle(color: cs.error, fontSize: 15)),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => openAppSettings(),
+          icon: const Icon(Icons.settings),
+          label: const Text('去系统设置开启'),
         ),
-        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  /// 监听中的读数:大音名 + Hz + (选了弦的话)判对 + 指针表 + 状态文字。
+  Widget _listeningContent(ColorScheme cs) {
+    final hasNote = _note != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              hasNote ? '${_note!.name}${_note!.octave}' : '—',
+              style: TextStyle(
+                fontSize: 48,
+                fontWeight: FontWeight.bold,
+                color: hasNote ? cs.primary : cs.outline,
+              ),
+            ),
+            const SizedBox(width: 10),
+            if (hasNote)
+              Text(
+                '${_freq!.toStringAsFixed(1)} Hz',
+                style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+              ),
+          ],
+        ),
+        if (_target != null && hasNote) ...[
+          const SizedBox(height: 4),
+          _matchBadge(cs),
+        ],
+        const SizedBox(height: 14),
+        _centsMeter(cs),
+        const SizedBox(height: 8),
         Text(
-          '${_freq!.toStringAsFixed(1)} Hz',
-          style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant),
+          hasNote
+              ? _tuneLabel(_note!.cents)
+              : '没听到清晰的音,拨一下弦试试。',
+          style: TextStyle(
+            fontSize: 13,
+            color: hasNote ? _tuneColor(_note!.cents, cs) : cs.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  /// "选的目标弦" vs "听到的音" 判对。
+  Widget _matchBadge(ColorScheme cs) {
+    final expected = _expectedNoteFor(_target!);
+    final match = _note!.name == expected.name && _note!.octave == expected.octave;
+    if (match) {
+      return Text(
+        '✓ 这就是 $_target 弦(标准 ${expected.name}${expected.octave})',
+        style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
+      );
+    }
+    return Text(
+      '你选的是 $_target 弦,但听到的是 ${_note!.name}${_note!.octave}',
+      style: TextStyle(fontSize: 12, color: cs.error),
+    );
+  }
+
+  /// 偏离指针表:中间=准,左=偏低,右=偏高。绿带是"准"区(±5 音分),针按 cents 偏移落位(±50 卡边)。
+  Widget _centsMeter(ColorScheme cs) {
+    final hasNote = _note != null;
+    final cents = hasNote ? _note!.cents : 0.0;
+    final clamped = cents.clamp(-50.0, 50.0).toDouble();
+    final frac = (clamped + 50) / 100; // 0=偏低边 .. 1=偏高边,0.5=正中
+    final accuracy = cents.abs();
+    final Color needleColor = !hasNote
+        ? cs.outline
+        : accuracy < 5
+            ? Colors.green
+            : accuracy < 25
+                ? cs.primary
+                : cs.error;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('偏低', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+            Text('准', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600)),
+            Text('偏高', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+          ],
         ),
         const SizedBox(height: 6),
-        Text(
-          _tuneLabel(cents),
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: _tuneColor(cents, cs),
+        SizedBox(
+          height: 26,
+          child: LayoutBuilder(
+            builder: (ctx, c) {
+              final w = c.maxWidth;
+              return Stack(
+                children: [
+                  // 轨道
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: cs.surface,
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                    ),
+                  ),
+                  // 中间"准"绿带(±5 音分 ≈ ±5% 宽)
+                  Positioned(
+                    left: w * 0.45,
+                    width: w * 0.10,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                    ),
+                  ),
+                  // 正中刻度线
+                  Positioned(
+                    left: w * 0.5 - 1,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(width: 2, color: cs.outline),
+                  ),
+                  // 指针
+                  if (hasNote)
+                    Positioned(
+                      left: (w * frac - 2).clamp(0.0, w - 4),
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 4,
+                        decoration: BoxDecoration(
+                          color: needleColor,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ],
@@ -284,15 +441,18 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   }
 }
 
-/// 一根弦的按钮:左边大圆字母(音符)+ 中间弦名/频率 + 右边喇叭图标。点整行 → onTap 播参考音。
+/// 一根弦的按钮:左边大圆字母(音符)+ 中间弦名/频率 + 右边图标。[isSelected] 时高亮(选作目标)。
+/// 点整行 → onTap(选目标弦 + 播参考音)。
 class _StringButton extends StatelessWidget {
   final String name;
   final double freq;
+  final bool isSelected;
   final VoidCallback onTap;
 
   const _StringButton({
     required this.name,
     required this.freq,
+    required this.isSelected,
     required this.onTap,
   });
 
@@ -305,9 +465,12 @@ class _StringButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest,
+          color: isSelected ? cs.primaryContainer : cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: cs.outlineVariant),
+          border: Border.all(
+            color: isSelected ? cs.primary : cs.outlineVariant,
+            width: isSelected ? 2 : 1,
+          ),
         ),
         child: Row(
           children: [
@@ -343,7 +506,10 @@ class _StringButton extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.volume_up, color: cs.primary),
+            Icon(
+              isSelected ? Icons.check_circle : Icons.volume_up,
+              color: isSelected ? cs.primary : cs.outline,
+            ),
           ],
         ),
       ),

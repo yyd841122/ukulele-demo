@@ -28,9 +28,11 @@ class _MainScaffoldState extends State<MainScaffold> {
   // 各 tab 共用的音频引擎(嗒声 + 扫弦声)。本页拥有 / init / dispose;各 tab 收引用、只调方法。
   final AudioEngine _audio = AudioEngine();
 
-  // 练习页 / 统计页的 key:用来在切 tab 时"戳一下"它们的状态(flushStats / reload)。
+  // 练习页 / 统计页 / 调音页的 key:用来在切 tab 时"戳一下"它们的状态
+  // (flushStats / reload / 调音页 pause 停麦)。
   final GlobalKey<SongScreenState> _songKey = GlobalKey<SongScreenState>();
   final GlobalKey<StatsScreenState> _statsKey = GlobalKey<StatsScreenState>();
+  final GlobalKey<TunerScreenState> _tunerKey = GlobalKey<TunerScreenState>();
 
   int _index = 0; // 当前选中第几个 tab(0 练习 / 1 和弦 / 2 统计 / 3 调音)
 
@@ -52,9 +54,14 @@ class _MainScaffoldState extends State<MainScaffold> {
   /// 进统计 tab 时让它 reload 重读。两个戳都靠 key 找到对应 State,空安全。
   void _onTabTapped(int i) {
     final leavingPractice = _index == 0 && i != 0;
+    final leavingTuner = _index == 3 && i != 3;
     setState(() => _index = i);
     if (leavingPractice) {
       _songKey.currentState?.flushStats();
+    }
+    if (leavingTuner) {
+      // 切走调音 tab → 停麦(隐私 + 省电;IndexedStack 保活,不停会一直录)。
+      _tunerKey.currentState?.pause();
     }
     if (i == 2) {
       // 统计 tab:tab 平级后 initState 只跑一次,这里手动让它重读最新 prefs。
@@ -78,7 +85,7 @@ class _MainScaffoldState extends State<MainScaffold> {
           SongScreen(key: _songKey, audio: _audio),
           ChordLibraryScreen(audio: _audio),
           StatsScreen(key: _statsKey),
-          TunerScreen(audio: _audio),
+          TunerScreen(key: _tunerKey, audio: _audio),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
