@@ -12,6 +12,8 @@ import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import 'audio_constants.dart';
+
 class MicCapture {
   final AudioRecorder _recorder = AudioRecorder();
   StreamSubscription<Uint8List>? _sub;
@@ -48,8 +50,8 @@ class MicCapture {
   }
 
   /// 开麦:开始采样、把 PCM16 字节流逐块转 Float64 推到 samples 流。
-  /// sampleRate 默认 44100(跟 PitchDetector 用的一致)。开成功返 true。
-  Future<bool> start({int sampleRate = 44100}) async {
+  /// [sampleRate] 默认走全项目统一的 [kAudioSampleRate](跟 PitchDetector 用的一致)。开成功返 true。
+  Future<bool> start({int sampleRate = kAudioSampleRate}) async {
     if (_recording) return true;
     try {
       final stream = await _recorder.startStream(

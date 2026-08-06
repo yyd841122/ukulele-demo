@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../audio/audio_constants.dart';
 import '../audio/audio_engine.dart';
 import '../audio/haptics.dart'; // 进入"准"区震一下:平台通道直接驱动马达,不受系统触感设置影响
 import '../audio/mic_capture.dart';
@@ -51,9 +52,12 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     maxFrequency: 500,
   );
 
-  static const int _sampleRate = 44100; // 跟 MicCapture / PitchDetector 用的一致
   static const int _window = 4096; // 测一次用多大缓冲(≈93ms,够尤克里里最低弦十几个周期)
   final List<double> _buf = <double>[]; // 滚动累积麦样本,攒满一窗测一次
+
+  // —— 判"准"的音分门槛:指针绿带 / 颜色 / 状态文字 / 震动触发都看这两个,集中一处改 ——
+  static const double _inTuneCents = 5; // |cents| < 这值算"准"(绿)
+  static const double _closeCents = 25; // |cents| < 这值算"稍偏"(主题色);再大就红
 
   StreamSubscription<Float64List>? _sub; // 订阅 MicCapture 的样本流
 
@@ -125,7 +129,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     }
     // 先订阅再开麦:broadcast 流没人听会丢事件,先挂上才不漏开头。
     _sub = _mic.samples.listen(_onSamples);
-    final started = await _mic.start(sampleRate: _sampleRate);
+    final started = await _mic.start(); // 采样率走全项目统一的 kAudioSampleRate
     if (!started) {
       await _sub?.cancel();
       _sub = null;
@@ -167,7 +171,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     if (_buf.length < _window) return;
     final window = Float64List.fromList(_buf.sublist(_buf.length - _window));
     _buf.clear();
-    final f = _detector.detect(window, _sampleRate);
+    final f = _detector.detect(window, kAudioSampleRate);
 
     if (f == null) {
       // 这一窗没测到清晰音。连续 3 次(≈0.3s)才清读数,容忍偶发漏检、指针不闪。
@@ -194,7 +198,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     final note = frequencyToNote(smoothed, a4: _a4);
     // 进入"准"区(|cents|<5)的这一下震一下——调弦时两手忙着拧弦钮、没法盯屏,震了就知道这根准了。
     // 只在"从不准→准"的跳变触发(一直准只震一次);_wasInTune 在漏检清读数 / 停麦 / 重新开麦时复位。
-    final inTune = note.cents.abs() < 5;
+    final inTune = note.cents.abs() < _inTuneCents;
     if (inTune && !_wasInTune) {
       Haptics.buzz(); // 短促一下(30ms):准区震动,调弦时不用盯屏
     }
@@ -420,20 +424,13 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// 偏离指针表:中间=准,左=偏低,右=偏高。绿带是"准"区(±5 音分),针按 cents 偏移落位(±50 卡边)。
+  /// 偏离指针表:中间=准,左=偏低,右=偏高。绿带是"准"区(±_inTuneCents 音分),针按 cents 偏移落位(±50 卡边)。
   Widget _centsMeter(ColorScheme cs) {
     final hasNote = _note != null;
     final cents = hasNote ? _note!.cents : 0.0;
     final clamped = cents.clamp(-50.0, 50.0).toDouble();
     final frac = (clamped + 50) / 100; // 0=偏低边 .. 1=偏高边,0.5=正中
-    final accuracy = cents.abs();
-    final Color needleColor = !hasNote
-        ? cs.outline
-        : accuracy < 5
-            ? Colors.green
-            : accuracy < 25
-                ? cs.primary
-                : cs.error;
+    final Color needleColor = !hasNote ? cs.outline : _tuneColor(cents, cs);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -452,6 +449,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
           child: LayoutBuilder(
             builder: (ctx, c) {
               final w = c.maxWidth;
+              final greenHalf = _inTuneCents / 100; // 准区半宽占满量程(±50 音分=100)的比例 → 0.05
               return Stack(
                 children: [
                   // 轨道
@@ -463,10 +461,10 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                  // 中间"准"绿带(±5 音分 ≈ ±5% 宽)
+                  // 中间"准"绿带(±_inTuneCents 音分):居中、宽 = 2·greenHalf
                   Positioned(
-                    left: w * 0.45,
-                    width: w * 0.10,
+                    left: w * (0.5 - greenHalf),
+                    width: w * (2 * greenHalf),
                     top: 0,
                     bottom: 0,
                     child: Container(
@@ -506,19 +504,20 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// 音分 → 文字标签:|cents|<5 算准;否则带正负号 + 偏低/偏高。
+  /// 音分 → 文字标签:|cents|<_inTuneCents 算准;否则带正负号 + 偏低/偏高。
   String _tuneLabel(double cents) {
     final sign = cents >= 0 ? '+' : '';
     final rounded = cents.toStringAsFixed(0);
-    if (cents.abs() < 5) return '✓ 准  $sign$rounded 音分';
+    if (cents.abs() < _inTuneCents) return '✓ 准  $sign$rounded 音分';
     return '$sign$rounded 音分(${cents < 0 ? '偏低' : '偏高'})';
   }
 
-  /// 音分 → 颜色:准=绿、稍偏=主题色、偏很多=红。
+  /// 音分 → 颜色:准(<_inTuneCents)=绿、稍偏(<_closeCents)=主题色、偏很多=红。
+  /// 指针针色 + 状态文字色都走这一份(以前两处各抄一遍,改一处忘另一处就不一致)。
   Color _tuneColor(double cents, ColorScheme cs) {
     final a = cents.abs();
-    if (a < 5) return Colors.green;
-    if (a < 25) return cs.primary;
+    if (a < _inTuneCents) return Colors.green;
+    if (a < _closeCents) return cs.primary;
     return cs.error;
   }
 }
