@@ -10,11 +10,16 @@
 //
 // 第35步(校准 / 打磨):①【A4 校准】滑块(430~450Hz,默认 440,持久化)——frequencyToNote 传校准后的
 // _a4,"准"的参照点整体平移、指针按此判准(交响音高 442 等就调高);参考音 / 琴弦按钮频率仍按标准 440
-// (跟合成出来的参考音一致,不混淆)。②【震动反馈】指针从不准进入"准"区(|cents|<5)时震一下——
-// 调弦时两手忙着拧弦钮、没法一直盯屏,震一下就知道"这根准了"。
+// (跟合成出来的参考音一致,不混淆)。
+//   ②【震动反馈】试过两版(HapticFeedback、自写 VIBRATE 平台通道)真机都不灵——第38步撤掉,
+//      改成"选中的弦调准时按钮变绿"做"调好了"的信号(更可靠、还更直观)。
 //
 // 第37步(弦距过滤):选了目标弦时,检测音离目标超过 600 音分(三全音)就当没听到——挡 YIN 偶发的八度
 // 误报(如 A4 被听成低八度 A3)。第30步承诺、原本留给"第32步"做的 UI 层兜底,本步补上(_closeToTarget)。
+//
+// 第38步(去震动 / 调准变绿):真机确认震动两版都不灵,干脆删干净(haptics.dart + Kotlin 平台通道 + VIBRATE
+// 权限 + _wasInTune)。改成选中的弦按钮在【目标弦 + 调准】时整颗变绿(_targetIsTuned:跟指针绿带同一个
+// |cents|<_inTuneCents 判准,所以"按钮变绿"和"指针进绿带"完全同步)。
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -23,7 +28,6 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../audio/audio_constants.dart';
 import '../audio/audio_engine.dart';
-import '../audio/haptics.dart'; // 进入"准"区震一下:平台通道直接驱动马达,不受系统触感设置影响
 import '../audio/mic_capture.dart';
 import '../audio/pitch_detector.dart';
 import '../audio/strum_synth.dart';
@@ -80,7 +84,6 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   String? _target; // 用户选中的"正在调这根弦":G/C/E/A;null=全自动(指针按测到的音走)
 
   double _a4 = 440; // A4 校准基准(调音器"准"的参照频率)。默认 440;从 prefs 读、滑块改、存回。
-  bool _wasInTune = false; // 上一帧是否已在"准"区(|cents|<5);用于只在"从不准→准"这一下震一次。
   AppPreferences? _prefs; // 读 / 存 _a4 用(initState 异步加载)
 
   @override
@@ -150,7 +153,6 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
         _note = null;
         _recent.clear();
         _misses = 0;
-        _wasInTune = false; // 重新开麦:准区震动从零起算
       });
     }
   }
@@ -162,7 +164,6 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     await _mic.stop();
     _recent.clear();
     _misses = 0;
-    _wasInTune = false;
     if (mounted) {
       setState(() {
         _listening = false;
@@ -205,13 +206,6 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 
     final smoothed = _median(_recent);
     final note = frequencyToNote(smoothed, a4: _a4);
-    // 进入"准"区(|cents|<5)的这一下震一下——调弦时两手忙着拧弦钮、没法盯屏,震了就知道这根准了。
-    // 只在"从不准→准"的跳变触发(一直准只震一次);_wasInTune 在漏检清读数 / 停麦 / 重新开麦时复位。
-    final inTune = note.cents.abs() < _inTuneCents;
-    if (inTune && !_wasInTune) {
-      Haptics.buzz(); // 短促一下(30ms):准区震动,调弦时不用盯屏
-    }
-    _wasInTune = inTune;
     if (mounted) setState(() { _freq = smoothed; _note = note; });
   }
 
@@ -221,7 +215,6 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     _misses++;
     if (_misses >= 3 && _freq != null) {
       _recent.clear();
-      _wasInTune = false; // 读数清了,下次再进准区重新震一下
       if (mounted) setState(() { _freq = null; _note = null; });
     }
   }
@@ -247,6 +240,18 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     return frequencyToNote(StrumSynth.openTuning[idx], a4: _a4);
   }
 
+  /// 选中的目标弦 vs 听到的音:音名 + 八度都对上吗?(判对徽标 + "调准变绿"共用)
+  bool get _targetMatches {
+    if (_target == null || _note == null) return false;
+    final expected = _expectedNoteFor(_target!);
+    return _note!.name == expected.name && _note!.octave == expected.octave;
+  }
+
+  /// 选中的目标弦现在【调准了】吗?(音名对 + 在准区 |cents|<_inTuneCents)。
+  /// 用来把选中的弦按钮整颗变绿——替代已撤掉的震动,做"这根调好了"的视觉信号。
+  /// 跟指针表绿带同一个判准,所以"按钮变绿"和"指针进绿带"完全同步。
+  bool get _targetIsTuned => _targetMatches && _note!.cents.abs() < _inTuneCents;
+
   /// 点一根琴弦:选它做"正在调的目标"(高亮)+ 顺便播参考音(原功能)。再点同一根取消选择。
   void _selectString(String name, int idx) {
     widget.audio.playOpenString(idx);
@@ -256,6 +261,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tuned = _targetIsTuned; // 选中弦现在调准了吗?是 → 该按钮变绿
     return Scaffold(
       appBar: AppBar(title: const Text('调音')),
       body: SingleChildScrollView(
@@ -281,6 +287,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
                 name: s.name,
                 freq: StrumSynth.openTuning[s.idx],
                 isSelected: _target == s.name,
+                isTuned: _target == s.name && tuned, // 选中且调准 → 整颗变绿
                 onTap: () => _selectString(s.name, s.idx),
               ),
               const SizedBox(height: 10),
@@ -438,9 +445,8 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 
   /// "选的目标弦" vs "听到的音" 判对。
   Widget _matchBadge(ColorScheme cs) {
-    final expected = _expectedNoteFor(_target!);
-    final match = _note!.name == expected.name && _note!.octave == expected.octave;
-    if (match) {
+    if (_targetMatches) {
+      final expected = _expectedNoteFor(_target!);
       return Text(
         '✓ 这就是 $_target 弦(标准 ${expected.name}${expected.octave})',
         style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
@@ -550,48 +556,58 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   }
 }
 
-/// 一根弦的按钮:左边大圆字母(音符)+ 中间弦名/频率 + 右边图标。[isSelected] 时高亮(选作目标)。
+/// 一根弦的按钮:左边大圆字母(音符)+ 中间弦名/频率 + 右边图标。三态:
+///   - [isTuned](选中且调准):整颗变绿,副标题显"✓ 调准了"——"这根调好了"的信号(替代已撤的震动)。
+///   - [isSelected](选中但还没准):主题色高亮(表示"正在调这根")。
+///   - 都不是:默认灰底 + 喇叭图标。
 /// 点整行 → onTap(选目标弦 + 播参考音)。
 class _StringButton extends StatelessWidget {
   final String name;
   final double freq;
   final bool isSelected;
+  final bool isTuned;
   final VoidCallback onTap;
 
   const _StringButton({
     required this.name,
     required this.freq,
     required this.isSelected,
+    required this.isTuned,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // 调准 = 绿;否则选中 = 主题色;都没 = 默认。调准必然已选中。
+    final accent = isTuned ? Colors.green : cs.primary;
+    final active = isSelected || isTuned; // 有边框 + 勾图标的两种"选中态"
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected ? cs.primaryContainer : cs.surfaceContainerHighest,
+          color: isTuned
+              ? Colors.green.withValues(alpha: 0.15)
+              : (isSelected ? cs.primaryContainer : cs.surfaceContainerHighest),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? cs.primary : cs.outlineVariant,
-            width: isSelected ? 2 : 1,
+            color: active ? accent : cs.outlineVariant,
+            width: active ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
             CircleAvatar(
               radius: 22,
-              backgroundColor: cs.primary,
+              backgroundColor: accent,
               child: Text(
                 name,
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: cs.onPrimary,
+                  color: isTuned ? Colors.white : cs.onPrimary,
                 ),
               ),
             ),
@@ -609,15 +625,19 @@ class _StringButton extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${freq.toStringAsFixed(2)} Hz · 空弦标准音',
-                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                    isTuned ? '✓ 调准了' : '${freq.toStringAsFixed(2)} Hz · 空弦标准音',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isTuned ? Colors.green : cs.onSurfaceVariant,
+                      fontWeight: isTuned ? FontWeight.w600 : FontWeight.normal,
+                    ),
                   ),
                 ],
               ),
             ),
             Icon(
-              isSelected ? Icons.check_circle : Icons.volume_up,
-              color: isSelected ? cs.primary : cs.outline,
+              active ? Icons.check_circle : Icons.volume_up,
+              color: active ? accent : cs.outline,
             ),
           ],
         ),
