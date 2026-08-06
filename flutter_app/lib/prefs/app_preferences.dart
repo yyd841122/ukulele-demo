@@ -7,6 +7,8 @@
 // 歌曲下标、节奏型是全局的(节奏型本来就是跨歌保留的练习偏好)。
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models.dart'; // practiceDayKey:把 DateTime 折成 'yyyy-MM-dd' 当字典 key
+
 class AppPreferences {
   final SharedPreferences _prefs;
   AppPreferences(this._prefs);
@@ -82,6 +84,20 @@ class AppPreferences {
   Future<void> setSec(int songIndex, int n) =>
       _prefs.setInt('$_kSecPrefix$songIndex', n);
 
+  // —— 练习日历(哪天练过,跨歌汇总)——
+  // 存 practiceDayKey 字符串('yyyy-MM-dd')列表、去重。给统计页画日历热力图 + 算"连续打卡 N 天"。
+  // 跨歌(不按歌存):练了哪天跟哪首歌无关,日历看的是"有没有练"。SongScreen 在真正攒到练习秒数时标记。
+  List<String> getPracticeDays() =>
+      _prefs.getStringList(_kPracticeDays) ?? [];
+  /// 标记今天练过(去重:已记过就 no-op)。SongScreen._accumulateSec 攒到 >=1 秒时调。
+  Future<void> markPracticedToday() async {
+    final today = practiceDayKey(DateTime.now());
+    final days = getPracticeDays();
+    if (days.contains(today)) return; // 今天已记过,不重复加
+    days.add(today);
+    await _prefs.setStringList(_kPracticeDays, days);
+  }
+
   // key 常量:集中放一处,免得读写各处拼字符串拼错。
   static const _kSongIndex = 'pref_song_index';
   static const _kPatternIndex = 'pref_pattern_index';
@@ -93,4 +109,5 @@ class AppPreferences {
   static const _kAbBPrefix = 'pref_ab_b_';
   static const _kLoopsPrefix = 'pref_loops_'; // 后接歌曲下标
   static const _kSecPrefix = 'pref_sec_'; // 后接歌曲下标
+  static const _kPracticeDays = 'pref_practice_days'; // 'yyyy-MM-dd' 字符串列表
 }

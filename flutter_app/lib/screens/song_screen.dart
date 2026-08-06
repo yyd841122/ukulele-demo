@@ -524,8 +524,14 @@ class SongScreenState extends State<SongScreen> {
   void _accumulateSec() {
     final start = _playStart;
     if (start == null) return;
-    _totalSec += DateTime.now().difference(start).inSeconds;
+    final secs = DateTime.now().difference(start).inSeconds;
+    _totalSec += secs;
     _playStart = null;
+    if (secs > 0) {
+      // 真正练了一会(>= 1 秒)→ 标记今天练过(去重),给统计页的日历 / 连续打卡用。
+      // fire-and-forget,跟其它 prefs 写一个套路(不 await,不卡节拍)。
+      _prefs?.markPracticedToday();
+    }
   }
 
   /// 把当前歌的累计遍数 + 秒数存进持久化。跟 tempo 一个套路:暂停 / 换歌 / 销毁时兜底存,不在每拍写(怕写太勤)。

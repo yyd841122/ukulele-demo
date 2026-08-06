@@ -64,6 +64,12 @@ class StatsScreenState extends State<StatsScreen> {
       totalSec += p.getSec(i);
     }
 
+    // 练习日历:哪天练过(跨歌)→ 算连续打卡天数 + 画日历热力图。
+    final practicedDays = p.getPracticeDays();
+    final practicedSet = practicedDays.toSet();
+    final now = DateTime.now();
+    final streak = currentStreak(practicedDays, now);
+
     return Scaffold(
       appBar: AppBar(title: const Text('练习统计')),
       body: ListView(
@@ -99,6 +105,56 @@ class StatsScreenState extends State<StatsScreen> {
             ),
           ),
           const SizedBox(height: 16),
+
+          // 连续打卡卡:🔥 连续 N 天 + 累计 M 天(激励向,放总计下面最显眼)。
+          // 用 secondaryContainer 跟总计卡 primaryContainer 区分开。
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              color: cs.secondaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Text('🔥', style: TextStyle(fontSize: 30)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '连续练琴 $streak 天',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: cs.onSecondaryContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '累计练琴 ${practicedSet.length} 天',
+                        style: TextStyle(fontSize: 12, color: cs.onSecondaryContainer),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 日历热力图:最近 13 周(≈3 个月),深色 = 练过。横向往左是更早的周。
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 6),
+            child: Text(
+              '最近 13 周(深色 = 练过)',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+          _PracticeCalendar(practiced: practicedSet, today: now, weeks: 13),
+          const SizedBox(height: 16),
+
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 8),
             child: Text(
@@ -193,6 +249,75 @@ class _SongStatsCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 练习日历热力图:最近 [weeks] 周,7 行(周一..周日)× N 列(周)。
+/// 深色方块 = 那天练过、浅色 = 没练、空白 = 未来(还没到)。横向从左(更早)到右(本周)。
+/// 对齐:每列是一个完整自然周(周一..周日);本周可能只有到今天为止的几天,后面留空。
+class _PracticeCalendar extends StatelessWidget {
+  final Set<String> practiced; // practiceDayKey('yyyy-MM-dd') 集合
+  final DateTime today;
+  final int weeks;
+
+  const _PracticeCalendar({
+    required this.practiced,
+    required this.today,
+    this.weeks = 13,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final todayDate = DateTime(today.year, today.month, today.day); // 折成零点,比较用
+    // 本周的周一:weekday 1=周一..7=周日,所以减 (weekday-1) 天。
+    final daysSinceMon = todayDate.weekday - 1;
+    final thisMonday = todayDate.subtract(Duration(days: daysSinceMon));
+    // 整个窗口的左上角 = 本周周一往前推 (weeks-1) 周。
+    final firstMonday = thisMonday.subtract(Duration(days: (weeks - 1) * 7));
+
+    final columns = <Widget>[];
+    for (var w = 0; w < weeks; w++) {
+      final colChildren = <Widget>[];
+      for (var d = 0; d < 7; d++) {
+        final date = firstMonday.add(Duration(days: w * 7 + d));
+        if (colChildren.isNotEmpty) colChildren.add(const SizedBox(height: 3));
+        colChildren.add(_dayCell(cs, date, todayDate));
+      }
+      columns.add(
+        Padding(
+          padding: EdgeInsets.only(right: w == weeks - 1 ? 0 : 3),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: colChildren,
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: columns,
+    );
+  }
+
+  /// 一个日期方格:练过 = 主色实心、没练 = 浅灰、未来 = 透明(占位不画色)。
+  Widget _dayCell(ColorScheme cs, DateTime date, DateTime todayDate) {
+    const size = 14.0;
+    if (date.isAfter(todayDate)) {
+      // 未来日子:留空格占位(保持网格对齐),不涂色。
+      return const SizedBox(width: size, height: size);
+    }
+    final did = practiced.contains(practiceDayKey(date));
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: did ? cs.primary : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(3),
       ),
     );
   }

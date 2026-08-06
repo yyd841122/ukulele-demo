@@ -101,6 +101,9 @@ void main() {
     expect(find.byType(StatsScreen), findsOneWidget);
     expect(find.text('全部练习'), findsOneWidget);
     expect(find.text('按歌曲'), findsOneWidget);
+    // 连续打卡卡 + 日历热力图标题也在(第34步新加)
+    expect(find.textContaining('连续'), findsOneWidget);
+    expect(find.textContaining('最近 13 周'), findsOneWidget);
   });
 
   testWidgets('底导航能切到调音页', (tester) async {

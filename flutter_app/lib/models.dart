@@ -206,6 +206,38 @@ String formatPracticeSec(int sec) {
   return '${h}h${m % 60}m';
 }
 
+/// 练习日历用的"日期键":把 DateTime 折成 date-only(零点)再取 ISO 字符串前 10 位
+/// → 'yyyy-MM-dd'(零填充,如 '2026-08-06')。toIso8601String 已自带零填充,取前 10 位刚好。
+/// 当存"哪天练过"的字典 key / 列表项用。抽成纯函数:存(SongScreen)、读(统计页)、测都要,共用一份。
+String practiceDayKey(DateTime d) =>
+    DateTime(d.year, d.month, d.day).toIso8601String().substring(0, 10);
+
+/// 连续打卡天数(练习日历的"🔥 连续 N 天"):从 today 往回数连续命中的天数。
+/// [practicedDays] = practiceDayKey 字符串列表(哪天练过);[today] 任意时刻都行(内部折成零点)。
+/// 规则:今天练了→从今天起数;今天没练但昨天练了→从昨天起数(今天还没结束, streak 仍算到昨天为止,
+///      今天再练就续上);今天昨天都没练→0。
+/// 纯函数、无副作用:抽出来是为了在无头测试里直接锁它(连练 / 断了 / 今天还没练这几种边界),
+/// 不依赖系统时钟(DateTime.now)——today 由调用方传,测试传固定值。
+int currentStreak(List<String> practicedDays, DateTime today) {
+  final set = practicedDays.toSet();
+  final todayDate = DateTime(today.year, today.month, today.day);
+  // 起点:今天命中→今天;否则昨天命中→昨天(今天还没练, streak 算到昨天为止);否则 0。
+  DateTime cursor;
+  if (set.contains(practiceDayKey(todayDate))) {
+    cursor = todayDate;
+  } else if (set.contains(practiceDayKey(todayDate.subtract(const Duration(days: 1))))) {
+    cursor = todayDate.subtract(const Duration(days: 1));
+  } else {
+    return 0;
+  }
+  var n = 0;
+  while (set.contains(practiceDayKey(cursor))) {
+    n++;
+    cursor = cursor.subtract(const Duration(days: 1));
+  }
+  return n;
+}
+
 /// 一行歌词,和弦用 [C] 标在"该弹的那个词"前面(行内和弦)。
 /// chords 是从歌词里解析出来的(按出现顺序),给节拍器拍扁成一条线往前推进用。
 @immutable

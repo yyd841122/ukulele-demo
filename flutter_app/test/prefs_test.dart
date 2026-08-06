@@ -3,6 +3,7 @@
 // shared_preferences 在 flutter_test 里是自动 mock 的内存库,setMockInitialValues 给每个测试一个干净起点。
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ukulele_demo/models.dart'; // practiceDayKey:断言标记的是今天的日期键
 import 'package:ukulele_demo/prefs/app_preferences.dart';
 
 void main() {
@@ -87,5 +88,21 @@ void main() {
     final p2 = await AppPreferences.load(); // 模拟重启
     expect(p2.getLyricScale(), 1.4);
     expect(p2.getLyricScale(0.9), 1.4); // 存过就忽略 fallback
+  });
+
+  test('练习日历:标记今天练过(去重)+ 能读回', () async {
+    final p = await AppPreferences.load();
+    expect(p.getPracticeDays(), isEmpty); // 没记过
+
+    await p.markPracticedToday();
+    await p.markPracticedToday(); // 同一天再调一次 → 去重,不重复加
+
+    final days = p.getPracticeDays();
+    expect(days.length, 1); // 去重:今天只记一次
+    expect(days, contains(practiceDayKey(DateTime.now())));
+
+    // 模拟重启仍读得到
+    final p2 = await AppPreferences.load();
+    expect(p2.getPracticeDays().length, 1);
   });
 }
