@@ -20,6 +20,9 @@
 // 第38步(去震动 / 调准变绿):真机确认震动两版都不灵,干脆删干净(haptics.dart + Kotlin 平台通道 + VIBRATE
 // 权限 + _wasInTune)。改成选中的弦按钮在【目标弦 + 调准】时整颗变绿(_targetIsTuned:跟指针绿带同一个
 // |cents|<_inTuneCents 判准,所以"按钮变绿"和"指针进绿带"完全同步)。
+//
+// 第40步(清单式绿按钮):第38步的"调准变绿"是实时的——一偏离就退回选中色。本步改成清单式:一根弦
+// 调准过就进 _tunedStrings、按钮保持绿,4 颗全绿=全调好;标题显"已调准 N/4"。新开一轮监听清空重数。
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -82,6 +85,10 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   int _misses = 0; // 连续没测到音的次数(容忍短暂漏检,免得指针一卡一显)
 
   String? _target; // 用户选中的"正在调这根弦":G/C/E/A;null=全自动(指针按测到的音走)
+
+  // 清单式"调准了":一根弦调准过就进这集合,按钮整颗保持绿(不会因之后偏离退回),4 颗全绿=全调好。
+  // 第38步的"实时绿、偏离就退回"不够直观——这里改成清单式,更像逐根核对。新开一轮监听时清空(重新调)。
+  final Set<String> _tunedStrings = {};
 
   double _a4 = 440; // A4 校准基准(调音器"准"的参照频率)。默认 440;从 prefs 读、滑块改、存回。
   AppPreferences? _prefs; // 读 / 存 _a4 用(initState 异步加载)
@@ -151,6 +158,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
         _permDenied = false;
         _freq = null;
         _note = null;
+        _tunedStrings.clear(); // 新开一轮监听 → 清单清空,重新数哪几根调好了
         _resetSmoothing();
       });
     }
@@ -204,7 +212,15 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 
     final smoothed = _median(_recent);
     final note = frequencyToNote(smoothed, a4: _a4);
-    if (mounted) setState(() { _freq = smoothed; _note = note; });
+    // 选中弦这次调准了 → 记进清单,按钮整颗保持绿(清单式:调过的不再因偏离退回)。
+    final tunedNow = _target != null && _isTuned(_target!, note);
+    if (mounted) {
+      setState(() {
+        _freq = smoothed;
+        _note = note;
+        if (tunedNow) _tunedStrings.add(_target!);
+      });
+    }
   }
 
   /// 重置平滑历史(最近几次检测 + 漏检计数):开始监听 / 停麦时都调,免得上一轮读数残留、指针拖。
@@ -244,17 +260,21 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     return frequencyToNote(StrumSynth.openTuning[idx], a4: _a4);
   }
 
-  /// 选中的目标弦 vs 听到的音:音名 + 八度都对上吗?(判对徽标 + "调准变绿"共用)
-  bool get _targetMatches {
-    if (_target == null || _note == null) return false;
-    final expected = _expectedNoteFor(_target!);
-    return _note!.name == expected.name && _note!.octave == expected.octave;
+  /// 某根弦的目标音(音名+八度)对得上 [note] 吗?抽成收 NoteResult 的版本,不依赖实例 _note:
+  /// 既给"选中态判对"(_targetMatches 读实例 _note),也给 _onSamples 用【刚测出的 note】判"这次调准了、
+  /// 要记进 _tunedStrings"——两边共用同一套判据,改一处两处跟。
+  bool _matchesExpected(String target, NoteResult note) {
+    final expected = _expectedNoteFor(target);
+    return note.name == expected.name && note.octave == expected.octave;
   }
 
-  /// 选中的目标弦现在【调准了】吗?(音名对 + 在准区 |cents|<_inTuneCents)。
-  /// 用来把选中的弦按钮整颗变绿——替代已撤掉的震动,做"这根调好了"的视觉信号。
-  /// 跟指针表绿带同一个判准,所以"按钮变绿"和"指针进绿带"完全同步。
-  bool get _targetIsTuned => _targetMatches && _note!.cents.abs() < _inTuneCents;
+  /// 某根弦【调准了】吗?(目标音对 + 在准区 |cents|<_inTuneCents)。跟指针绿带、第38步"变绿"同一个判准。
+  bool _isTuned(String target, NoteResult note) =>
+      _matchesExpected(target, note) && note.cents.abs() < _inTuneCents;
+
+  /// 选中的目标弦 vs 听到的音:音名 + 八度都对上吗?(判对徽标用)
+  bool get _targetMatches =>
+      _target != null && _note != null && _matchesExpected(_target!, _note!);
 
   /// 点一根琴弦:选它做"正在调的目标"(高亮)+ 顺便播参考音(原功能)。再点同一根取消选择。
   void _selectString(String name, int idx) {
@@ -265,7 +285,6 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tuned = _targetIsTuned; // 选中弦现在调准了吗?是 → 该按钮变绿
     return Scaffold(
       appBar: AppBar(title: const Text('调音')),
       body: SingleChildScrollView(
@@ -278,7 +297,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
             _calibrationRow(cs),
             const SizedBox(height: 20),
             Text(
-              '选弦 · 点琴弦选「正在调这根」(也播参考音)',
+              '选弦 · 已调准 ${_tunedStrings.length}/4(点琴弦选「正在调这根」)',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -291,7 +310,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
                 name: s.name,
                 freq: StrumSynth.openTuning[s.idx],
                 isSelected: _target == s.name,
-                isTuned: _target == s.name && tuned, // 选中且调准 → 整颗变绿
+                isTuned: _tunedStrings.contains(s.name), // 调准过(在清单里)→ 整颗保持绿
                 onTap: () => _selectString(s.name, s.idx),
               ),
               const SizedBox(height: 10),
@@ -561,7 +580,8 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 }
 
 /// 一根弦的按钮:左边大圆字母(音符)+ 中间弦名/频率 + 右边图标。三态:
-///   - [isTuned](选中且调准):整颗变绿,副标题显"✓ 调准了"——"这根调好了"的信号(替代已撤的震动)。
+///   - [isTuned](在清单里=调准过):整颗变绿,副标题显"✓ 调准了"。调准过就保持绿、不会因之后偏离退回
+///     (清单式);可以是当前选中的弦,也可以是之前调好、已切走到别的弦的。
 ///   - [isSelected](选中但还没准):主题色高亮(表示"正在调这根")。
 ///   - 都不是:默认灰底 + 喇叭图标。
 /// 点整行 → onTap(选目标弦 + 播参考音)。
