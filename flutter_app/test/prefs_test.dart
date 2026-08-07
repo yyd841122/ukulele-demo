@@ -115,4 +115,28 @@ void main() {
     final p2 = await AppPreferences.load(); // 模拟重启
     expect(p2.getA4(), 442);
   });
+
+  test('换和弦训练:弦对/速度/档位/挑战,存了能读回、没存过给默认', () async {
+    final p = await AppPreferences.load();
+    // 没存过 → 调用方给的 fallback
+    expect(p.getTrainerChordA('C'), 'C');
+    expect(p.getTrainerChordB('G'), 'G');
+    expect(p.getTrainerBpm(60), 60);
+    expect(p.getTrainerBeats(4), 4);
+    expect(p.getTrainerChallenge(), false);
+
+    await p.setTrainerChordA('Am');
+    await p.setTrainerChordB('F');
+    await p.setTrainerBpm(80);
+    await p.setTrainerBeats(2);
+    await p.setTrainerChallenge(true);
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getTrainerChordA('C'), 'Am');
+    expect(p2.getTrainerChordB('G'), 'F');
+    expect(p2.getTrainerBpm(60), 80);
+    expect(p2.getTrainerBeats(4), 2);
+    expect(p2.getTrainerChallenge(), true);
+    expect(p2.getTrainerChallenge(false), true); // 存过就忽略 fallback
+  });
 }

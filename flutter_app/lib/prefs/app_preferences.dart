@@ -48,6 +48,31 @@ class AppPreferences {
   double getA4([double fallback = 440]) => _prefs.getDouble(_kA4) ?? fallback;
   Future<void> setA4(double v) => _prefs.setDouble(_kA4, v);
 
+  // —— 换和弦训练(全局;上次选的两个和弦 / 速度 / 每几拍换 / 60 秒挑战开关)——
+  // 不按歌存——它跟具体哪首歌无关,是独立的切换练习。存了就记住上次选的,跨 app 重启还在;
+  // 没存过调用方给默认(C↔G / 60 BPM / 4 拍 / 挑战关)。和弦名存字符串,调用方负责校验还在 chordShapes 里。
+  String getTrainerChordA(String fallback) =>
+      _prefs.getString(_kTrainerChordA) ?? fallback;
+  Future<void> setTrainerChordA(String v) =>
+      _prefs.setString(_kTrainerChordA, v);
+
+  String getTrainerChordB(String fallback) =>
+      _prefs.getString(_kTrainerChordB) ?? fallback;
+  Future<void> setTrainerChordB(String v) =>
+      _prefs.setString(_kTrainerChordB, v);
+
+  int getTrainerBpm(int fallback) => _prefs.getInt(_kTrainerBpm) ?? fallback;
+  Future<void> setTrainerBpm(int v) => _prefs.setInt(_kTrainerBpm, v);
+
+  int getTrainerBeats(int fallback) =>
+      _prefs.getInt(_kTrainerBeats) ?? fallback;
+  Future<void> setTrainerBeats(int v) => _prefs.setInt(_kTrainerBeats, v);
+
+  bool getTrainerChallenge([bool fallback = false]) =>
+      _prefs.getBool(_kTrainerChallenge) ?? fallback;
+  Future<void> setTrainerChallenge(bool v) =>
+      _prefs.setBool(_kTrainerChallenge, v);
+
   // —— 按歌存的偏好(key 带歌曲下标)——
   // 某首歌上次调到的速度(BPM);没存过返回 null → 用原速。
   int? getTempo(int songIndex) => _prefs.getInt('$_kTempoPrefix$songIndex');
@@ -110,6 +135,11 @@ class AppPreferences {
   static const _kRamp = 'pref_ramp';
   static const _kLyricScale = 'pref_lyric_scale';
   static const _kA4 = 'pref_a4'; // 调音器 A4 校准基准(Hz)
+  static const _kTrainerChordA = 'pref_trainer_chord_a'; // 换和弦训练:上次选的和弦 A
+  static const _kTrainerChordB = 'pref_trainer_chord_b'; // 换和弦训练:上次选的和弦 B
+  static const _kTrainerBpm = 'pref_trainer_bpm'; // 换和弦训练:速度
+  static const _kTrainerBeats = 'pref_trainer_beats'; // 换和弦训练:每几拍换
+  static const _kTrainerChallenge = 'pref_trainer_challenge'; // 换和弦训练:60 秒挑战开关
   static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲下标,如 pref_tempo_2
   static const _kAbAPrefix = 'pref_ab_a_'; // 后接歌曲下标
   static const _kAbBPrefix = 'pref_ab_b_';

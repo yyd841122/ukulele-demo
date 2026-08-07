@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 
 import '../audio/audio_engine.dart';
 import '../models.dart';
+import '../prefs/app_preferences.dart';
 import '../widgets/chord_diagram.dart';
 
 /// 换和弦训练页。[audio] 复用 MainScaffold 的共享引擎(不二次 init,跟和弦页 / 调音页一样)。
@@ -52,6 +53,8 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
 
   Timer? _timer;
 
+  AppPreferences? _prefs; // 记住上次选的弦对/速度/档位/挑战(initState 异步读、改时存回)
+
   /// 当前该显示的和弦名(_side 决定看 A 还是 B)。
   String get _current => _side == 0 ? _chordA : _chordB;
 
@@ -60,6 +63,32 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
 
   /// 每拍多少毫秒(60 秒 / BPM)。
   int get _beatMs => (60000 / _bpm).round();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs(); // 异步读上次的选择;没好之前先用字段默认值(C↔G/60/4/关),不卡首帧
+  }
+
+  /// 异步读上次的弦对 / 速度 / 档位 / 挑战开关。SharedPreferences 在测试里 mock 了,getInstance 不会挂。
+  /// 和弦名校验还在 chordShapes 里(防以后删和弦导致存的值失效);保证 A≠B;档位校验在 {1,2,4}。
+  Future<void> _loadPrefs() async {
+    final p = await AppPreferences.load();
+    if (!mounted) return; // 异步回来页面可能已经没了
+    final chords = chordShapes.keys.toSet();
+    setState(() {
+      _prefs = p;
+      final a = p.getTrainerChordA(_chordA);
+      _chordA = chords.contains(a) ? a : _chordA;
+      final b = p.getTrainerChordB(_chordB);
+      // 存的 B 失效或跟 A 撞了 → 退一个跟 A 不同的默认(A 是 G 就退 C,否则退 G)。
+      _chordB = (chords.contains(b) && b != _chordA) ? b : (_chordA == 'G' ? 'C' : 'G');
+      final bpc = p.getTrainerBeats(_beatsPerChange);
+      _beatsPerChange = const {1, 2, 4}.contains(bpc) ? bpc : _beatsPerChange;
+      _bpm = p.getTrainerBpm(_bpm);
+      _challenge = p.getTrainerChallenge(_challenge);
+    });
+  }
 
   @override
   void dispose() {
@@ -125,6 +154,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
     final n = v.round();
     if (n == _bpm) return;
     setState(() => _bpm = n);
+    _prefs?.setTrainerBpm(n);
     if (_playing) {
       _timer?.cancel();
       _timer = Timer.periodic(Duration(milliseconds: _beatMs), (_) => _tick());
@@ -138,6 +168,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
       _beatsPerChange = v;
       _beat = 0;
     });
+    _prefs?.setTrainerBeats(v);
   }
 
   /// 点和弦卡 → 循环到下一个和弦,跳过跟另一个重复的(保证 A≠B,不然没东西可换)。
@@ -157,6 +188,9 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
         _chordB = next;
       }
     });
+    // 改了就存:两个都存(简单;另一个没变存回原值无副作用),下次进 tab 直接是这次的配置。
+    _prefs?.setTrainerChordA(_chordA);
+    _prefs?.setTrainerChordB(_chordB);
   }
 
   @override
@@ -234,7 +268,12 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
               title: const Text('60 秒挑战'),
               subtitle: const Text('数一分钟能干净换几次'),
               value: _challenge,
-              onChanged: _playing ? null : (v) => setState(() => _challenge = v),
+              onChanged: _playing
+                  ? null
+                  : (v) {
+                      setState(() => _challenge = v);
+                      _prefs?.setTrainerChallenge(v);
+                    },
             ),
 
             const SizedBox(height: 12),
