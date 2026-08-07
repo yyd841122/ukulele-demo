@@ -133,12 +133,12 @@ class SongScreenState extends State<SongScreen> {
       _rampOn = p.getRamp();
       _lyricScale = p.getLyricScale(1.0).clamp(0.8, 1.8); // Slider 区间,防存了个越界值
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
-      _tempo = p.getTempo(_selected) ?? songs[_selected].tempo;
-      _totalLoops = p.getLoops(_selected); // 上次这首歌累计练的遍数
-      _totalSec = p.getSec(_selected); // 上次这首歌累计练的秒数
+      _tempo = p.getTempo(songs[_selected].id) ?? songs[_selected].tempo;
+      _totalLoops = p.getLoops(songs[_selected].id); // 上次这首歌累计练的遍数
+      _totalSec = p.getSec(songs[_selected].id); // 上次这首歌累计练的秒数
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
       // AB 是按歌存的行下标:万一 songs 改过、行数变了,越界的丢弃(否则后面 _loopStartLine 会越界)。
-      final ab = p.getAb(_selected);
+      final ab = p.getAb(songs[_selected].id);
       _markerA = _validLine(ab?.a);
       _markerB = _validLine(ab?.b);
     });
@@ -157,9 +157,9 @@ class SongScreenState extends State<SongScreen> {
     final p = _prefs;
     if (p == null) return;
     if (_abActive) {
-      p.setAb(_selected, _markerA, _markerB);
+      p.setAb(songs[_selected].id, _markerA, _markerB);
     } else {
-      p.setAb(_selected, null, null);
+      p.setAb(songs[_selected].id, null, null);
     }
   }
 
@@ -193,7 +193,7 @@ class SongScreenState extends State<SongScreen> {
   void dispose() {
     // 页面销毁前最后存一次当前歌的速度(滑块拖动时不存、怕写太勤;走这里兜底)。
     _accumulateSec(); // 把正在播放的尾段时间结进 _totalSec(没在播就是 no-op)
-    _prefs?.setTempo(_selected, _tempo);
+    _prefs?.setTempo(songs[_selected].id, _tempo);
     _saveStats(); // 兜底存累计遍数 + 秒数
     _setWakelock(false); // 离开页面:释放屏幕常亮,别一直亮着耗电
     // 页面销毁时收尾:停闹钟、释放预览定时器。_audio 不在这释放——它归 MainScaffold 拥有。
@@ -316,10 +316,10 @@ class SongScreenState extends State<SongScreen> {
     final p = _prefs;
     // 切走前先把【当前这首】(还没换的 _selected)的速度、AB、累计打卡都存下来——下次回来才接得上。
     if (p != null) {
-      p.setTempo(_selected, _tempo);
-      p.setAb(_selected, _markerA, _markerB);
-      p.setLoops(_selected, _totalLoops);
-      p.setSec(_selected, _totalSec);
+      p.setTempo(songs[_selected].id, _tempo);
+      p.setAb(songs[_selected].id, _markerA, _markerB);
+      p.setLoops(songs[_selected].id, _totalLoops);
+      p.setSec(songs[_selected].id, _totalSec);
     }
     setState(() {
       _playing = false;
@@ -327,15 +327,15 @@ class SongScreenState extends State<SongScreen> {
       _idx = 0;
       _slot = 0;
       _loops = 0; // 换歌重新计数
-      _totalLoops = p?.getLoops(i) ?? 0; // 新歌的累计遍数(没练过 = 0)
-      _totalSec = p?.getSec(i) ?? 0; // 新歌的累计秒数
+      _totalLoops = p?.getLoops(songs[i].id) ?? 0; // 新歌的累计遍数(没练过 = 0)
+      _totalSec = p?.getSec(songs[i].id) ?? 0; // 新歌的累计秒数
       _playStart = null; // 不在播,清掉计时起点
       _inCountIn = false; // 换歌取消可能进行中的预备拍
       _everPlayed = false; // 新歌从头算"还没正式开始",下次按 ▶ 会重新数预备拍
       _markerA = null; // 换歌清空 AB(行下标按某首歌的行算,不能跨歌保留;AB 只在启动时恢复,不随切换蹦出来吓人)
       _markerB = null;
       // 切到新歌:用它【上次调到的速度】(没调过就原速)——每首歌记住自己的速度,来回切不丢。
-      _tempo = p?.getTempo(i) ?? songs[i].tempo;
+      _tempo = p?.getTempo(songs[i].id) ?? songs[i].tempo;
       _rebuildFlat();
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
     });
@@ -536,8 +536,8 @@ class SongScreenState extends State<SongScreen> {
 
   /// 把当前歌的累计遍数 + 秒数存进持久化。跟 tempo 一个套路:暂停 / 换歌 / 销毁时兜底存,不在每拍写(怕写太勤)。
   void _saveStats() {
-    _prefs?.setLoops(_selected, _totalLoops);
-    _prefs?.setSec(_selected, _totalSec);
+    _prefs?.setLoops(songs[_selected].id, _totalLoops);
+    _prefs?.setSec(songs[_selected].id, _totalSec);
   }
 
   /// 把当前会话还没落盘的打卡补存:把 _playStart 到现在的秒数结进 _totalSec(还在播就重置 _playStart

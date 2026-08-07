@@ -262,29 +262,44 @@ class Section {
 
 /// 一首可练习的歌。
 ///
+/// - id:稳定标识。偏好(速度 / AB / 遍数 / 秒数)按它存,不按下标——这样加 / 删用户歌
+///   不会让下标挪位、把"这首歌练了多少"串到别的歌上。内置歌的 id = 它在下标里的位置
+///   (字符串 '0'、'1'……),跟旧版"按下标存"的偏好键一模一样 → 旧数据零迁移、原样读得到。
 /// - tempo:速度(BPM,每分钟多少拍),决定节拍器快慢
 /// - beatsPerChord:一个和弦持续几拍后换下一个
 @immutable
 class Song {
+  final String id;
   final String title;
   final int tempo;
   final int beatsPerChord;
   final List<Section> sections;
 
   const Song({
+    this.id = '',
     required this.title,
     required this.tempo,
     this.beatsPerChord = 4,
     required this.sections,
   });
+
+  /// 复制本歌、只改 id(给内置歌在加载时补稳定 id 用;其余字段原样)。
+  Song copyWith({String? id}) => Song(
+        id: id ?? this.id,
+        title: title,
+        tempo: tempo,
+        beatsPerChord: beatsPerChord,
+        sections: sections,
+      );
 }
 
-/// 歌曲库。界面里用顶栏下拉框选一首。
+/// 内置歌曲(原始、不带 id)。加载时由下面【songs】那条给每首补上稳定 id = 它的下标,
+/// 再(第43b步起)追加用户自加的歌。界面读的是下面那条 songs,不是这份原始的。
 ///
 /// 原 IZ 版把《Over the Rainbow》和《What a Wonderful World》串成一首串烧(medley),
 /// 这里按"两首就该分两条"的原则拆成两首,免得新手以为后半段是《Over the Rainbow》的词。
 /// 歌词用行内和弦([C]词),比 Web 版(和弦单独一排)更清楚和弦落在哪个词上。
-const List<Song> songs = [
+const List<Song> builtinSongs = [
   Song(
     title: '🌈 Somewhere Over the Rainbow',
     tempo: 72,
@@ -617,4 +632,13 @@ const List<Song> songs = [
       ),
     ],
   ),
+];
+
+/// 【第43a步】内置歌补上稳定 id(= 各自下标)后的歌曲库。界面读这份。
+///
+/// id 取下标的字符串:'0'、'1'…… 跟旧版"按下标存"的偏好键(pref_tempo_0 等)完全一致 →
+/// 旧练习数据零迁移、原样读得到。第43b步起歌库(SongStore)会在这后面追加用户自加的歌
+/// (用 'u1'、'u2' 这种 id,不跟内置的数字 id 撞);在那之前界面读的就是这 13 首内置歌。
+final List<Song> songs = [
+  for (var i = 0; i < builtinSongs.length; i++) builtinSongs[i].copyWith(id: '$i'),
 ];

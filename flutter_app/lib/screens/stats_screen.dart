@@ -60,8 +60,8 @@ class StatsScreenState extends State<StatsScreen> {
     var totalLoops = 0;
     var totalSec = 0;
     for (var i = 0; i < songs.length; i++) {
-      totalLoops += p.getLoops(i);
-      totalSec += p.getSec(i);
+      totalLoops += p.getLoops(songs[i].id);
+      totalSec += p.getSec(songs[i].id);
     }
 
     // 练习日历:哪天练过(跨歌)→ 算连续打卡天数 + 画日历热力图。
@@ -167,9 +167,9 @@ class StatsScreenState extends State<StatsScreen> {
           for (var i = 0; i < songs.length; i++)
             _SongStatsCard(
               song: songs[i],
-              loops: p.getLoops(i),
-              sec: p.getSec(i),
-              lastTempo: p.getTempo(i),
+              loops: p.getLoops(songs[i].id),
+              sec: p.getSec(songs[i].id),
+              lastTempo: p.getTempo(songs[i].id),
             ),
         ],
       ),

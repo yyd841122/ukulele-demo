@@ -73,24 +73,26 @@ class AppPreferences {
   Future<void> setTrainerChallenge(bool v) =>
       _prefs.setBool(_kTrainerChallenge, v);
 
-  // —— 按歌存的偏好(key 带歌曲下标)——
+  // —— 按歌存的偏好(key 带歌曲 id)——
+  // 第43a步:从"按下标 songIndex"改成"按 id songId"。内置歌的 id = 下标字符串('0'、'1'…),
+  // 所以键(pref_tempo_0 等)跟旧版完全一致 → 旧练习数据零迁移、原样读得到。用户歌用 'u1'、'u2' 这种 id。
   // 某首歌上次调到的速度(BPM);没存过返回 null → 用原速。
-  int? getTempo(int songIndex) => _prefs.getInt('$_kTempoPrefix$songIndex');
-  Future<void> setTempo(int songIndex, int v) =>
-      _prefs.setInt('$_kTempoPrefix$songIndex', v);
+  int? getTempo(String songId) => _prefs.getInt('$_kTempoPrefix$songId');
+  Future<void> setTempo(String songId, int v) =>
+      _prefs.setInt('$_kTempoPrefix$songId', v);
 
   // 某首歌设的 AB 循环区间(起止行下标)。两个都 null = 没设。a、b 任一 null 视为不完整。
-  ({int? a, int? b})? getAb(int songIndex) {
-    final a = _prefs.getInt('$_kAbAPrefix$songIndex');
-    final b = _prefs.getInt('$_kAbBPrefix$songIndex');
+  ({int? a, int? b})? getAb(String songId) {
+    final a = _prefs.getInt('$_kAbAPrefix$songId');
+    final b = _prefs.getInt('$_kAbBPrefix$songId');
     if (a == null && b == null) return null; // 都没存 = 从没设过
     return (a: a, b: b);
   }
 
   /// 存某首歌的 AB 区间。传 null 表示清除那一头(整段清除就两个都传 null)。
-  Future<void> setAb(int songIndex, int? a, int? b) async {
-    final keyA = '$_kAbAPrefix$songIndex';
-    final keyB = '$_kAbBPrefix$songIndex';
+  Future<void> setAb(String songId, int? a, int? b) async {
+    final keyA = '$_kAbAPrefix$songId';
+    final keyB = '$_kAbBPrefix$songId';
     if (a == null) {
       await _prefs.remove(keyA);
     } else {
@@ -105,14 +107,14 @@ class AppPreferences {
 
   // —— 练琴打卡(按歌存)——
   // 累计遍数:这首歌跨会话总共完整练了多少遍(_loops 只算本次会话,换歌清零;这个是持久累计)。
-  int getLoops(int songIndex) => _prefs.getInt('$_kLoopsPrefix$songIndex') ?? 0;
-  Future<void> setLoops(int songIndex, int n) =>
-      _prefs.setInt('$_kLoopsPrefix$songIndex', n);
+  int getLoops(String songId) => _prefs.getInt('$_kLoopsPrefix$songId') ?? 0;
+  Future<void> setLoops(String songId, int n) =>
+      _prefs.setInt('$_kLoopsPrefix$songId', n);
 
   // 累计练习秒数:这首歌总共练了多少秒(只在播放中计时,暂停/换歌/退出时结算)。
-  int getSec(int songIndex) => _prefs.getInt('$_kSecPrefix$songIndex') ?? 0;
-  Future<void> setSec(int songIndex, int n) =>
-      _prefs.setInt('$_kSecPrefix$songIndex', n);
+  int getSec(String songId) => _prefs.getInt('$_kSecPrefix$songId') ?? 0;
+  Future<void> setSec(String songId, int n) =>
+      _prefs.setInt('$_kSecPrefix$songId', n);
 
   // —— 练习日历(哪天练过,跨歌汇总)——
   // 存 practiceDayKey 字符串('yyyy-MM-dd')列表、去重。给统计页画日历热力图 + 算"连续打卡 N 天"。
@@ -140,10 +142,10 @@ class AppPreferences {
   static const _kTrainerBpm = 'pref_trainer_bpm'; // 换和弦训练:速度
   static const _kTrainerBeats = 'pref_trainer_beats'; // 换和弦训练:每几拍换
   static const _kTrainerChallenge = 'pref_trainer_challenge'; // 换和弦训练:60 秒挑战开关
-  static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲下标,如 pref_tempo_2
-  static const _kAbAPrefix = 'pref_ab_a_'; // 后接歌曲下标
+  static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲 id,如 pref_tempo_0(内置)、pref_tempo_u1(用户)
+  static const _kAbAPrefix = 'pref_ab_a_'; // 后接歌曲 id
   static const _kAbBPrefix = 'pref_ab_b_';
-  static const _kLoopsPrefix = 'pref_loops_'; // 后接歌曲下标
-  static const _kSecPrefix = 'pref_sec_'; // 后接歌曲下标
+  static const _kLoopsPrefix = 'pref_loops_'; // 后接歌曲 id
+  static const _kSecPrefix = 'pref_sec_'; // 后接歌曲 id
   static const _kPracticeDays = 'pref_practice_days'; // 'yyyy-MM-dd' 字符串列表
 }

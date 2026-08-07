@@ -28,55 +28,55 @@ void main() {
 
   test('速度按歌存:不同歌互不串', () async {
     final p = await AppPreferences.load();
-    expect(p.getTempo(0), isNull); // 没存过 → null(调用方据此用原速)
+    expect(p.getTempo('a'), isNull); // 没存过 → null(调用方据此用原速)
 
-    await p.setTempo(0, 90);
-    await p.setTempo(1, 120);
+    await p.setTempo('a', 90);
+    await p.setTempo('b', 120);
 
     final p2 = await AppPreferences.load();
-    expect(p2.getTempo(0), 90);
-    expect(p2.getTempo(1), 120);
-    expect(p2.getTempo(2), isNull); // 别的歌没存
+    expect(p2.getTempo('a'), 90);
+    expect(p2.getTempo('b'), 120);
+    expect(p2.getTempo('c'), isNull); // 别的歌没存
   });
 
   test('AB 区间:成对存 / 成对清', () async {
     final p = await AppPreferences.load();
-    expect(p.getAb(0), isNull); // 没设过
+    expect(p.getAb('x'), isNull); // 没设过
 
-    await p.setAb(0, 1, 3);
+    await p.setAb('x', 1, 3);
     var p2 = await AppPreferences.load();
-    expect(p2.getAb(0)!.a, 1);
-    expect(p2.getAb(0)!.b, 3);
+    expect(p2.getAb('x')!.a, 1);
+    expect(p2.getAb('x')!.b, 3);
 
     // 清除(两个都传 null)
-    await p2.setAb(0, null, null);
+    await p2.setAb('x', null, null);
     p2 = await AppPreferences.load();
-    expect(p2.getAb(0), isNull);
+    expect(p2.getAb('x'), isNull);
   });
 
   test('AB 按歌存:不同歌的区间不串', () async {
     final p = await AppPreferences.load();
-    await p.setAb(0, 1, 2);
-    await p.setAb(3, 5, 7);
+    await p.setAb('m', 1, 2);
+    await p.setAb('n', 5, 7);
 
     final p2 = await AppPreferences.load();
-    expect(p2.getAb(0)!.a, 1);
-    expect(p2.getAb(3)!.b, 7);
+    expect(p2.getAb('m')!.a, 1);
+    expect(p2.getAb('n')!.b, 7);
   });
 
   test('练琴打卡:累计遍数 + 秒数,存了能读回、按歌不串', () async {
     final p = await AppPreferences.load();
-    expect(p.getLoops(0), 0); // 没存过 → 0
-    expect(p.getSec(0), 0);
+    expect(p.getLoops('s1'), 0); // 没存过 → 0
+    expect(p.getSec('s1'), 0);
 
-    await p.setLoops(0, 5);
-    await p.setSec(0, 320);
+    await p.setLoops('s1', 5);
+    await p.setSec('s1', 320);
 
     final p2 = await AppPreferences.load(); // 模拟重启
-    expect(p2.getLoops(0), 5);
-    expect(p2.getSec(0), 320);
-    expect(p2.getLoops(1), 0); // 别的歌没存 → 0
-    expect(p2.getSec(1), 0);
+    expect(p2.getLoops('s1'), 5);
+    expect(p2.getSec('s1'), 320);
+    expect(p2.getLoops('s2'), 0); // 别的歌没存 → 0
+    expect(p2.getSec('s2'), 0);
   });
 
   test('歌词字号:存了能读回,没存过给默认 1.0', () async {
