@@ -549,4 +549,72 @@ const List<Song> songs = [
       ),
     ],
   ),
+  // —— 第42步新加的几首(行内和弦;都只用 chordShapes 里那 6 个:C G Am F D Em,和弦图画得出)——
+  Song(
+    title: "💕 Can't Help Falling in Love",
+    tempo: 66, // 慢抒情,新手跟得上
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: "[C]Wise men [Em]say, [Am]only fools [F]rush in"),
+          Line(lyric: "[C]But I [Em]can't help [Am]falling in [F]love with you"),
+          Line(lyric: "[C]Shall I [Em]stay, [Am]would it [F]be a sin"),
+          Line(lyric: "[C]If I [Em]can't help [Am]falling in [F]love with you"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[F]Like a [G]river [Am]flows, [C]surely to the sea"),
+          Line(lyric: "[F]Darling [G]so it [Am]goes, [C]some things are meant to be"),
+          Line(lyric: "[C]Take my [Em]hand, [Am]take my [F]whole life too"),
+          Line(lyric: "[C]For I [Em]can't help [Am]falling in [F]love with you"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🤝 Lean on Me',
+    tempo: 82,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: "[C]Sometimes in our [G]lives we [Am]all have pain and [F]sorrow"),
+          Line(lyric: "[C]But if we are [G]wise we [Am]know there's always [F]tomorrow"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]Lean on [G]me, when you're [Am]not [F]strong"),
+          Line(lyric: "[F]And I'll be your [C]friend, I'll help you [G]carry on"),
+          Line(lyric: "[C]For it won't be [G]long, till I'm [Am]gonna need somebody to [F]lean on"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: "🍃 Blowin' in the Wind",
+    tempo: 84,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: "[G]How many [C]roads must a [G]man walk down"),
+          Line(lyric: "[G]Before you [C]call him a [G]man"),
+          Line(lyric: "[Em]How many [C]seas must a [G]white dove sail"),
+          Line(lyric: "[Em]Before she [C]sleeps in the [D]sand"),
+        ],
+      ),
+      Section(
+        name: '🎶 答案',
+        lines: [
+          Line(lyric: "[G]The answer my [C]friend is [G]blowin' in the wind"),
+          Line(lyric: "[G]The answer is [C]blowin' in the [D]wind"),
+        ],
+      ),
+    ],
+  ),
 ];
