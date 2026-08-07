@@ -40,6 +40,18 @@ void main() {
       expect(back.sections.first.lines.first.chords, ['C', 'G']);
     });
 
+    test('beatsPerChord 非默认值(3)来回不丢——华尔兹等非 4 拍歌也能存', () {
+      final s = Song(
+        id: 'u2',
+        title: '华尔兹',
+        tempo: 100,
+        beatsPerChord: 3,
+        sections: [Section(lines: [Line(lyric: '[C]词')])],
+      );
+      final back = Song.fromJson(s.toJson());
+      expect(back.beatsPerChord, 3);
+    });
+
     test('fromJson:字段缺失给默认值(防旧版存的歌缺新字段挂掉)', () {
       final back = Song.fromJson({});
       expect(back.id, '');

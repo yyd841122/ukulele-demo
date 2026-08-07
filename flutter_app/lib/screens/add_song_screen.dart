@@ -27,6 +27,11 @@ class _AddSongScreenState extends State<AddSongScreen> {
   late final TextEditingController _titleCtl;
   late final TextEditingController _lyricsCtl;
   late int _tempo;
+  late int _beatsPerChord; // 每和弦持续几拍(默认 4);第44步起用户可在表单选 2/3/4/6/8
+
+  // 每和弦几拍的可选项。4 = 最常见(4/4,一小节一个和弦);3 = 华尔兹(3/4);2 = 换得快;
+  // 6/8 = 一个和弦拖更久。海岛/民谣/摇滚这些招牌节奏按 4 拍写,选别的拍数能练、扫弦形状自动截断。
+  static const _beatChoices = [2, 3, 4, 6, 8];
 
   // 可插入的和弦 = chordShapes 里那 6 个(C G Am F D Em);插进歌词后指法图才画得出。
   late final List<String> _chords = chordShapes.keys.toList();
@@ -43,6 +48,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
           : [for (final s in init.sections) s.lines.map((l) => l.lyric).join('\n')].join('\n\n'),
     );
     _tempo = init?.tempo ?? 80;
+    _beatsPerChord = init?.beatsPerChord ?? 4; // 编辑回填这首歌的拍数;新增默认 4
   }
 
   @override
@@ -109,7 +115,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
       id: widget.initial?.id ?? '', // 编辑保留原 id;添加留空(歌库 add 时分配 'u<n>')
       title: title,
       tempo: _tempo,
-      beatsPerChord: 4,
+      beatsPerChord: _beatsPerChord,
       sections: sections,
     ));
   }
@@ -162,6 +168,29 @@ class _AddSongScreenState extends State<AddSongScreen> {
                   ),
                 ),
                 SizedBox(width: 48, child: Text('$_tempo', textAlign: TextAlign.end)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // 每和弦几拍:一个和弦持续几拍后换下一个。4 拍最常见(一小节一个和弦);华尔兹(3/4)选 3;
+            // 和弦换得快选 2;拖久点选 6/8。招牌节奏(海岛/民谣/摇滚)按 4 拍写的,别的拍数能练、
+            // 扫弦形状会自动截断(不崩,只是少几下);全下/下上任何拍数都正常。
+            Row(
+              children: [
+                const Text('每和弦几拍'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final b in _beatChoices)
+                        ChoiceChip(
+                          label: Text('$b'),
+                          selected: _beatsPerChord == b,
+                          onSelected: (_) => setState(() => _beatsPerChord = b),
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 4),
