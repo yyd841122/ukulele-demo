@@ -140,7 +140,16 @@ class SongScreenState extends State<SongScreen> {
     if (!mounted) return;
     setState(() {
       _prefs = p;
-      _selected = p.getSongIndex(_selected).clamp(0, songs.length - 1);
+      // 上次选哪首按【id】存(第45步起):加 / 删用户歌不会让"上次选哪首"串位。旧版按下标存,这里一次性迁移。
+      var id = p.getSelectedSongId();
+      if (id == null) {
+        // 旧版按下标存:读回下标 → 换算成那首歌的 id 存下,以后直接走 id。
+        final legacy = p.getLegacySongIndex(_selected).clamp(0, songs.length - 1);
+        id = songs[legacy].id;
+        p.setSelectedSongId(id); // fire-and-forget 一次性迁移(跟其它 prefs 写一个套路)
+      }
+      final found = songs.indexWhere((s) => s.id == id);
+      _selected = (found < 0 ? _selected : found).clamp(0, songs.length - 1);
       // clamp 防万一存了个越界值(节奏型以后还会加);上界按当前歌的节奏型数量动态取,别写死成数字。
       _patternIndex = p
           .getPatternIndex(_patternIndex)
@@ -356,8 +365,8 @@ class SongScreenState extends State<SongScreen> {
       _rebuildFlat();
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
     });
-    // 切完记下新的歌下标(下次启动直接进这首)。
-    p?.setSongIndex(i);
+    // 切完记下新选的歌【id】(下次启动直接进这首;按 id 存,加 / 删别的歌不会串位)。
+    p?.setSelectedSongId(songs[i].id);
   }
 
   /// 点"添加自己的歌":开表单 → 校验通过拿到 Song → 加进歌库 → 切到这首新歌。
@@ -457,7 +466,7 @@ class SongScreenState extends State<SongScreen> {
       _totalSec = p?.getSec(songs[0].id) ?? 0;
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
     });
-    p?.setSongIndex(0);
+    p?.setSelectedSongId(songs[0].id);
   }
 
   /// 拖滑块调速。正在播放时,旧 Timer.periodic 的间隔是【创建那一刻】就定死的、改 _tempo 它不知道,

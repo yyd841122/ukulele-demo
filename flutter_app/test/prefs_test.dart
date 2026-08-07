@@ -12,18 +12,26 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('上次选的歌 / 节奏型:存了能读回,没存过给默认值', () async {
+  test('上次选的歌(按 id)/ 节奏型:存了能读回,没存过给默认值', () async {
     final p = await AppPreferences.load();
-    expect(p.getSongIndex(0), 0); // 没存过 → fallback
+    expect(p.getSelectedSongId(), isNull); // 没存过 → null
     expect(p.getPatternIndex(1), 1);
 
-    await p.setSongIndex(3);
+    await p.setSelectedSongId('u2');
     await p.setPatternIndex(2);
 
     // 重新加载 = 模拟 app 重启
     final p2 = await AppPreferences.load();
-    expect(p2.getSongIndex(0), 3);
+    expect(p2.getSelectedSongId(), 'u2');
     expect(p2.getPatternIndex(0), 2);
+  });
+
+  test('一次性迁移:旧版按下标存的下标读得回(迁移写在新键,由 song_screen 触发)', () async {
+    // 模拟旧版写过的"按下标存"值
+    SharedPreferences.setMockInitialValues({'pref_song_index': 3});
+    final p = await AppPreferences.load();
+    expect(p.getSelectedSongId(), isNull); // 新键还没写过(迁移还没跑)
+    expect(p.getLegacySongIndex(-1), 3); // 旧下标读得回 → 迁移拿它换算成 id
   });
 
   test('速度按歌存:不同歌互不串', () async {

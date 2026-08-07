@@ -18,9 +18,15 @@ class AppPreferences {
       AppPreferences(await SharedPreferences.getInstance());
 
   // —— 全局偏好 ——
-  // 上次选的歌在 songs 列表里的下标。
-  int getSongIndex(int fallback) => _prefs.getInt(_kSongIndex) ?? fallback;
-  Future<void> setSongIndex(int i) => _prefs.setInt(_kSongIndex, i);
+  // 上次选的歌的【id】(第45步起:从按下标改成按 id 存)。原因:用户加 / 删歌会让下标挪位,
+  // 按下标存的"上次选哪首"重启后可能恢复到别的歌;按 id 存不会。内置歌 id = 下标字符串,
+  // 所以旧版按下标存的值一次性迁移过来就行(迁移在 song_screen._loadPrefs 里做)。
+  String? getSelectedSongId() => _prefs.getString(_kSelectedSongId);
+  Future<void> setSelectedSongId(String id) =>
+      _prefs.setString(_kSelectedSongId, id);
+
+  // 旧版(第45步前)按下标存的"上次选歌下标"。只留来一次性迁移读;迁移完不再写、成孤儿 key(无害)。
+  int getLegacySongIndex(int fallback) => _prefs.getInt(_kSongIndex) ?? fallback;
 
   // 当前选的扫弦节奏型(patternsFor 返回那几个里的第几个)。跨歌保留。
   int getPatternIndex(int fallback) =>
@@ -151,7 +157,8 @@ class AppPreferences {
   }
 
   // key 常量:集中放一处,免得读写各处拼字符串拼错。
-  static const _kSongIndex = 'pref_song_index';
+  static const _kSongIndex = 'pref_song_index'; // 旧版:上次选歌下标(第45步前)。留作一次性迁移读。
+  static const _kSelectedSongId = 'pref_selected_song_id'; // 第45步起:上次选歌按 id 存(替 _kSongIndex)
   static const _kPatternIndex = 'pref_pattern_index';
   static const _kStrumSound = 'pref_strum_sound';
   static const _kRamp = 'pref_ramp';
