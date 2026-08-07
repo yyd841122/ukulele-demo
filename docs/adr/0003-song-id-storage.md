@@ -60,8 +60,9 @@ Status: accepted *(第43a步,2026-08-07)*
 - 用户歌存 JSON(`pref_user_songs`,每首一条) + id 计数器(`pref_user_song_seq`)。
   以后改 `Song` 结构要兼顾向后兼容:`Song.fromJson` 对缺失字段给默认值,旧版存的用户歌不会挂。
 - **别再把 per-song 偏好改回按下标存**——会重新引入"加 / 删歌串数据"的 bug。这条是本 ADR 的红线。
-- 已知小限制(接受):`getSongIndex`(全局"上次选的歌")仍按下标存;若上次选的是用户歌、之后又
-  增删了用户歌,重启可能不精确恢复到那首(下标挪了)。低影响,要稳可后续也改按 id 存。
+- ✅ **已于第45步修复**(原"已知小限制"):全局"上次选的歌"原本仍按下标存(`getSongIndex` /
+  `pref_song_index`),加 / 删用户歌后重启可能恢复错歌;第45步起改按 id 存(`getSelectedSongId` /
+  `pref_selected_song_id`,旧下标一次性迁移)。本 ADR 的 id 原则现在覆盖【所有 per-song 偏好 + 全局选歌】。
 
 ## 相关
 
