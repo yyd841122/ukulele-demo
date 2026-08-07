@@ -151,8 +151,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
         _permDenied = false;
         _freq = null;
         _note = null;
-        _recent.clear();
-        _misses = 0;
+        _resetSmoothing();
       });
     }
   }
@@ -162,8 +161,7 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     await _sub?.cancel();
     _sub = null;
     await _mic.stop();
-    _recent.clear();
-    _misses = 0;
+    _resetSmoothing();
     if (mounted) {
       setState(() {
         _listening = false;
@@ -207,6 +205,12 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     final smoothed = _median(_recent);
     final note = frequencyToNote(smoothed, a4: _a4);
     if (mounted) setState(() { _freq = smoothed; _note = note; });
+  }
+
+  /// 重置平滑历史(最近几次检测 + 漏检计数):开始监听 / 停麦时都调,免得上一轮读数残留、指针拖。
+  void _resetSmoothing() {
+    _recent.clear();
+    _misses = 0;
   }
 
   /// 把"这一窗当作没测到清晰音"处理:连续 3 次(≈0.3s)才清读数,容忍偶发漏检、指针不闪。

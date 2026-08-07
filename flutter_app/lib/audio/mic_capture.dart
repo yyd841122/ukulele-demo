@@ -26,7 +26,6 @@ class MicCapture {
   Stream<Float64List> get samples => _samples.stream;
 
   bool _recording = false;
-  bool get isRecording => _recording;
 
   /// 申请麦克风权限。已授权 / 刚点"允许"→ true;被拒绝 / 永久拒绝 / 平台通道没接 → false。
   Future<bool> requestPermission() async {
