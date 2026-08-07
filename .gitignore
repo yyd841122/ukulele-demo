@@ -2,8 +2,12 @@
 .claude/
 .agents/
 skills-lock.json
-docs/
 CLAUDE.md
+
+# docs/ 下大部分是本地 AI 工作笔记(交接 handover、agent 工作流),不上 git;
+# 但【架构决策 ADR】是仓库该有的东西,放开 docs/adr/ 进版本控制。
+docs/*
+!docs/adr/
 
 # node 依赖(以后如果用得到)
 node_modules/
