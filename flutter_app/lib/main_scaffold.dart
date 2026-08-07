@@ -11,11 +11,13 @@
 import 'package:flutter/material.dart';
 
 import 'audio/audio_engine.dart';
+import 'prefs/app_preferences.dart';
 import 'screens/chord_library_screen.dart';
 import 'screens/chord_trainer_screen.dart';
 import 'screens/song_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/tuner_screen.dart';
+import 'song_store.dart';
 
 /// 主框架:底导航 + 共享 AudioEngine。UkuleleApp 的 home 指向它(替原来的 SongScreen)。
 class MainScaffold extends StatefulWidget {
@@ -28,6 +30,10 @@ class MainScaffold extends StatefulWidget {
 class _MainScaffoldState extends State<MainScaffold> {
   // 各 tab 共用的音频引擎(嗒声 + 扫弦声)。本页拥有 / init / dispose;各 tab 收引用、只调方法。
   final AudioEngine _audio = AudioEngine();
+
+  // 歌单(内置歌 + 用户自加歌)。构造时内置歌就位(界面第一帧有歌);用户歌 _initSongs() 后追加。
+  // 加 / 删用户歌时它 notify,练习页下拉框、统计页按歌列表跟着刷新。
+  final SongStore _songs = SongStore();
 
   // 练习页 / 统计页 / 调音页 / 换和弦训练页的 key:用来在切 tab 时"戳一下"它们的状态
   // (flushStats / reload / 调音页 pause 停麦 / 训练页 stop 停节拍器)。
@@ -42,6 +48,14 @@ class _MainScaffoldState extends State<MainScaffold> {
   void initState() {
     super.initState();
     _initAudio(); // 后台初始化引擎 + 加载音频(不 await,不卡界面)
+    _initSongs(); // 后台加载用户自加的歌、追加到内置歌后面
+  }
+
+  /// 后台加载用户自加的歌(读 prefs JSON),追加到内置歌后面。有用户歌才 notify,练习/统计页跟着刷新。
+  Future<void> _initSongs() async {
+    final p = await AppPreferences.load();
+    if (!mounted) return;
+    await _songs.load(p);
   }
 
   /// 后台初始化音频引擎。失败(如测试环境加载不了原生库)引擎内部 catch 打日志;不点亮 ▶ 即可。
@@ -90,9 +104,9 @@ class _MainScaffoldState extends State<MainScaffold> {
       body: IndexedStack(
         index: _index,
         children: [
-          SongScreen(key: _songKey, audio: _audio),
+          SongScreen(key: _songKey, audio: _audio, store: _songs),
           ChordLibraryScreen(audio: _audio),
-          StatsScreen(key: _statsKey),
+          StatsScreen(key: _statsKey, store: _songs),
           TunerScreen(key: _tunerKey, audio: _audio),
           ChordTrainerScreen(key: _trainerKey, audio: _audio),
         ],

@@ -291,7 +291,44 @@ class Song {
         beatsPerChord: beatsPerChord,
         sections: sections,
       );
+
+  /// 序列化成 JSON(给用户自加的歌持久化用;内置歌不存——它们在代码里)。
+  /// id 也存:跨 app 重启读回来时 id 不变 → 这首歌的练习记录(按 id 存)才接得上、不丢。
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'tempo': tempo,
+        'beatsPerChord': beatsPerChord,
+        'sections': [
+          for (final s in sections)
+            {
+              if (s.name != null) 'name': s.name,
+              'lines': [for (final l in s.lines) {'lyric': l.lyric}],
+            },
+        ],
+      };
+
+  /// 从 JSON 还原成 Song(用户歌启动时读出来)。字段缺失给默认值,防旧版存的歌缺新字段挂掉。
+  factory Song.fromJson(Map<String, dynamic> j) => Song(
+        id: j['id'] as String? ?? '',
+        title: j['title'] as String? ?? '(未命名)',
+        tempo: (j['tempo'] as num?)?.toInt() ?? 80,
+        beatsPerChord: (j['beatsPerChord'] as num?)?.toInt() ?? 4,
+        sections: [
+          for (final s in (j['sections'] as List?) ?? const [])
+            _sectionFromJson(s as Map<String, dynamic>),
+        ],
+      );
 }
+
+/// 一段的反序列化(Song.fromJson 用,抽出来免得集合 for 里塞语句)。
+Section _sectionFromJson(Map<String, dynamic> j) => Section(
+      name: j['name'] as String?,
+      lines: [
+        for (final l in (j['lines'] as List?) ?? const [])
+          Line(lyric: (l as Map<String, dynamic>)['lyric'] as String? ?? ''),
+      ],
+    );
 
 /// 内置歌曲(原始、不带 id)。加载时由下面【songs】那条给每首补上稳定 id = 它的下标,
 /// 再(第43b步起)追加用户自加的歌。界面读的是下面那条 songs,不是这份原始的。

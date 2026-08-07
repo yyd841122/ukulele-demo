@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../prefs/app_preferences.dart';
+import '../song_store.dart';
 
 /// 练习统计页:总计卡(跨所有歌)+ 每首歌一张卡(累计遍数 / 时长 / 原速·最近速度)。
 ///
@@ -17,7 +18,9 @@ import '../prefs/app_preferences.dart';
 /// 切回统计 tab 不会重跑 initState。所以 MainScaffold 在切到统计 tab 时会调 reload() 重读 prefs,
 /// 读到的才是含「本次练习」的最新值(练习 tab 切走时已先 flushStats 把当前会话刷盘)。
 class StatsScreen extends StatefulWidget {
-  const StatsScreen({super.key});
+  final SongStore store; // 歌单(内置 + 用户自加);加 / 删用户歌时刷新"按歌曲"列表
+
+  const StatsScreen({required this.store, super.key});
 
   @override
   State<StatsScreen> createState() => StatsScreenState();
@@ -25,12 +28,28 @@ class StatsScreen extends StatefulWidget {
 
 /// public:MainScaffold 持 `GlobalKey<StatsScreenState>`,切到统计 tab 时调 reload()。
 class StatsScreenState extends State<StatsScreen> {
+  /// 歌单(内置 + 用户自加)。从歌库读——加 / 删用户歌后"按歌曲"列表能跟上。
+  List<Song> get songs => widget.store.songs;
+
   AppPreferences? _prefs;
 
   @override
   void initState() {
     super.initState();
+    widget.store.addListener(_onStoreChanged); // 歌单变 → 重读 + 重画按歌列表
     _load(); // 异步读 prefs;没好之前先画 loading,不卡首帧
+  }
+
+  @override
+  void dispose() {
+    widget.store.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  /// 歌单变了(加 / 删用户歌):重读 prefs + setState 重画(build 里的 songs getter 会拿到新歌单)。
+  void _onStoreChanged() {
+    if (!mounted) return;
+    _load();
   }
 
   Future<void> _load() async {

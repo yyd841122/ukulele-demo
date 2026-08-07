@@ -13,8 +13,10 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../audio/audio_engine.dart';
 import '../models.dart';
 import '../prefs/app_preferences.dart';
+import '../song_store.dart';
 import '../widgets/lyric_view.dart';
 import '../widgets/practice_bar.dart';
+import 'add_song_screen.dart';
 
 /// 歌曲页:顶栏下拉选歌,正文铺出当前歌的每一段、每一行。
 /// 因为要"记住当前选的是哪首"+ 节拍器状态,这里用 StatefulWidget(带状态)。
@@ -22,8 +24,9 @@ import '../widgets/practice_bar.dart';
 /// audio 由外层 MainScaffold 注入并拥有(第28步:多个 tab 共用一份引擎,不在本页自建/自释放)。
 class SongScreen extends StatefulWidget {
   final AudioEngine audio;
+  final SongStore store; // 歌单(内置 + 用户自加);加 / 删用户歌时它 notify,本页下拉框刷新
 
-  const SongScreen({required this.audio, super.key});
+  const SongScreen({required this.audio, required this.store, super.key});
 
   @override
   State<SongScreen> createState() => SongScreenState();
@@ -32,6 +35,10 @@ class SongScreen extends StatefulWidget {
 /// public:MainScaffold 持 `GlobalKey<SongScreenState>`,切走练习 tab 时调 flushStats()
 /// 把当前会话打卡刷盘,这样平级的统计 tab 才读得到含本次练习的最新值。
 class SongScreenState extends State<SongScreen> {
+  /// 歌单(内置 + 用户自加)。从歌库读,不直接读顶层 songs——加 / 删用户歌能跟上(歌库会 notify)。
+  /// 全文原来直接用 songs,这里加同名 getter 接管,旧代码 songs[...] 一行不用改。
+  List<Song> get songs => widget.store.songs;
+
   // 当前选中的歌在 songs 列表里的下标。默认第 0 首(Over the Rainbow)。
   int _selected = 0;
 
@@ -110,10 +117,19 @@ class SongScreenState extends State<SongScreen> {
   @override
   void initState() {
     super.initState();
+    widget.store.addListener(_onStoreChanged); // 歌单变(加 / 删用户歌)→ 刷新下拉框
     _rebuildFlat(); // 先把当前歌拍扁,界面第一次画就能显示"现在弹 第1个和弦"
     _tempo = songs[_selected].tempo; // 默认原速(late 字段必须在第一次被读之前赋上值)
     // 音频引擎由 MainScaffold 在 app 启动时统一 init(本页只调它的方法),这里不再 _initAudio。
     _loadPrefs(); // 异步读上次的歌/速度/节奏型/AB,读好再 reconcile(不卡首帧:首帧先用默认值画)
+  }
+
+  /// 歌单变了(加 / 删用户歌):刷新下拉框。_selected 可能越界(删歌时),夹回合法范围。
+  void _onStoreChanged() {
+    if (!mounted || songs.isEmpty) return;
+    setState(() {
+      _selected = _selected.clamp(0, songs.length - 1);
+    });
   }
 
   /// 异步读持久化偏好,读好把状态 reconcile 到上次的值(上次的歌、那首歌的速度、节奏型、AB)。
@@ -191,6 +207,7 @@ class SongScreenState extends State<SongScreen> {
 
   @override
   void dispose() {
+    widget.store.removeListener(_onStoreChanged); // 页面销毁:别再收歌库通知
     // 页面销毁前最后存一次当前歌的速度(滑块拖动时不存、怕写太勤;走这里兜底)。
     _accumulateSec(); // 把正在播放的尾段时间结进 _totalSec(没在播就是 no-op)
     _prefs?.setTempo(songs[_selected].id, _tempo);
@@ -341,6 +358,17 @@ class SongScreenState extends State<SongScreen> {
     });
     // 切完记下新的歌下标(下次启动直接进这首)。
     p?.setSongIndex(i);
+  }
+
+  /// 点"添加自己的歌":开表单 → 校验通过拿到 Song → 加进歌库 → 切到这首新歌。
+  Future<void> _openAddSong() async {
+    final created = await Navigator.of(context).push<Song>(
+      MaterialPageRoute(builder: (_) => const AddSongScreen()),
+    );
+    if (!mounted || created == null) return; // 取消了 / 页面已不在
+    widget.store.add(created);
+    // 加完切到这首新歌(它被追加到歌单末尾),走完整换歌流程(停拍、读新歌的偏好)。
+    if (songs.isNotEmpty) _onSongChanged(songs.length - 1);
   }
 
   /// 拖滑块调速。正在播放时,旧 Timer.periodic 的间隔是【创建那一刻】就定死的、改 _tempo 它不知道,
@@ -714,9 +742,25 @@ class SongScreenState extends State<SongScreen> {
                   ),
                 ),
               ),
+            // 第43b步:末尾一项"添加自己的歌"——哨兵值 -1(不对应真歌),点它开表单、不切歌。
+            DropdownMenuItem(
+              value: -1,
+              child: Row(
+                children: [
+                  Icon(Icons.add, size: 18, color: theme.colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Text('添加自己的歌', style: TextStyle(color: theme.colorScheme.primary)),
+                ],
+              ),
+            ),
           ],
           onChanged: (i) {
-            if (i != null) _onSongChanged(i);
+            if (i == null) return;
+            if (i == -1) {
+              _openAddSong(); // 点"添加" → 开表单
+              return;
+            }
+            _onSongChanged(i);
           },
           dropdownColor: theme.colorScheme.surface,
           // 下面这个 style 是"下拉框里当前显示的那行歌名"的文字样式。
