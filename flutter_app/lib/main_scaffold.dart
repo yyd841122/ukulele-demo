@@ -18,10 +18,14 @@ import 'screens/song_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/tuner_screen.dart';
 import 'song_store.dart';
+import 'theme_controller.dart';
 
 /// 主框架:底导航 + 共享 AudioEngine。UkuleleApp 的 home 指向它(替原来的 SongScreen)。
 class MainScaffold extends StatefulWidget {
-  const MainScaffold({super.key});
+  // 主题控制器(第47步):从根传进来,再透给统计页的切换菜单。
+  final ThemeController theme;
+
+  const MainScaffold({required this.theme, super.key});
 
   @override
   State<MainScaffold> createState() => _MainScaffoldState();
@@ -106,7 +110,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         children: [
           SongScreen(key: _songKey, audio: _audio, store: _songs),
           ChordLibraryScreen(audio: _audio),
-          StatsScreen(key: _statsKey, store: _songs),
+          StatsScreen(key: _statsKey, store: _songs, theme: widget.theme),
           TunerScreen(key: _tunerKey, audio: _audio),
           ChordTrainerScreen(key: _trainerKey, audio: _audio),
         ],

@@ -124,6 +124,16 @@ void main() {
     expect(p2.getA4(), 442);
   });
 
+  test('主题模式:存了能读回,没存过给默认 system', () async {
+    final p = await AppPreferences.load();
+    expect(p.getThemeMode(), 'system'); // 没存过 → 默认
+
+    await p.setThemeMode('dark');
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getThemeMode(), 'dark');
+  });
+
   test('clearSong:清掉某首歌的所有偏好(删用户歌时调)', () async {
     final p = await AppPreferences.load();
     await p.setTempo('u1', 90);

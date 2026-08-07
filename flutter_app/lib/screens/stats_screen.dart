@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../prefs/app_preferences.dart';
 import '../song_store.dart';
+import '../theme_controller.dart';
 
 /// 练习统计页:总计卡(跨所有歌)+ 每首歌一张卡(累计遍数 / 时长 / 原速·最近速度)。
 ///
@@ -19,8 +20,9 @@ import '../song_store.dart';
 /// 读到的才是含「本次练习」的最新值(练习 tab 切走时已先 flushStats 把当前会话刷盘)。
 class StatsScreen extends StatefulWidget {
   final SongStore store; // 歌单(内置 + 用户自加);加 / 删用户歌时刷新"按歌曲"列表
+  final ThemeController theme; // 主题控制器(第47步):顶栏菜单切 系统/浅色/深色
 
-  const StatsScreen({required this.store, super.key});
+  const StatsScreen({required this.store, required this.theme, super.key});
 
   @override
   State<StatsScreen> createState() => StatsScreenState();
@@ -37,12 +39,14 @@ class StatsScreenState extends State<StatsScreen> {
   void initState() {
     super.initState();
     widget.store.addListener(_onStoreChanged); // 歌单变 → 重读 + 重画按歌列表
+    widget.theme.addListener(_onThemeChanged); // 主题变 → 重画(图标跟上当前模式)
     _load(); // 异步读 prefs;没好之前先画 loading,不卡首帧
   }
 
   @override
   void dispose() {
     widget.store.removeListener(_onStoreChanged);
+    widget.theme.removeListener(_onThemeChanged);
     super.dispose();
   }
 
@@ -51,6 +55,40 @@ class StatsScreenState extends State<StatsScreen> {
     if (!mounted) return;
     _load();
   }
+
+  // 主题变了 → 重画一下,让顶栏主题按钮的图标跟上当前模式。
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  // 顶栏主题切换菜单:系统 / 浅色 / 深色,当前模式打勾。PopupMenuButton 的图标也随当前模式变。
+  PopupMenuButton<ThemeMode> get _themeButton => PopupMenuButton<ThemeMode>(
+        icon: Icon(_themeIcon(widget.theme.value)),
+        tooltip: '主题',
+        onSelected: (m) => widget.theme.set(m),
+        itemBuilder: (_) => [
+          for (final m in const [ThemeMode.system, ThemeMode.light, ThemeMode.dark])
+            CheckedPopupMenuItem<ThemeMode>(
+              value: m,
+              checked: widget.theme.value == m,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Text(_themeLabel(m)),
+              ),
+            ),
+        ],
+      );
+
+  static IconData _themeIcon(ThemeMode m) => switch (m) {
+        ThemeMode.system => Icons.brightness_auto,
+        ThemeMode.light => Icons.light_mode_outlined,
+        ThemeMode.dark => Icons.dark_mode_outlined,
+      };
+  static String _themeLabel(ThemeMode m) => switch (m) {
+        ThemeMode.system => '跟随系统',
+        ThemeMode.light => '浅色',
+        ThemeMode.dark => '深色',
+      };
 
   Future<void> _load() async {
     final p = await AppPreferences.load();
@@ -70,7 +108,10 @@ class StatsScreenState extends State<StatsScreen> {
     // prefs 还没加载完:先画个 loading,加载完 setState 切过去(跟 SongScreen 首帧默认值一个套路)。
     if (p == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('练习统计')),
+        appBar: AppBar(
+          title: const Text('练习统计'),
+          actions: [_themeButton],
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -90,7 +131,10 @@ class StatsScreenState extends State<StatsScreen> {
     final streak = currentStreak(practicedDays, now);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('练习统计')),
+      appBar: AppBar(
+        title: const Text('练习统计'),
+        actions: [_themeButton],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
