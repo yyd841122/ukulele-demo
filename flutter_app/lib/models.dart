@@ -330,6 +330,40 @@ Section _sectionFromJson(Map<String, dynamic> j) => Section(
       ],
     );
 
+/// 把"加歌表单"里那框歌词文本拍成段落(第46步起支持 #名字 段落命名)。规则:
+///  - 空行 = 分段(匿名段);
+///  - 行首 `#名字` = 给【接下来的】段落起名(如 `#副歌`),这行本身不是歌词;
+///  - 其余非空行 = 一条 Line(行内 [和弦] 由 Line.chords 自己解析)。
+/// 名字后没歌词的空段会被丢掉(不造没词的段);`#` 后面空白当匿名段(不造空名字)。
+/// 纯函数、无副作用:抽出来能在无头测试里直接锁解析(有名 / 无名 / 混合 / 名字后没词 / 空 #)。
+List<Section> parseLyrics(String text) {
+  final sections = <Section>[];
+  var current = <Line>[];
+  String? pendingName; // 下一段的名字(由 #名字 行设定);null = 匿名段
+  void flush() {
+    if (current.isNotEmpty) {
+      sections.add(Section(name: pendingName, lines: current));
+      current = <Line>[];
+    }
+    pendingName = null;
+  }
+
+  for (final raw in text.split('\n')) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      flush(); // 空行 = 分段
+    } else if (trimmed.startsWith('#')) {
+      flush(); // 先收尾当前段,再用这行给下一段命名
+      final n = trimmed.substring(1).trim();
+      pendingName = n.isEmpty ? null : n; // 空 # → 匿名(不造空名字)
+    } else {
+      current.add(Line(lyric: raw));
+    }
+  }
+  flush();
+  return sections;
+}
+
 /// 内置歌曲(原始、不带 id)。加载时由下面【songs】那条给每首补上稳定 id = 它的下标,
 /// 再(第43b步起)追加用户自加的歌。界面读的是下面那条 songs,不是这份原始的。
 ///

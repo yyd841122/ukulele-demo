@@ -41,11 +41,17 @@ class _AddSongScreenState extends State<AddSongScreen> {
     super.initState();
     final init = widget.initial;
     _titleCtl = TextEditingController(text: init?.title ?? '');
-    // 编辑模式:把已有段落拍回成带 [和弦] 的多行文本、段之间空一行(跟 _parseSections 对得上),方便改。
+    // 编辑模式:把已有段落拍回成带 [和弦] 的文本;有段落名的段前面加一行 #名字(跟 parseLyrics 对得上)。
     _lyricsCtl = TextEditingController(
       text: init == null
           ? ''
-          : [for (final s in init.sections) s.lines.map((l) => l.lyric).join('\n')].join('\n\n'),
+          : [
+              for (final s in init.sections)
+                [
+                  if (s.name != null && s.name!.isNotEmpty) '#${s.name}',
+                  ...s.lines.map((l) => l.lyric),
+                ].join('\n'),
+            ].join('\n\n'),
     );
     _tempo = init?.tempo ?? 80;
     _beatsPerChord = init?.beatsPerChord ?? 4; // 编辑回填这首歌的拍数;新增默认 4
@@ -71,23 +77,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
     );
   }
 
-  /// 把歌词文本拆成段落:空行分段(方便分主歌 / 副歌),非空行各成一条 Line。
-  List<Section> _parseSections(String text) {
-    final sections = <Section>[];
-    var current = <Line>[];
-    for (final raw in text.split('\n')) {
-      if (raw.trim().isEmpty) {
-        if (current.isNotEmpty) {
-          sections.add(Section(lines: current));
-          current = <Line>[];
-        }
-      } else {
-        current.add(Line(lyric: raw));
-      }
-    }
-    if (current.isNotEmpty) sections.add(Section(lines: current));
-    return sections;
-  }
+  /// 把歌词文本拆成段落(空行分段、#名字 命名)的逻辑抽到了 models.parseLyrics——这里直接用。
 
   /// 保存:校验 → 拼成 Song → pop 回传。校验不过弹 SnackBar 提示、不退出。
   void _save() {
@@ -96,7 +86,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
       _toast('先填个歌名吧');
       return;
     }
-    final sections = _parseSections(_lyricsCtl.text);
+    final sections = parseLyrics(_lyricsCtl.text);
     if (sections.isEmpty) {
       _toast('歌词不能空:至少写一行');
       return;
@@ -195,7 +185,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              '歌词与和弦:换行分句、空行分段;点和弦按钮在光标处插 [X]',
+              '歌词与和弦:换行分句、空行分段;行首写 #副歌 给段落命名;点和弦按钮在光标处插 [X]',
               style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 8),
@@ -214,7 +204,7 @@ class _AddSongScreenState extends State<AddSongScreen> {
               maxLines: 12,
               minLines: 6,
               decoration: const InputDecoration(
-                hintText: '[C]第一句词 [G]...\n\n[Am]副歌 [F]...(空行分段)',
+                hintText: '#主歌\n[C]第一句 [G]...\n\n#副歌\n[Am]高潮 [F]...',
                 border: OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
