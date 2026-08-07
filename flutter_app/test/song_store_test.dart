@@ -85,5 +85,55 @@ void main() {
       expect(store2.songs.last.title, '我的歌');
       expect(store2.songs.last.tempo, 90);
     });
+
+    test('改一首用户歌:update 后内容变、id 不变、持久化', () async {
+      var p = await AppPreferences.load();
+      final store = SongStore();
+      await store.load(p);
+      final created = store.add(Song(
+        title: '旧标题',
+        tempo: 90,
+        sections: [Section(lines: [Line(lyric: '[C]词')])],
+      ));
+      store.update(Song(
+        id: created.id,
+        title: '新标题',
+        tempo: 120,
+        sections: [Section(lines: [Line(lyric: '[G]新词')])],
+      ));
+      expect(store.songs.last.id, created.id); // id 不变
+      expect(store.songs.last.title, '新标题');
+      expect(store.songs.last.tempo, 120);
+
+      // 重启:改完持久化了
+      p = await AppPreferences.load();
+      final store2 = SongStore();
+      await store2.load(p);
+      expect(store2.songs.last.title, '新标题');
+      expect(store2.songs.last.tempo, 120);
+    });
+
+    test('删一首用户歌:移除 + 持久化(重启也没了)', () async {
+      var p = await AppPreferences.load();
+      final store = SongStore();
+      await store.load(p);
+      final builtinCount = store.songs.length;
+      final created = store.add(Song(
+        title: '删我',
+        tempo: 90,
+        sections: [Section(lines: [Line(lyric: '[C]词')])],
+      ));
+
+      store.remove(created.id);
+      expect(store.songs.length, builtinCount); // 列表立刻少一首
+
+      // 重启:这首歌没了(fire-and-forget 的持久化在这步 await 落盘)。
+      // remove 顺带清偏好的效果(clearSong)在 prefs_test 里单独、确定性测。
+      p = await AppPreferences.load();
+      final store2 = SongStore();
+      await store2.load(p);
+      expect(store2.songs.length, builtinCount);
+      expect(store2.songs.where((s) => s.id == created.id), isEmpty);
+    });
   });
 }

@@ -371,6 +371,95 @@ class SongScreenState extends State<SongScreen> {
     if (songs.isNotEmpty) _onSongChanged(songs.length - 1);
   }
 
+  /// 编辑当前这首用户歌:开表单(回填)→ 拿到改后的 Song → 更新歌库 → 按新内容重拍扁。
+  Future<void> _openEditSong() async {
+    final current = songs[_selected];
+    if (!widget.store.isUserSong(current)) return; // 内置歌不可改(兜一道,图标本就不出)
+    // 编辑期间停掉节拍器(不然表单开着、后台还按旧内容打拍)。
+    if (_playing) {
+      _timer?.cancel();
+      _timer = null;
+      _accumulateSec();
+      _setWakelock(false);
+    }
+    _previewTimer?.cancel();
+    _previewTimer = null;
+    final edited = await Navigator.of(context).push<Song>(
+      MaterialPageRoute(builder: (_) => AddSongScreen(initial: current)),
+    );
+    if (!mounted || edited == null) return; // 取消了 / 页面已不在
+    widget.store.update(edited);
+    final p = _prefs;
+    setState(() {
+      _playing = false;
+      _idx = 0;
+      _slot = 0;
+      _loops = 0; // 内容可能变了,本次遍数从头计
+      _markerA = null; // 行结构可能变,旧 AB 失效
+      _markerB = null;
+      _inCountIn = false;
+      _everPlayed = false;
+      _rebuildFlat();
+      _tempo = edited.tempo; // 原速可能改了
+      _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
+    });
+    p?.setTempo(edited.id, edited.tempo); // 新原速落盘(覆盖旧的"上次速度")
+    p?.setAb(edited.id, null, null); // 行结构可能变,清旧 AB
+  }
+
+  /// 删除当前这首用户歌:确认 → 从歌库移除(顺带清它的偏好)→ 切回第一首。内置歌不可删。
+  Future<void> _deleteCurrentSong() async {
+    final current = songs[_selected];
+    if (!widget.store.isUserSong(current)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除这首歌?'),
+        content: Text('「${current.title}」删掉就找不回来了。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    // 停播放(歌要删了,不结计时、不存偏好——remove 会清掉)。
+    _timer?.cancel();
+    _timer = null;
+    _previewTimer?.cancel();
+    _previewTimer = null;
+    _playStart = null;
+    if (_playing) _setWakelock(false);
+    widget.store.remove(current.id); // notify → _onStoreChanged 把 _selected 夹回合法范围
+    if (!mounted || songs.isEmpty) return;
+    // 切回第一首(内置歌,一定在)。不走 _onSongChanged:它会"存旧歌偏好",但旧歌已删、下标也挪了——
+    // 那样会把别的歌的偏好写花。这里直接重置到第 0 首。
+    final p = _prefs;
+    setState(() {
+      _playing = false;
+      _selected = 0;
+      _idx = 0;
+      _slot = 0;
+      _loops = 0;
+      _markerA = null;
+      _markerB = null;
+      _inCountIn = false;
+      _everPlayed = false;
+      _rebuildFlat();
+      _tempo = p?.getTempo(songs[0].id) ?? songs[0].tempo;
+      _totalLoops = p?.getLoops(songs[0].id) ?? 0;
+      _totalSec = p?.getSec(songs[0].id) ?? 0;
+      _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
+    });
+    p?.setSongIndex(0);
+  }
+
   /// 拖滑块调速。正在播放时,旧 Timer.periodic 的间隔是【创建那一刻】就定死的、改 _tempo 它不知道,
   /// 所以必须 cancel 掉、用新的 _halfBeat 再起一个(下一个槽就按新速度来)。
   /// 不归零位置(_idx/_slot 不动)、也不立刻补响一声——否则会跟刚才那下叠在一起。
@@ -788,8 +877,20 @@ class SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
-        // 顶栏右侧图标:字号(调歌词大小)。统计、和弦速查挪成底导航 tab 了(第28步),不再占这。
+        // 顶栏右侧图标:用户歌才出 编辑 / 删除(第43c步;内置歌不可改不可删);字号一直有。
         actions: [
+          if (widget.store.isUserSong(song))
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: '编辑这首歌',
+              onPressed: _openEditSong,
+            ),
+          if (widget.store.isUserSong(song))
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: '删除这首歌',
+              onPressed: _deleteCurrentSong,
+            ),
           IconButton(
             icon: const Icon(Icons.format_size_rounded),
             tooltip: '歌词字号',

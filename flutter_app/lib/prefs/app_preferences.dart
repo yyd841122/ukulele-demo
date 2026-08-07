@@ -127,6 +127,15 @@ class AppPreferences {
   Future<void> setSec(String songId, int n) =>
       _prefs.setInt('$_kSecPrefix$songId', n);
 
+  /// 清掉某首歌的所有偏好(删用户歌时调,免得留垃圾 key)。内置歌不走这(不可删)。
+  Future<void> clearSong(String id) async {
+    await _prefs.remove('$_kTempoPrefix$id');
+    await _prefs.remove('$_kAbAPrefix$id');
+    await _prefs.remove('$_kAbBPrefix$id');
+    await _prefs.remove('$_kLoopsPrefix$id');
+    await _prefs.remove('$_kSecPrefix$id');
+  }
+
   // —— 练习日历(哪天练过,跨歌汇总)——
   // 存 practiceDayKey 字符串('yyyy-MM-dd')列表、去重。给统计页画日历热力图 + 算"连续打卡 N 天"。
   // 跨歌(不按歌存):练了哪天跟哪首歌无关,日历看的是"有没有练"。SongScreen 在真正攒到练习秒数时标记。

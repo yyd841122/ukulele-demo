@@ -116,6 +116,22 @@ void main() {
     expect(p2.getA4(), 442);
   });
 
+  test('clearSong:清掉某首歌的所有偏好(删用户歌时调)', () async {
+    final p = await AppPreferences.load();
+    await p.setTempo('u1', 90);
+    await p.setAb('u1', 2, 5);
+    await p.setLoops('u1', 7);
+    await p.setSec('u1', 200);
+
+    await p.clearSong('u1');
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getTempo('u1'), isNull);
+    expect(p2.getAb('u1'), isNull);
+    expect(p2.getLoops('u1'), 0);
+    expect(p2.getSec('u1'), 0);
+  });
+
   test('换和弦训练:弦对/速度/档位/挑战,存了能读回、没存过给默认', () async {
     final p = await AppPreferences.load();
     // 没存过 → 调用方给的 fallback

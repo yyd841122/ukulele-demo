@@ -57,4 +57,25 @@ class SongStore extends ChangeNotifier {
     final jsons = [for (final s in _songs.where(isUserSong)) jsonEncode(s.toJson())];
     p.setUserSongs(jsons);
   }
+
+  /// 改一首用户歌(按 id 找到、替换内容)。内置歌不可改(id 不以 'u' 开头就 no-op)。
+  void update(Song updated) {
+    if (!updated.id.startsWith('u')) return;
+    final p = _prefs;
+    _songs = [for (final s in _songs) s.id == updated.id ? updated : s];
+    if (p != null) _persist(p);
+    notifyListeners();
+  }
+
+  /// 删一首用户歌(按 id)。内置歌不可删。顺带清掉它的偏好(速度/AB/遍数/秒数),免得留垃圾。
+  void remove(String id) {
+    if (!id.startsWith('u')) return;
+    final p = _prefs;
+    _songs = _songs.where((s) => s.id != id).toList();
+    if (p != null) {
+      _persist(p);
+      p.clearSong(id); // fire-and-forget(跟其它 prefs 写一个套路,不卡 notify)
+    }
+    notifyListeners();
+  }
 }
