@@ -1461,4 +1461,46 @@ final builtinFingerpickSongs = <FingerpickSong>[
       ]),
     ],
   ),
+
+  // ═══ 4. 小星星 (Twinkle Twinkle Little Star) ═══
+  // C 调,最简单的指弹入门曲。纯旋律,每音一拍(四分音符,duration=4)。
+  // 指法:do=C弦空(1,0) re=C弦2品(1,2) mi=E弦空(2,0) fa=E弦1品(2,1)
+  //      sol=G弦空(0,0) la=A弦空(3,0)
+  FingerpickSong(
+    title: '小星星 (Twinkle Twinkle Little Star)',
+    subtitle: 'C 调 · 指弹入门',
+    tempo: 85,
+    bars: [
+      // 1: 一闪一闪亮晶晶 (C C G G A A G)
+      FingerpickBar(lyric: '一闪一闪亮晶晶', slots: [
+        fp(1,0,t:4), fp(1,0,t:4), fp(0,0,t:4), fp(0,0,t:4),
+        fp(3,0,t:4), fp(3,0,t:4), fp(0,0,t:4), fpr(t:4),
+      ]),
+      // 2: 满天都是小星星 (F F E E D D C)
+      FingerpickBar(lyric: '满天都是小星星', slots: [
+        fp(2,1,t:4), fp(2,1,t:4), fp(2,0,t:4), fp(2,0,t:4),
+        fp(1,2,t:4), fp(1,2,t:4), fp(1,0,t:4), fpr(t:4),
+      ]),
+      // 3: 挂在天上放光明 (G G F F E E D)
+      FingerpickBar(lyric: '挂在天上放光明', slots: [
+        fp(0,0,t:4), fp(0,0,t:4), fp(2,1,t:4), fp(2,1,t:4),
+        fp(2,0,t:4), fp(2,0,t:4), fp(1,2,t:4), fpr(t:4),
+      ]),
+      // 4: 好像许多小眼睛 (G G F F E E D)
+      FingerpickBar(lyric: '好像许多小眼睛', slots: [
+        fp(0,0,t:4), fp(0,0,t:4), fp(2,1,t:4), fp(2,1,t:4),
+        fp(2,0,t:4), fp(2,0,t:4), fp(1,2,t:4), fpr(t:4),
+      ]),
+      // 5: 一闪一闪亮晶晶 (C C G G A A G)
+      FingerpickBar(lyric: '一闪一闪亮晶晶', slots: [
+        fp(1,0,t:4), fp(1,0,t:4), fp(0,0,t:4), fp(0,0,t:4),
+        fp(3,0,t:4), fp(3,0,t:4), fp(0,0,t:4), fpr(t:4),
+      ]),
+      // 6: 满天都是小星星 (F F E E D D C)
+      FingerpickBar(lyric: '满天都是小星星', slots: [
+        fp(2,1,t:4), fp(2,1,t:4), fp(2,0,t:4), fp(2,0,t:4),
+        fp(1,2,t:4), fp(1,2,t:4), fp(1,0,t:4), fpr(t:4),
+      ]),
+    ],
+  ),
 ];

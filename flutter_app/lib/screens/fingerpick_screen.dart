@@ -46,8 +46,9 @@ class FingerpickScreenState extends State<FingerpickScreen> {
   int _selectedSong = 0;
   int _slot = 0;
   int _idx = 0;
-  bool _inCountIn = false;
+  bool _inCountIn = false;          // 曲谱模式也用这个:预备拍阶段
   bool _everPlayed = false;
+  int _countInSlot = 0;             // 预备拍当前数到第几拍(0..3)
   int _transpose = 0;
 
   AppPreferences? _prefs;
@@ -115,11 +116,13 @@ class FingerpickScreenState extends State<FingerpickScreen> {
 
     if (_mode == _FpMode.score) {
       _globalSlot = 0;
+      if (!_everPlayed) _inCountIn = true; // 第一次按▶ 数 4 拍预备拍
     } else {
       _slot = 0; _idx = 0;
       _inCountIn = true;
       _everPlayed = false;
     }
+    _countInSlot = 0;
     setState(() => _playing = true);
     _timer = Timer.periodic(_tickDuration, (_) => _onTick());
   }
@@ -145,17 +148,39 @@ class FingerpickScreenState extends State<FingerpickScreen> {
 
   void _tickScore() {
     if (_flatSlots.isEmpty) return;
-    // 推进:跳过已过时的 duration 累积
-    _globalSlot++;
-    if (_globalSlot >= _flatSlots.length) _globalSlot = 0;
 
-    // 发声
-    final s = _flatSlots[_globalSlot];
+    // 预备拍:数 4 拍(每拍 4 个 16 分槽),只敲节拍器嗒声,不进曲谱。
+    if (_inCountIn) {
+      // 每 4 个 tick = 1 拍。第 1 拍(0-3)的第 0 tick 重音嗒,之后每拍首 tick 普通嗒。
+      if (_countInSlot % 4 == 0) {
+        widget.audio.playClick(accent: _countInSlot == 0);
+      }
+      _countInSlot++;
+      if (_countInSlot >= 16) { // 4 拍 × 4 = 数完
+        _inCountIn = false;
+        _everPlayed = true;
+        // 立刻播第 0 槽(正式开始)
+        _playSlot(0);
+      }
+      return;
+    }
+
+    // 正式播放:按当前槽的 duration 推进到下一个要响的槽。
+    final cur = _flatSlots[_globalSlot];
+    final adv = cur.duration.clamp(1, 8); // 1=16分…8=2分,占多少个 16 分 tick
+    _globalSlot += adv;
+    if (_globalSlot >= _flatSlots.length) _globalSlot = 0; // 整曲循环
+
+    _playSlot(_globalSlot);
+  }
+
+  /// 拨响曲谱第 slot 个槽(如果该槽该发声)。
+  void _playSlot(int slot) {
+    if (slot < 0 || slot >= _flatSlots.length) return;
+    final s = _flatSlots[slot];
     if (s.shouldPlay && _soundOn) {
-      // 要按弦+品拨:直接用 freqForString 算频率→合成单音播放
-      widget.audio.playString('C', s.stringIndex!, semis: 0);
-      // 注:这里简单地用 C 和弦名来查 chordShapes,实际该用 freqForString 直算。
-      // 暂时用 playString 的查表兜底:对不上 chordShapes 的就退回空弦。
+      // 第77步:按弦号+品直拨精确旋律音(不再查和弦桶),移调走 semis。
+      widget.audio.playPitch(s.stringIndex!, s.fret, semis: _transpose);
     }
   }
 
@@ -339,7 +364,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
             slotsPerBar: _slotsPerBar(),
           ),
         ),
-        // 当前歌词条
+        // 当前歌词条(预备拍时显示倒计时数字)
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -347,15 +372,17 @@ class FingerpickScreenState extends State<FingerpickScreen> {
             color: cs.surfaceContainerHighest,
             border: Border(top: BorderSide(color: cs.outlineVariant)),
           ),
-          child: Text(
-            currentLyric ?? '♪',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 18,
-              color: cs.primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          child: _inCountIn
+              ? Text(
+                  '预备 ${_countInSlot ~/ 4 + 1}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: cs.primary),
+                )
+              : Text(
+                  currentLyric ?? '♪',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, color: cs.primary, fontWeight: FontWeight.w600),
+                ),
         ),
         // 控制栏
         _buildControlBar(cs),

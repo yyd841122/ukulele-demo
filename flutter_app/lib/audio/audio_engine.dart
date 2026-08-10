@@ -51,6 +51,13 @@ class AudioEngine {
   // 跟扫弦桶 _chordsByOffset 一样的层级,只是音源是单弦而非整扫。默认只建 0 桶;移调桶 prepareTranspose 时一并建。
   final Map<int, Map<String, AudioSource>> _stringSourcesByOffset = {};
 
+  // —— 半音表(第77步·指弹曲谱模式)——
+  // 按"弦号_品"预合成的单音,不依赖和弦名。指弹曲谱要播精确的旋律音(如小星星的 do/re/mi),
+  // playString 按"和弦名"查会拿不到对的标准音高(它只存该和弦指法那个品)。这里存独立半音表。
+  // key = "弦号_品"(如 "1_2" = C 弦 2 品 = D4)。0-12 品够覆盖常用音域。固定不偏移(移调单独处理)。
+  final Map<String, AudioSource> _pitchTable = {};
+  static const int _maxFret = 12; // 预合成到第 12 品
+
   // —— 跟唱录音回放(第49步)——
   // 一次性声源槽:回放「听刚才」时 loadMem 录音 WAV 进来 → play;播完或下次回放时释放。单槽位复用,
   // 不堆积、path 不撞 key(每次先 dispose 上一个)。null = 当前没有回放声源占着。
@@ -85,6 +92,8 @@ class AudioEngine {
     await _initOpenStringSources();
     // 第59步:尽力预生成指弹单弦音源。失败只降级,不影响嗒声/扫弦/参考音。
     await _initStringSources();
+    // 第77步:尽力预生成半音表(按弦+品),指弹曲谱模式播精确旋律用。
+    await _initPitchTable();
     return true;
   }
 
@@ -213,7 +222,40 @@ class AudioEngine {
     return out;
   }
 
-  /// 引擎和嗒声都加载好了吗(没好之前 ▶ 按钮变灰、按了也不出声)。
+  /// 第77步:预生成半音表——4 根弦 × 0~12 品各合成一段单音拨弦 WAV,loadMem 进内存。
+  /// 跟扫弦/单弦桶一样【尽力而为】:失败只打日志。固定种子(参考音要稳定)。
+  Future<void> _initPitchTable() async {
+    try {
+      final synth = StrumSynth(seed: 20240802);
+      for (var s = 0; s < 4; s++) {
+        for (var f = 0; f <= _maxFret; f++) {
+          final freq = StrumSynth.freqForString(s, f);
+          final wav = synth.synthesizeStringWav(freq);
+          try {
+            final src = await SoLoud.instance.loadMem('pitch_${s}_$f', wav);
+            _pitchTable['${s}_$f'] = src;
+          } catch (e) {
+            debugPrint('半音表 弦$s 品$f 加载失败: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('半音表预生成失败(嗒声/扫弦仍可用): $e');
+    }
+  }
+
+  /// 第77步:按"弦号+品"拨一个精确的单音(指弹曲谱模式播旋律用,如小星星的 do/re/mi)。
+  /// 不依赖和弦名,直接查半音表。没预生成(初始化失败/品超 12)就跳过 + 打日志。
+  /// [semis] = 移调偏移(目前只支持 0;非 0 时按品偏移查表,超界退回 0 品)。
+  void playPitch(int stringIndex, int fret, {int semis = 0}) {
+    final f = (fret + semis).clamp(0, _maxFret);
+    final src = _pitchTable['${stringIndex}_$f'];
+    if (src == null) {
+      debugPrint('半音表:没有 弦$stringIndex 品$f 的声源(初始化失败?),跳过');
+      return;
+    }
+    SoLoud.instance.play(src);
+  }
   bool get isReady => _initialized;
 
   /// 播一声嗒(第58步-5:按当前选中的音色播)。play(src) 每次起全新实例从头播。
@@ -323,6 +365,9 @@ class AudioEngine {
       for (final s in bucket.values) {
         SoLoud.instance.disposeSource(s);
       }
+    }
+    for (final s in _pitchTable.values) {
+      SoLoud.instance.disposeSource(s);
     }
     if (_voiceSrc != null) SoLoud.instance.disposeSource(_voiceSrc!);
   }
