@@ -328,7 +328,7 @@ class StatsScreenState extends State<StatsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('练习统计'),
-        actions: [_themeButton],
+        actions: [_backupButton, _themeButton],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
