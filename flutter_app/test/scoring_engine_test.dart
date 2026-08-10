@@ -131,24 +131,24 @@ void main() {
     test('等级边界:S≥0.95, A≥0.85, B≥0.70, C≥0.50, D<0.50', () {
       SessionScore s;
 
-      s = SessionScore(); for (var i = 0; i < 95; i++) s.record(BeatJudgment.good);
-      for (var i = 0; i < 5; i++) s.record(BeatJudgment.missed);
+      s = SessionScore(); for (var i = 0; i < 95; i++) { s.record(BeatJudgment.good); }
+      for (var i = 0; i < 5; i++) { s.record(BeatJudgment.missed); }
       expect(s.grade, 'S');
 
-      s = SessionScore(); for (var i = 0; i < 85; i++) s.record(BeatJudgment.good);
-      for (var i = 0; i < 15; i++) s.record(BeatJudgment.missed);
+      s = SessionScore(); for (var i = 0; i < 85; i++) { s.record(BeatJudgment.good); }
+      for (var i = 0; i < 15; i++) { s.record(BeatJudgment.missed); }
       expect(s.grade, 'A');
 
-      s = SessionScore(); for (var i = 0; i < 70; i++) s.record(BeatJudgment.good);
-      for (var i = 0; i < 30; i++) s.record(BeatJudgment.missed);
+      s = SessionScore(); for (var i = 0; i < 70; i++) { s.record(BeatJudgment.good); }
+      for (var i = 0; i < 30; i++) { s.record(BeatJudgment.missed); }
       expect(s.grade, 'B');
 
-      s = SessionScore(); for (var i = 0; i < 50; i++) s.record(BeatJudgment.good);
-      for (var i = 0; i < 50; i++) s.record(BeatJudgment.missed);
+      s = SessionScore(); for (var i = 0; i < 50; i++) { s.record(BeatJudgment.good); }
+      for (var i = 0; i < 50; i++) { s.record(BeatJudgment.missed); }
       expect(s.grade, 'C');
 
-      s = SessionScore(); for (var i = 0; i < 49; i++) s.record(BeatJudgment.good);
-      for (var i = 0; i < 51; i++) s.record(BeatJudgment.missed);
+      s = SessionScore(); for (var i = 0; i < 49; i++) { s.record(BeatJudgment.good); }
+      for (var i = 0; i < 51; i++) { s.record(BeatJudgment.missed); }
       expect(s.grade, 'D');
     });
 
@@ -160,7 +160,7 @@ void main() {
 
     test('reset 清空所有计数', () {
       final s = SessionScore();
-      for (var i = 0; i < 10; i++) s.record(BeatJudgment.good);
+      for (var i = 0; i < 10; i++) { s.record(BeatJudgment.good); }
       s.reset();
       expect(s.total, 0);
       expect(s.good, 0);

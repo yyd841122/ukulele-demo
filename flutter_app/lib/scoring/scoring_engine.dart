@@ -1,11 +1,18 @@
-// 跟弹打分引擎(第61步):起音检测 + 计时准度评分 + 练习会话评分跟踪。
+// 跟弹打分引擎(第61步/第62步):起音检测 + 计时准度评分 + 音高评分 + 练习会话跟踪。
 //
 // 纯 Dart(不依赖 Flutter):只跟数字打交道,UI 显示不在这。可无头测试全部计分逻辑。
 //
-// 管线: MicCapture samples → OnsetDetector(能量阈值起音) → TimingScorer(onset vs expected time)
-// → SessionScore(累计 good/early/late/missed → 准确率 → 等级)。
+// 管线: MicCapture samples → OnsetDetector(能量阈值起音) → TimingScorer(onset vs expected)
+// → PitchScorer(YIN 测频 vs 期望频率) → SessionScore(累计 + 准确率 + 等级)。
+//
+// 音高打分只在指弹模式启用:扫弦=复音、YIN 只能检一个基频、判不准不如别瞎判。
+// 指弹每下只拨一根弦 → 单音 → YIN 准确 → 可判对错。
 import 'dart:math';
 import 'dart:typed_data';
+
+import '../audio/pitch_detector.dart';
+import '../audio/strum_synth.dart';
+import '../models.dart'; // chordShapes
 
 /// 单拍的计时判定。
 enum BeatJudgment { good, early, late, missed }
@@ -136,5 +143,40 @@ class SessionScore {
 
   void reset() {
     good = 0; early = 0; late = 0; missed = 0; extra = 0;
+  }
+}
+
+/// 音高评分(第62步):onset 触发后取样本窗 → YIN 测频 → 跟期望频率比较 → 判对错。
+/// 只在指弹模式用——单音 YIN 准;扫弦和弦是复音、YIN 只能检一个基频,不判。
+class PitchScorer {
+  final PitchDetector _detector;
+  /// 容差(音分):偏差 ≤ 这个 = correct。新手放宽到 ±35 cent(≈ 1/3 半音)。
+  static const int correctCents = 35;
+  /// 偏差 ≤ 这个 = close(偏了点但还能听)。> 这个 = wrong。
+  static const int closeCents = 60;
+
+  PitchScorer(PitchDetector detector) : _detector = detector;
+
+  /// 判一段样本的实际音高 vs 期望频率。返回 (判定, 偏差cents, 检测到的Hz)。
+  /// [samples] = onset 后 ~200ms 窗口;[expectedHz] = 该弦该品格该弹的音。
+  /// YIN 检不到(null) → wrong。
+  ({String judgment, double cents, double? detectedHz}) judge(
+    Float64List samples,
+    double expectedHz,
+  ) {
+    final f0 = _detector.detect(samples, 44100);
+    if (f0 == null) return (judgment: 'miss', cents: double.nan, detectedHz: null);
+    final cents = centsBetween(f0, expectedHz);
+    final absC = cents.abs();
+    if (absC <= correctCents) return (judgment: 'correct', cents: cents, detectedHz: f0);
+    if (absC <= closeCents) return (judgment: 'close', cents: cents, detectedHz: f0);
+    return (judgment: 'wrong', cents: cents, detectedHz: f0);
+  }
+
+  /// 给"某个和弦上某根弦按了某品"算期望频率(考虑移调)。
+  static double expectedHz(String chord, int stringIndex, {int semis = 0}) {
+    final frets = chordShapes[chord];
+    if (frets == null || stringIndex < 0 || stringIndex >= frets.length) return 0;
+    return StrumSynth.freqForString(stringIndex, frets[stringIndex], semitoneOffset: semis);
   }
 }
