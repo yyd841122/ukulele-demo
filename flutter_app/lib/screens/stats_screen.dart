@@ -7,9 +7,12 @@
 // (_accumulateSec 把这段时间结进 _totalSec、还在播就重置 _playStart 让计时不停,_saveStats 落盘),
 // 再调本页 reload() 重读——这样读到的才是含「本次」的最新值,不会少算刚练的这段。
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Clipboard:备份一键复制 / 导入粘贴
+import 'package:share_plus/share_plus.dart'; // 系统分享面板:把备份文本一键发出去(第50步)
 
 import '../models.dart';
 import '../prefs/app_preferences.dart';
+import '../song_backup.dart'; // encodeBackup / decodeBackup(第50步)
 import '../song_store.dart';
 import '../theme_controller.dart';
 
@@ -100,6 +103,198 @@ class StatsScreenState extends State<StatsScreen> {
   /// 不 reload 的话读到的还是上次切来时的旧值,漏算这期间在练习 tab 刚练的量。
   void reload() => _load();
 
+  // 顶栏备份 / 导入菜单(第50步):把用户自加歌导出 JSON 文本(复制 / 分享),或从文本导回。
+  // 备份 / 导入只对【用户自加歌】有意义(内置歌在代码里),用 store.songs + isUserSong 取。
+  PopupMenuButton<String> get _backupButton => PopupMenuButton<String>(
+        icon: const Icon(Icons.cloud_upload_outlined),
+        tooltip: '备份 / 导入歌曲',
+        onSelected: (v) {
+          if (v == 'backup') {
+            _exportSongs();
+          } else if (v == 'import') {
+            _importSongs();
+          }
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'backup', child: Text('备份 / 分享我的歌')),
+          PopupMenuItem(value: 'import', child: Text('从备份导入歌')),
+        ],
+      );
+
+  /// 备份:把用户自加歌编码成 JSON 文本,弹框给用户【复制到剪贴板】或【分享…】出去。
+  /// 没有用户歌 → 直接提示,不开框。
+  Future<void> _exportSongs() async {
+    final userSongs = [
+      for (final s in songs)
+        if (widget.store.isUserSong(s)) s,
+    ];
+    if (userSongs.isEmpty) {
+      _toast('还没有自己加的歌,不用备份');
+      return;
+    }
+    final backup = encodeBackup(userSongs);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('备份 ${userSongs.length} 首歌'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '下面是 ${userSongs.length} 首自加歌的备份文本。复制或分享出去,换手机 / 重装时粘到「从备份导入」就能恢复。',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // 备份文本可能很长:限高 200 可滚、可选(也能手动选中复制)。
+                SizedBox(
+                  height: 200,
+                  child: Scrollbar(
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        backup,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: backup));
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                _toast('已复制 ${userSongs.length} 首歌到剪贴板');
+              },
+              child: const Text('复制到剪贴板'),
+            ),
+            FilledButton.icon(
+              onPressed: () => SharePlus.instance.share(
+                ShareParams(text: backup, subject: '我的尤克里里练习歌'),
+              ),
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('分享…'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 导入:粘贴备份文本 → 解析 → 确认 → 加到歌库末尾(分配新 id,不动现有歌)。
+  Future<void> _importSongs() async {
+    final ctl = TextEditingController();
+    String? err; // 解析出错时的文案(TextField 的 errorText)
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSt) {
+            return AlertDialog(
+              title: const Text('从备份导入歌'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '把备份文本整段粘进来。会加到歌库末尾,不影响现有歌(重复导入会重复加,可之后删)。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: ctl,
+                      maxLines: 8,
+                      minLines: 4,
+                      decoration: InputDecoration(
+                        hintText: '在这里粘贴备份文本…',
+                        border: const OutlineInputBorder(),
+                        errorText: err,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final text = ctl.text.trim();
+                    if (text.isEmpty) {
+                      setSt(() => err = '先把备份文本粘进来');
+                      return;
+                    }
+                    try {
+                      final parsed = decodeBackup(text);
+                      if (parsed.isEmpty) {
+                        setSt(() => err = '没解析到歌,文本对吗?');
+                        return;
+                      }
+                      final confirmed = await _confirmImport(parsed.length);
+                      if (confirmed != true) return;
+                      widget.store.addAll(parsed);
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      _toast('导入了 ${parsed.length} 首歌');
+                    } on FormatException catch (e) {
+                      setSt(() => err = e.message.isEmpty ? '解析失败,文本对吗?' : e.message);
+                    }
+                  },
+                  child: const Text('导入'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// 导入前的二次确认(告诉用户会加几首,免得误粘进东西)。
+  Future<bool?> _confirmImport(int n) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认导入'),
+        content: Text('把 $n 首歌加到歌库末尾?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('导入'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _toast(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -110,7 +305,7 @@ class StatsScreenState extends State<StatsScreen> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('练习统计'),
-          actions: [_themeButton],
+          actions: [_backupButton, _themeButton],
         ),
         body: const Center(child: CircularProgressIndicator()),
       );

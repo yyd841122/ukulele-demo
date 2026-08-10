@@ -147,5 +147,46 @@ void main() {
       expect(store2.songs.length, builtinCount);
       expect(store2.songs.where((s) => s.id == created.id), isEmpty);
     });
+
+    test('addAll(第50步·从备份导入):批量加、分配新 id、持久化、重启读回', () async {
+      var p = await AppPreferences.load();
+      final store = SongStore();
+      await store.load(p);
+      final builtinCount = store.songs.length;
+
+      final added = store.addAll([
+        Song(title: '导入A', tempo: 90, sections: [Section(lines: [Line(lyric: '[C]词')])]),
+        Song(title: '导入B', tempo: 100, sections: [Section(lines: [Line(lyric: '[G]词')])]),
+      ]);
+      // 每首分到新 u-id(u1、u2),不信任(也没传)源 id。
+      expect(added.length, 2);
+      expect(added[0].id, 'u1');
+      expect(added[1].id, 'u2');
+      expect(store.songs.length, builtinCount + 2);
+      expect(store.songs.last.title, '导入B');
+
+      // 重启:批量加的都持久化了、id 不变。
+      p = await AppPreferences.load();
+      final store2 = SongStore();
+      await store2.load(p);
+      expect(store2.songs.length, builtinCount + 2);
+      expect(store2.songs[builtinCount].id, 'u1');
+      expect(store2.songs[builtinCount].title, '导入A');
+    });
+
+    test('addAll 后再加单首:id 续号(不跟已删 / 已用撞),不回滚', () async {
+      final p = await AppPreferences.load();
+      final store = SongStore();
+      await store.load(p);
+      store.addAll([
+        Song(title: 'X', tempo: 90, sections: [Section(lines: [Line(lyric: '[C]词')])]),
+        Song(title: 'Y', tempo: 90, sections: [Section(lines: [Line(lyric: '[C]词')])]),
+      ]);
+      // 这时计数器到 u2;再加单首该是 u3(不回滚、不重用)。
+      final next = store.add(
+        Song(title: 'Z', tempo: 90, sections: [Section(lines: [Line(lyric: '[C]词')])]),
+      );
+      expect(next.id, 'u3');
+    });
   });
 }

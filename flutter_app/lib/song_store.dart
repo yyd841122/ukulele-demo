@@ -52,6 +52,24 @@ class SongStore extends ChangeNotifier {
     return withId;
   }
 
+  /// 批量加用户歌(第50步·从备份导入):给每首分配新 `u<n>` id(不信任备份里的 id,免撞现有歌)、
+  /// 追加、一次持久化 + 一次通知(比循环调 add 省 N 次写盘 + N 次刷帧)。返回带新 id 的歌。
+  /// 空列表 / 还没加载完 → 返回空、不动。
+  List<Song> addAll(List<Song> newSongs) {
+    final p = _prefs;
+    if (p == null || newSongs.isEmpty) return const [];
+    final added = <Song>[];
+    for (final s in newSongs) {
+      _userSeq++;
+      added.add(s.copyWith(id: 'u$_userSeq'));
+    }
+    p.setUserSongSeq(_userSeq);
+    _songs = [..._songs, ...added];
+    _persist(p);
+    notifyListeners();
+    return added;
+  }
+
   /// 把当前所有用户歌写回 prefs(每首一条 JSON 字符串)。内置歌不写(它们在代码里)。
   void _persist(AppPreferences p) {
     final jsons = [for (final s in _songs.where(isUserSong)) jsonEncode(s.toJson())];
