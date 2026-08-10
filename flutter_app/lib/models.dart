@@ -1231,3 +1231,72 @@ const List<Song> builtinSongs = [
 final List<Song> songs = [
   for (var i = 0; i < builtinSongs.length; i++) builtinSongs[i].copyWith(id: '$i'),
 ];
+
+// —— 指弹曲谱(第72步) ——
+// 跟 Song(和弦进行+歌词)不同:指弹曲谱是按小节组织的精确 TAB 数据,
+// 每小节 N 个时值槽(16分音符粒度),每槽定义哪根弦第几品 + 时值。
+// 支持真实指弹曲(如卡农/天空之城),不是自动生成的练习型。
+
+/// 指弹曲谱:一首完整的指弹曲子。
+@immutable
+class FingerpickSong {
+  final String title;        // 曲名
+  final String subtitle;     // 副标题(作曲/改编,可选)
+  final int tempo;           // 建议 BPM
+  final int beatsPerBar;     // 每小节几拍(4=4/4 拍)
+  final List<FingerpickBar> bars; // 小节列表
+
+  const FingerpickSong({
+    required this.title,
+    this.subtitle = '',
+    required this.tempo,
+    this.beatsPerBar = 4,
+    required this.bars,
+  });
+
+  /// 总槽位数(拍扁一整首曲子的所有16分音符槽)。
+  int get totalSlots => bars.fold(0, (sum, b) => sum + b.slots.length);
+
+  /// 把整首曲子的所有槽拍扁成一条线(播放用)。
+  List<FingerpickSlot> get flatSlots {
+    final out = <FingerpickSlot>[];
+    for (final b in bars) { out.addAll(b.slots); }
+    return out;
+  }
+}
+
+/// 指弹谱的一个小节。
+@immutable
+class FingerpickBar {
+  /// 本小节的时值槽列表。每拍4个16分槽、4/4拍一个小节16槽。
+  /// 但实际可能少于16(小节不规则/末尾不完整);duration 决定实际时值。
+  final List<FingerpickSlot> slots;
+
+  /// 跟这小节对应的歌词/和弦提示(可空)。播放到这小节时下面的歌词区显示它。
+  final String? lyric;
+
+  const FingerpickBar({required this.slots, this.lyric});
+}
+
+/// 指弹谱的一个时值槽:哪根弦、第几品、多长时值。
+@immutable
+class FingerpickSlot {
+  /// 弦下标:0=G, 1=C, 2=E, 3=A。null=休止(占时值但不弹)。
+  final int? stringIndex;
+
+  /// 品位(0=空弦)。stringIndex 为 null 时无意义。
+  final int fret;
+
+  /// 时值:1=16分音符, 2=8分, 3=附点8分, 4=4分, 6=附点4分, 8=2分。
+  /// 播放时按此决定该槽占多少个16分槽的时间。
+  final int duration;
+
+  const FingerpickSlot({this.stringIndex, this.fret = 0, this.duration = 1});
+
+  /// 这个槽该发声吗(stringIndex 非 null 且 duration > 0)。
+  bool get shouldPlay => stringIndex != null && duration > 0;
+
+  /// 休止槽(占时值、不弹)。
+  const FingerpickSlot.rest({int duration = 1})
+      : stringIndex = null, fret = 0, duration = duration;
+}
