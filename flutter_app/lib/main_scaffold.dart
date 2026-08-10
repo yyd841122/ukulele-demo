@@ -84,6 +84,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     if (leavingPractice) {
       _songKey.currentState?.flushStats();
       _songKey.currentState?.stopRecordingIfActive(); // 切走练习 tab → 停录(隐私 + 省电,跟调音器停麦同套路)
+      _songKey.currentState?.stopMetronome(); // 切走练习 tab → 停节拍器 + 关屏幕常亮(跟其他 tab 一个套路)
     }
     if (leavingTuner) {
       // 切走调音 tab → 停麦(隐私 + 省电;IndexedStack 保活,不停会一直录)。

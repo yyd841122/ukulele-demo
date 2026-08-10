@@ -27,14 +27,20 @@ class ReminderService {
   int _lastMinute = 0;
 
   /// 初始化通知插件:建 Android 渠道 + 加载时区数据。app 启动时调一次。
+  /// 包 try/catch:插件未接好的环境(如 headless 测试)抛 MissingPluginException 会冒泡到
+  /// UkuleleApp.initState 红屏——跟 MicCapture/VoiceRecorder 同类调用一样兜住。
   Future<void> init() async {
     if (_initialized) return;
-    tz.initializeTimeZones();
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    await _plugin.initialize(
-      settings: const InitializationSettings(android: android),
-    );
-    _initialized = true;
+    try {
+      tz.initializeTimeZones();
+      const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+      await _plugin.initialize(
+        settings: const InitializationSettings(android: android),
+      );
+      _initialized = true;
+    } catch (_) {
+      // 初始化失败:sync 时会再试;不崩 app。
+    }
   }
 
   /// 按用户偏好同步提醒:开了就设每日定时,关了就取消。统计页改设置后调这里。
@@ -81,9 +87,11 @@ class ReminderService {
     );
   }
 
-  /// 请求 Android 13+ 的通知权限(如果需要)。在统计页开提醒开关时调。
-  Future<void> requestPermission() async {
-    await _plugin.resolvePlatformSpecificImplementation<
+  /// 请求 Android 13+ 的通知权限。返回是否已授权——调用方据此决定开关要不要回滚
+  /// (旧版返回 void 丢了结果,用户拒了权限开关还亮着、通知永远不响)。
+  Future<bool> requestPermission() async {
+    final granted = await _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
+    return granted ?? false;
   }
 }

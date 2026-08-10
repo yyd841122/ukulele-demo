@@ -8,6 +8,7 @@
 // 再调本页 reload() 重读——这样读到的才是含「本次」的最新值,不会少算刚练的这段。
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Clipboard:备份一键复制 / 导入粘贴
+import 'package:permission_handler/permission_handler.dart'; // openAppSettings:通知权限被拒时引去系统设置
 import 'package:share_plus/share_plus.dart'; // 系统分享面板:把备份文本一键发出去(第50步)
 
 import '../audio/reminder_service.dart'; // 练习提醒(第58步-4)
@@ -676,8 +677,18 @@ class _ReminderCardState extends State<_ReminderCard> {
                 value: enabled,
                 onChanged: (v) async {
                   if (v) {
-                    // Android 13+ 先请求通知权限
-                    await ReminderService().requestPermission();
+                    // Android 13+ 先请求通知权限;被拒就不开(避免开关亮着但通知永远不响)。
+                    final granted = await ReminderService().requestPermission();
+                    if (!granted) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('需要通知权限才能提醒'),
+                          action: SnackBarAction(label: '去设置', onPressed: openAppSettings),
+                        ),
+                      );
+                      return; // 不翻开关、不存
+                    }
                   }
                   widget.p.setReminderEnabled(v);
                   await ReminderService().sync(widget.p);
