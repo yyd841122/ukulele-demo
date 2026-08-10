@@ -5,7 +5,6 @@
 // ▶ 逐槽播放 + TAB 谱逐槽高亮 + 自动滚动。
 // 定时器复用 SongScreen 套路:_halfBeat 粒度、_slot/_idx 推进、预备拍倒计时。
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -199,7 +198,6 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final fps = fingerpickPatternsFor(song.beatsPerChord);
-    final fp = fps[_patternIndex.clamp(0, fps.length - 1)];
 
     // TAB 谱当前高亮槽位:指弹型的一个"bar"(beatsPerChord×2 槽)对应 _flat 里一个和弦;
     // _idx 决定第几个和弦,_slot 决定和弦内第几个槽。

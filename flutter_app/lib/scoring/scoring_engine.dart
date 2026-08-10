@@ -134,8 +134,6 @@ class SessionScore {
 
   /// 平均偏差(ms):只算有检测到的拍(good/early/late 的绝对值平均)。null = 没任何有效拍。
   double? get avgDeviationMs {
-    var sum = 0.0;
-    var n = 0;
     // avgDeviation 没法从 record 简单算——调用方自行维护偏差列表。
     // 这里只返回 null,不在 SessionScore 里存每拍偏差(太重);由调用方算。
     return null;
