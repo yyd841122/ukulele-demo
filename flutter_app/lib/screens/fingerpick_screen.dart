@@ -42,6 +42,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
   bool _inCountIn = false;       // 预备拍阶段
   bool _everPlayed = false;      // 这首歌正式播过(用来决定是否再数预备拍)
   int _countInSlot = 0;          // 预备拍已走的 16 分 tick(0..15)
+  bool _pendingStart = false;    // 预备拍刚结束,下一 tick 播第一个音(修过渡早1tick)
 
   // —— 曲谱模式 ——
   List<FingerpickSlot> _flatSlots = []; // 拍扁的所有音
@@ -58,7 +59,6 @@ class FingerpickScreenState extends State<FingerpickScreen> {
   int _idx = 0;
   List<int> _practiceBarStarts = [];
 
-  int _transpose = 0;
   AppPreferences? _prefs;
 
   /// 一个 16 分音符 tick 的时长。曲谱/练习都用 16 分粒度(练习模式数据按 8 分=duration 2)。
@@ -131,6 +131,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     _inCountIn = false;
     _everPlayed = false;
     _countInSlot = 0;
+    _pendingStart = false;
   }
 
   // —— 播放控制 ——
@@ -189,10 +190,17 @@ class FingerpickScreenState extends State<FingerpickScreen> {
       if (_countInSlot >= 16) {
         _inCountIn = false;
         _everPlayed = true;
-        _globalSlot = 0;
-        _ticksHeld = 0;
-        _playSlot(0); // 预备拍结束 → 立刻拨第一个音
+        _pendingStart = true; // 不立即播 slot0;下一 tick(=整曲 beat1)再播,修"过渡早1拍"
       }
+      return;
+    }
+
+    // 预备拍刚结束:这一 tick 是整曲第 1 拍的强位,播 slot0。
+    if (_pendingStart) {
+      _pendingStart = false;
+      _globalSlot = 0;
+      _ticksHeld = 0;
+      _playSlot(0);
       return;
     }
 
@@ -211,34 +219,57 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     if (slot < 0 || slot >= _flatSlots.length) return;
     final s = _flatSlots[slot];
     if (s.shouldPlay && _soundOn) {
-      widget.audio.playPitch(s.stringIndex!, s.fret, semis: _transpose);
+      widget.audio.playPitch(s.stringIndex!, s.fret);
     }
   }
 
-  /// 练习模式:8 分音符粒度(数据按 duration=2 画)。沿用旧逻辑。
+  /// 练习模式:8 分音符槽位,每 2 个 16 分 tick 推一个槽(修"快2倍")。
   void _tickPractice() {
     final song = songs.isNotEmpty ? songs[_selectedSong] : null;
     if (song == null) return;
+
     if (_inCountIn) {
       if (_countInSlot % 4 == 0) widget.audio.playClick(accent: _countInSlot == 0);
       _countInSlot++;
-      if (_countInSlot >= 16) { _inCountIn = false; _everPlayed = true; }
+      if (_countInSlot >= 16) {
+        _inCountIn = false;
+        _everPlayed = true;
+        _pendingStart = true;
+      }
       return;
     }
-    _slot++;
-    if (_slot >= song.beatsPerChord * 2) {
+
+    if (_pendingStart) {
+      _pendingStart = false;
       _slot = 0;
-      if (_flat.isNotEmpty) {
-        if (_idx + 1 >= _flat.length) { _idx = 0; } else { _idx++; }
+      _ticksHeld = 0;
+      _playPracticeSlot();
+      return;
+    }
+
+    // 8 分音符 = 2 个 16 分 tick。累积到 2 才推进一个槽。
+    _ticksHeld++;
+    if (_ticksHeld >= 2) {
+      _ticksHeld = 0;
+      _slot++;
+      if (_slot >= song.beatsPerChord * 2) {
+        _slot = 0;
+        if (_flat.isNotEmpty) {
+          if (_idx + 1 >= _flat.length) { _idx = 0; } else { _idx++; }
+        }
       }
+      _playPracticeSlot();
     }
-    if (_soundOn && _flat.isNotEmpty && _idx < _flat.length) {
-      final fps = fingerpickPatternsFor(song.beatsPerChord);
-      final fp = fps[_patternIndex.clamp(0, fps.length - 1)];
-      final grid = fp.grid(song.beatsPerChord);
-      final si = (_slot >= 0 && _slot < grid.length) ? grid[_slot] : null;
-      if (si != null) widget.audio.playString(_flat[_idx], si);
-    }
+  }
+
+  void _playPracticeSlot() {
+    if (!_soundOn || _flat.isEmpty || _idx >= _flat.length) return;
+    final song = songs[_selectedSong];
+    final fps = fingerpickPatternsFor(song.beatsPerChord);
+    final fp = fps[_patternIndex.clamp(0, fps.length - 1)];
+    final grid = fp.grid(song.beatsPerChord);
+    final si = (_slot >= 0 && _slot < grid.length) ? grid[_slot] : null;
+    if (si != null) widget.audio.playString(_flat[_idx], si);
   }
 
   @override
@@ -297,7 +328,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
             ]),
           ),
       ],
-      onChanged: (i) { if (i != null) { setState(() => _selectedScore = i); _rebuildScoreSlots(); } },
+      onChanged: (i) { if (i != null) { _stop(); setState(() => _selectedScore = i); _rebuildScoreSlots(); } },
       dropdownColor: cs.surface,
       style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurface),
     ));
@@ -311,7 +342,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
             isExpanded: true,
             underline: const SizedBox.shrink(),
             items: [for (var i = 0; i < songs.length; i++) DropdownMenuItem(value: i, child: Text(songs[i].title, style: theme.textTheme.titleSmall))],
-            onChanged: (i) { if (i != null) { setState(() => _selectedSong = i); _rebuildPractice(); } },
+            onChanged: (i) { if (i != null) { _stop(); setState(() => _selectedSong = i); _rebuildPractice(); } },
             dropdownColor: cs.surface,
             style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurface),
           ));
@@ -377,7 +408,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
             ChoiceChip(
               label: Text(fps[i].name, style: const TextStyle(fontSize: 12)),
               selected: i == _patternIndex,
-              onSelected: (_) { setState(() => _patternIndex = i); _rebuildPractice(); },
+              onSelected: (_) { _stop(); setState(() => _patternIndex = i); _rebuildPractice(); },
               visualDensity: VisualDensity.compact,
             ),
         ]),
