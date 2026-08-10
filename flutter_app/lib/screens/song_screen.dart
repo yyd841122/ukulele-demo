@@ -6,11 +6,14 @@
 // 歌词里当前和弦贴片反色点亮、当前行微微高亮并自动滚到屏幕中间。播到末尾循环回开头。
 // 练习栏里:一排和弦卡 = 当前这一行的和弦,弹到哪个、那张就变大指法图高亮,其余小参考;卡跟当前行一一对应。
 import 'dart:async'; // Timer(定时器)在这
+import 'dart:typed_data'; // Uint8List:录音 WAV 字节
 
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart'; // openAppSettings:录音权限被永久拒绝时引去系统设置
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../audio/audio_engine.dart';
+import '../audio/voice_recorder.dart'; // 跟唱录音(第49步)
 import '../models.dart';
 import '../prefs/app_preferences.dart';
 import '../song_store.dart';
@@ -108,6 +111,12 @@ class SongScreenState extends State<SongScreen> {
   // 按歌存:每首歌贴合嗓音要的移调不一样,跟 tempo 一个套路,切歌不串。照旧按原和弦指法,
   // app 把扫弦声整体升 / 降这么多半音重新合成出来(双向都行,不像真变调夹只能升)。
   int _transpose = 0;
+
+  // —— 跟唱录音(第49步)——
+  // 录人声 →「听刚才」回放最后一段。MVP:只留最后一次(ephemeral,不持久化、不跨重启)。
+  VoiceRecorder? _recorder; // 懒建(第一次录音时才 new);SongScreen 销毁时释放
+  bool _recording = false; // 现在在录吗(切 mic/stop 图标 + 防重入)
+  Uint8List? _takeWav; // 最近一次录音的完整 WAV(停录时套头生成);null = 还没录过 / 没录到
 
   // —— 分段 AB 循环 ——
   // _markerA / _markerB:用户在歌词上点的两个"循环点"(行下标)。两个都标好 → 引擎到 B 行末尾跳回 A 行开头反复。
@@ -233,6 +242,7 @@ class SongScreenState extends State<SongScreen> {
     // 页面销毁时收尾:停闹钟、释放预览定时器。_audio 不在这释放——它归 MainScaffold 拥有。
     _timer?.cancel();
     _previewTimer?.cancel();
+    _recorder?.dispose(); // 跟唱录音器:停录 + 释放麦(SongScreen 销毁 = app 退出,IndexedStack 保活)
     super.dispose();
   }
 
@@ -830,6 +840,81 @@ class SongScreenState extends State<SongScreen> {
     );
   }
 
+  // —— 跟唱录音(第49步):录人声 →「听刚才」回放最后一段 ——
+  // 跟练习的节拍器 / 扫弦声互不干扰:录音器只管开麦收 PCM、回放只管播 WAV,都不碰节拍推进逻辑。
+  VoiceRecorder _ensureRecorder() => _recorder ??= VoiceRecorder();
+
+  /// 按一下 mic:正在录 → 停(生成 WAV 存下);没在录 → 申请权限 + 开录。
+  Future<void> _toggleRecord() async {
+    if (_recording) {
+      await _stopRecord();
+    } else {
+      await _startRecord();
+    }
+  }
+
+  /// 开录:先要麦克风权限(没有就提示;永久拒绝给「去设置」入口)。权限 ok → 清缓冲开麦。
+  Future<void> _startRecord() async {
+    final rec = _ensureRecorder();
+    final granted = await rec.requestPermission();
+    if (!granted) {
+      if (!mounted) return;
+      final denied = await rec.isPermanentlyDenied();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('需要麦克风权限才能录音'),
+          action: denied
+              ? SnackBarAction(label: '去设置', onPressed: openAppSettings)
+              : null,
+        ),
+      );
+      return;
+    }
+    final started = await rec.start();
+    if (!started) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('开录失败,再试一次')),
+      );
+      return;
+    }
+    setState(() => _recording = true); // 切成 stop 图标 + 信息行显「录音中」
+  }
+
+  /// 停录:关麦、取走 PCM、套 WAV 头存成 _takeWav。没录到(缓冲空)给个提示、不清掉旧 take。
+  Future<void> _stopRecord() async {
+    final rec = _recorder;
+    if (rec == null) return;
+    final pcm = await rec.stop();
+    Uint8List? wav;
+    if (pcm != null && pcm.isNotEmpty) {
+      wav = wavFromPcm16(pcm); // 套标准 WAV 头(纯函数,可测)
+    }
+    if (!mounted) return;
+    setState(() {
+      _recording = false;
+      if (wav != null) _takeWav = wav; // 录到了 → 覆盖旧的(只留最后一次)
+    });
+    if (wav == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('没录到,再试一次')),
+      );
+    }
+  }
+
+  /// 「听刚才」:回放最近一次录音。
+  void _playTake() {
+    final wav = _takeWav;
+    if (wav == null) return;
+    widget.audio.playWavBytes(wav);
+  }
+
+  /// 离开练习 tab 时由 MainScaffold 调:正在录就停掉(隐私 + 省电,跟调音器切走停麦一个套路)。
+  Future<void> stopRecordingIfActive() async {
+    if (_recording) await _stopRecord();
+  }
+
   @override
   Widget build(BuildContext context) {
     final song = songs[_selected];
@@ -966,7 +1051,7 @@ class SongScreenState extends State<SongScreen> {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                '${formatTranspose(_transpose)}$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${formatPracticeSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
+                '${_recording ? '🔴 录音中 · ' : ''}${formatTranspose(_transpose)}$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${formatPracticeSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -974,7 +1059,7 @@ class SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
-        // 顶栏右侧图标:用户歌才出 编辑 / 删除(第43c步;内置歌不可改不可删);移调 + 字号一直有。
+        // 顶栏右侧图标:用户歌才出 编辑 / 删除(第43c步;内置歌不可改不可删);移调 + 字号 + 跟唱录音一直有。
         actions: [
           if (widget.store.isUserSong(song))
             IconButton(
@@ -987,6 +1072,20 @@ class SongScreenState extends State<SongScreen> {
               icon: const Icon(Icons.delete_outline),
               tooltip: '删除这首歌',
               onPressed: _deleteCurrentSong,
+            ),
+          // 跟唱录音(第49步):按一下开录 / 再按停。录音中图标变红 stop,一眼看出在录。
+          IconButton(
+            icon: Icon(_recording ? Icons.stop_circle_outlined : Icons.mic_none_outlined),
+            tooltip: _recording ? '停止录音' : '录人声(跟唱录音)',
+            onPressed: _toggleRecord,
+            color: _recording ? theme.colorScheme.error : null,
+          ),
+          // 「听刚才」:录过才出。回放最近一次录音(只留最后一段,重录覆盖)。
+          if (_takeWav != null && !_recording)
+            IconButton(
+              icon: const Icon(Icons.replay_rounded),
+              tooltip: '听刚才的录音',
+              onPressed: _playTake,
             ),
           IconButton(
             // 移调 ≠ 0 时图标用主色点亮,一眼看出当前在移调练习。

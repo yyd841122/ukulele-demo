@@ -39,6 +39,11 @@ class AudioEngine {
   // 复用扫弦同款 Karplus-Strong 合成(StrumSynth),只是拨一根而不是扫四根。
   final Map<int, AudioSource> _openStrings = {};
 
+  // —— 跟唱录音回放(第49步)——
+  // 一次性声源槽:回放「听刚才」时 loadMem 录音 WAV 进来 → play;播完或下次回放时释放。单槽位复用,
+  // 不堆积、path 不撞 key(每次先 dispose 上一个)。null = 当前没有回放声源占着。
+  AudioSource? _voiceSrc;
+
   /// 调音参考音持续多久(秒)。比扫弦(0.8s)长——调音要边听边拧弦钮,余音长点好对音。
   static const double referenceToneSec = 2.5;
 
@@ -167,6 +172,42 @@ class AudioEngine {
     SoLoud.instance.play(src, volume: volume);
   }
 
+  /// 一次性回放一段完整 WAV 字节(给跟唱录音「听刚才」用)。loadMem 进内存 → play → 估时长后释放声源。
+  /// 连续回放:先 dispose 上一次的声源再 load 新的(单槽位复用、path 复用,不堆积、不撞 key)。
+  /// 引擎没好 / 加载失败 → 打日志、不崩。fire-and-forget:调用方不必 await。
+  Future<void> playWavBytes(Uint8List wav, {double volume = 1.0}) async {
+    if (!_initialized) return;
+    // 先释放上一次的回放声源(免得连续回放堆一堆一次性声源)。
+    final prev = _voiceSrc;
+    _voiceSrc = null;
+    if (prev != null) {
+      try {
+        SoLoud.instance.disposeSource(prev);
+      } catch (e) {
+        debugPrint('释放旧回放声源失败: $e');
+      }
+    }
+    try {
+      final src = await SoLoud.instance.loadMem('voice_take', wav);
+      _voiceSrc = src;
+      SoLoud.instance.play(src, volume: volume);
+      // 播完释放:data 字节 = 总长 - 44 头;单声道 16 位 = 每样本 2 字节 → 时长 = 样本数 / 采样率。
+      // 采样率跟扫弦同一个 StrumSynth.sampleRate(44100),录音也用这个(见 wavFromPcm16)。
+      final samples = (wav.length - 44) ~/ 2;
+      final ms = (samples * 1000 / StrumSynth.sampleRate).round();
+      Future.delayed(Duration(milliseconds: ms + 300), () {
+        if (_voiceSrc == src) _voiceSrc = null; // 这期间没被新回放顶替才清槽
+        try {
+          SoLoud.instance.disposeSource(src);
+        } catch (e) {
+          debugPrint('回放声源播完释放失败: $e');
+        }
+      });
+    } catch (e) {
+      debugPrint('回放录音失败: $e');
+    }
+  }
+
   /// 释放所有声源(嗒声 + 扫弦 × 各移调桶)。页面销毁时调,否则占资源。
   void dispose() {
     if (_normalSrc != null) SoLoud.instance.disposeSource(_normalSrc!);
@@ -180,5 +221,6 @@ class AudioEngine {
     for (final s in _openStrings.values) {
       SoLoud.instance.disposeSource(s);
     }
+    if (_voiceSrc != null) SoLoud.instance.disposeSource(_voiceSrc!);
   }
 }

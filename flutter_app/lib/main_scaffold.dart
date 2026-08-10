@@ -80,6 +80,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     setState(() => _index = i);
     if (leavingPractice) {
       _songKey.currentState?.flushStats();
+      _songKey.currentState?.stopRecordingIfActive(); // 切走练习 tab → 停录(隐私 + 省电,跟调音器停麦同套路)
     }
     if (leavingTuner) {
       // 切走调音 tab → 停麦(隐私 + 省电;IndexedStack 保活,不停会一直录)。
