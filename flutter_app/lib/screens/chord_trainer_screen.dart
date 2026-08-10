@@ -14,6 +14,7 @@
 // 60 秒挑战:不开无尽模式,跑满 _bpm 拍(= 正好 60 秒:每拍 60/bpm 秒 × bpm 拍 = 60s)自停,
 // _switches 就是"一分钟能换几次"的成绩——不用再起一个倒计时定时器。
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -60,14 +61,16 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
   List<String> get _pool => _poolForDifficulty(_difficulty);
 
   /// 从当前难度池随机抽两个不同和弦(第58步-7)。
+  /// 随机抽两个不同的和弦。用 dart:math Random 真随机(旧版用时间戳模 pool.length 有强偏置:
+  /// 入门档永远只抽相邻和弦对)。A≠B 保证循环到不同。
   void _randomPick() {
     final pool = _pool;
     if (pool.length < 2) return;
-    final t = DateTime.now().microsecondsSinceEpoch;
-    final a = pool[t % pool.length];
-    String b = a;
-    for (var i = 1; i < 50 && b == a; i++) {
-      b = pool[(t + i * 1049) % pool.length];
+    final rnd = Random();
+    final a = pool[rnd.nextInt(pool.length)];
+    var b = a;
+    while (b == a) {
+      b = pool[rnd.nextInt(pool.length)];
     }
     setState(() { _chordA = a; _chordB = b; });
     _prefs?.setTrainerChordA(a);
@@ -104,6 +107,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
   int _beat = 0; // 当前和弦内数到第几拍了(0.._beatsPerChange-1;0 = 刚切过来,这拍是重音)
   int _switches = 0; // 已经切了几次(每切一次 +1)
   int _elapsedBeats = 0; // 本次跑了多少拍(60 秒挑战用来算倒计时 + 到点自停)
+  int _targetBeats = 0; // 60 秒挑战开始时快照的目标拍数(=起跑时的 bpm),中途改 bpm 不影响本次时长
 
   Timer? _timer;
 
@@ -171,6 +175,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
       _beat = 0;
       _switches = 0;
       _elapsedBeats = 0;
+      _targetBeats = _bpm; // 快照起跑时的 bpm,中途改 bpm 不再影响本次挑战时长
     });
     _timer = Timer.periodic(Duration(milliseconds: _beatMs), (_) => _tick());
   }
@@ -195,8 +200,8 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
         _side = 1 - _side;
         _switches++;
       }
-      if (_challenge && _elapsedBeats >= _bpm) {
-        // 60 秒挑战:跑满 _bpm 拍 = 正好 60 秒 → 自停、点亮 _finished 显成绩。
+      if (_challenge && _elapsedBeats >= _targetBeats) {
+        // 60 秒挑战:跑满快照的目标拍数(起跑 bpm 决定,每拍 60000/bpm ms × bpm 拍 = 60s) → 自停。
         _playing = false;
         _finished = true;
         _timer?.cancel();
@@ -483,12 +488,14 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
               children: [
                 Expanded(
                   child: LinearProgressIndicator(
-                    value: (_elapsedBeats / _bpm).clamp(0.0, 1.0),
+                    value: _targetBeats > 0
+                        ? (_elapsedBeats / _targetBeats).clamp(0.0, 1.0)
+                        : 0.0,
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 还剩几秒:(_bpm - _elapsedBeats) 拍 × 每拍秒数(60 / _bpm)。
-                Text('${((_bpm - _elapsedBeats) * 60 / _bpm).ceil()} s'),
+                // 还剩几秒:用快照的目标拍数算(起跑 bpm 决定),中途改 bpm 不让倒计时跳。
+                Text('${((_targetBeats - _elapsedBeats) * 60 / _targetBeats).ceil()} s'),
               ],
             ),
           ),
