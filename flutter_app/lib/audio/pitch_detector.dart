@@ -36,11 +36,12 @@ class PitchDetector {
     if (n < 16) return null;
 
     // 安静门:均方太小说明没在弹(只剩环境噪声),直接返回 null,免得把噪声当成音高。
+    // 第56步:1e-4→5e-4(约 -66 dBFS),减少环境噪声误判。
     var sumSq = 0.0;
     for (final v in samples) {
       sumSq += v * v;
     }
-    if (sumSq / n < 1e-4) return null;
+    if (sumSq / n < 5e-4) return null;
 
     // τ(延后采样数)上下界:由目标频率范围反推。τ = sampleRate / freq。
     final minTau = max(2, (sampleRate / maxFrequency).floor());

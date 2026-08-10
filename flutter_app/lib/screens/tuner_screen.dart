@@ -184,31 +184,35 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     _buf.addAll(chunk);
     if (_buf.length < _window) return;
     final window = Float64List.fromList(_buf.sublist(_buf.length - _window));
-    _buf.clear();
+    // 第56步:50% 窗口重叠——保留后半窗,不清空全部。减少起音瞬态的不连贯读数。
+    _buf.removeRange(0, _window ~/ 2);
     final f = _detector.detect(window, kAudioSampleRate);
 
     if (f == null) {
-      _registerMiss(); // 这一窗没测到清晰音
+      _registerMiss();
       return;
     }
 
-    // 弦距过滤(第30步承诺、本步补):选了目标弦时,检测音离目标太远就当没听到——典型是 YIN
-    // 把 A4 听成低八度 A3(差 1200 音分),不挡的话指针会乱跳、还可能误触发"准了震动"。
-    // 没选弦(全自动)不过滤:没目标就没法分辨八度误报,放行让它按测到的音走。
     if (_target != null && !_closeToTarget(f, _target!)) {
       _registerMiss();
       return;
     }
 
     _misses = 0;
-    // 换弦(频率大跳 >~5 半音)→ 清空历史,中位数立刻跟到新弦,不拖。
+    // 换弦(频率大跳 >~5 半音):清空历史用新值当基线。第56步:差>1.3倍(>三全音)→拒绝并计漏检,
+    // 防自动模式下八度误报;差>1.05倍→清历史(正常换弦,已被 _target 过滤后才到这)。
     if (_recent.isNotEmpty) {
       final med = _median(_recent);
       final ratio = f > med ? f / med : med / f;
-      if (ratio > 1.3) _recent.clear();
+      if (ratio > 1.3) {
+        _registerMiss(); // 八度式跳变:拒绝,不接入历史
+        return;
+      }
+      if (ratio > 1.05) _recent.clear();
     }
     _recent.add(f);
-    if (_recent.length > 7) _recent.removeAt(0);
+    // 第56步:7→5,中位数窗口 ~650ms→~465ms,指针更快稳定。
+    if (_recent.length > 5) _recent.removeAt(0);
 
     final smoothed = _median(_recent);
     final note = frequencyToNote(smoothed, a4: _a4);
@@ -229,11 +233,11 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
     _misses = 0;
   }
 
-  /// 把"这一窗当作没测到清晰音"处理:连续 3 次(≈0.3s)才清读数,容忍偶发漏检、指针不闪。
-  /// 没测到音 / 被弦距过滤挡掉,都走这里(抽出来免得两处抄一遍)。
+  /// 把"这一窗当作没测到清晰音"处理:连续 2 次(≈0.2s)才清读数,容忍偶发漏检、指针不闪。
+  /// 没测到音 / 被弦距过滤挡掉 / 八度跳变拒绝,都走这里。第56步:3→2,加快清空速度。
   void _registerMiss() {
     _misses++;
-    if (_misses >= 3 && _freq != null) {
+    if (_misses >= 2 && _freq != null) {
       _recent.clear();
       if (mounted) setState(() { _freq = null; _note = null; });
     }
@@ -343,10 +347,18 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
             children: [
               const Text('基准音 A4', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               const Spacer(),
+              // 第56步:Hz 数值更显眼(16号加粗 primary 色),非标准时加提示
               Text(
                 '${_a4.round()} Hz',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.primary),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.primary),
               ),
+              if (_a4.round() != 440) ...[
+                const SizedBox(width: 6),
+                Text(
+                  '非标准',
+                  style: TextStyle(fontSize: 11, color: cs.error),
+                ),
+              ],
             ],
           ),
           Slider(
