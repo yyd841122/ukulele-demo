@@ -172,16 +172,17 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
   }
 
   /// 点和弦卡 → 循环到下一个和弦,跳过跟另一个重复的(保证 A≠B,不然没东西可换)。
-  void _cycleChord(bool isA) {
+  /// 返回切换后的和弦名(直接能放给 playChord 试听)。
+  String _cycleChord(bool isA) {
+    final other = isA ? _chordB : _chordA;
+    final cur = isA ? _chordA : _chordB;
+    var i = _chords.indexOf(cur);
+    String next;
+    do {
+      i = (i + 1) % _chords.length;
+      next = _chords[i];
+    } while (next == other);
     setState(() {
-      final other = isA ? _chordB : _chordA;
-      final cur = isA ? _chordA : _chordB;
-      var i = _chords.indexOf(cur);
-      String next;
-      do {
-        i = (i + 1) % _chords.length;
-        next = _chords[i];
-      } while (next == other);
       if (isA) {
         _chordA = next;
       } else {
@@ -191,6 +192,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
     // 改了就存:两个都存(简单;另一个没变存回原值无副作用),下次进 tab 直接是这次的配置。
     _prefs?.setTrainerChordA(_chordA);
     _prefs?.setTrainerChordB(_chordB);
+    return next;
   }
 
   @override
@@ -295,8 +297,8 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
     final cs = Theme.of(context).colorScheme;
     return InkWell(
       onTap: () {
-        _cycleChord(isA);
-        widget.audio.playChord(name); // 换完听一声,确认选的是哪个
+        final next = _cycleChord(isA);
+        widget.audio.playChord(next); // 换完听一声,确认选的是新和弦
       },
       borderRadius: BorderRadius.circular(10),
       child: Container(

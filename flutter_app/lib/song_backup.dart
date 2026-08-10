@@ -29,6 +29,7 @@ String encodeBackup(List<Song> songs) {
 /// 把备份 JSON 文本解析回 Song 列表。
 /// 认两种形态:{"songs":[...]} 带壳备份,或光秃秃 [...] 数组。不是合法 JSON / 没有 songs → 抛 FormatException。
 /// 单首歌用 Song.fromJson 解(它对缺字段给默认值,跨版本向前兼容);类型不对的元素抛(让调用方提示)。
+/// 解析后检查:len(songs) ≠ len(raw) → 有非对象元素被丢弃,抛 FormatException 告知用户(防止静默丢歌)。
 List<Song> decodeBackup(String text) {
   final Object decoded;
   try {
@@ -44,8 +45,13 @@ List<Song> decodeBackup(String text) {
   } else {
     throw const FormatException('不是有效的歌曲备份(缺 songs 字段)');
   }
-  return [
-    for (final s in raw)
-      if (s is Map<String, dynamic>) Song.fromJson(s),
-  ];
+  final songs = <Song>[];
+  for (final s in raw) {
+    if (s is Map<String, dynamic>) {
+      songs.add(Song.fromJson(s));
+    } else {
+      throw const FormatException('备份里有不是歌曲的数据,检查格式');
+    }
+  }
+  return songs;
 }

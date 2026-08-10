@@ -241,9 +241,11 @@ class TunerScreenState extends State<TunerScreen> with WidgetsBindingObserver {
 
   /// 选了目标弦 [target] 时,检测频率 [freq] 是否"够近"——挡 YIN 八度误报。
   /// 判据:与目标空弦频率的音分差 < _maxTargetCents(三全音 600)。
+  /// target 不在 _strings(不可能,但防御)时返 false——不当成离目标近,安全地当没听到。
   bool _closeToTarget(double freq, String target) {
-    final idx = _strings.firstWhere((s) => s.name == target).idx;
-    final targetFreq = StrumSynth.openTuning[idx];
+    final match = _strings.where((s) => s.name == target);
+    if (match.isEmpty) return false;
+    final targetFreq = StrumSynth.openTuning[match.first.idx];
     return centsBetween(freq, targetFreq).abs() < _maxTargetCents;
   }
 

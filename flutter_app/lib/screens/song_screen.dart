@@ -921,15 +921,17 @@ class SongScreenState extends State<SongScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     // 进度条:整曲模式按整首歌走;AB 模式只走 AB 区间那一段(到 B 回 0)。空歌算 0。
+    // clamp 防区间外(如 AB 刚设 / 清除瞬间 _idx 还在区间外,progress 会变负或超 1),免得进度条画崩。
     final double progress;
     if (_flat.isEmpty) {
       progress = 0.0;
     } else if (_abActive) {
       final span = _loopLastChord - _loopFirstChord + 1;
-      progress =
-          ((_idx - _loopFirstChord) + _slot / (song.beatsPerChord * 2)) / span;
+      progress = (((_idx - _loopFirstChord) + _slot / (song.beatsPerChord * 2)) / span)
+          .clamp(0.0, 1.0);
     } else {
-      progress = (_idx + _slot / (song.beatsPerChord * 2)) / _flat.length;
+      progress = ((_idx + _slot / (song.beatsPerChord * 2)) / _flat.length)
+          .clamp(0.0, 1.0);
     }
 
     // 预备拍当前数到第几拍(1..beatsPerChord);0 = 不在数预备拍。

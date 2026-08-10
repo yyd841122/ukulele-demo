@@ -163,7 +163,7 @@ class AppPreferences {
   /// 标记今天练过(去重:已记过就 no-op)。SongScreen._accumulateSec 攒到 >=1 秒时调。
   Future<void> markPracticedToday() async {
     final today = practiceDayKey(DateTime.now());
-    final days = getPracticeDays();
+    final days = [...getPracticeDays()]; // 先复制:SharedPreferences 有些实现返回不可变列表
     if (days.contains(today)) return; // 今天已记过,不重复加
     days.add(today);
     await _prefs.setStringList(_kPracticeDays, days);

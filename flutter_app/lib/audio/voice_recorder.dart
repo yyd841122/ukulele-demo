@@ -65,7 +65,13 @@ class VoiceRecorder {
         ),
       );
       _recording = true;
-      _sub = stream.listen((chunk) => _buf.add(chunk));
+      _sub = stream.listen(
+        (chunk) => _buf.add(chunk),
+        onError: (e) {
+          debugPrint('录音流出错: $e');
+          _recording = false;
+        },
+      );
       return true;
     } catch (e) {
       debugPrint('开录失败: $e');

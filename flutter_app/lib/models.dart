@@ -84,13 +84,37 @@ List<WordUnit> parseWords(String marked) {
 
 /// 和弦指法表:frets 按 **G C E A**(从左到右四根弦)顺序,0 = 空弦,数字 = 按第几品。
 /// 照搬 Web 版 CHORDS。画指法图(ChordDiagram)时按这个数组画按弦点 / 空弦圈。
+///
+/// 第52步起从 6 个扩到 20 个:大三和弦(A Bb C D F G)、小三和弦(Am Bm Cm Dm Em Fm Gm)、
+/// 属七和弦(A7 B7 C7 D7 E7 G7)、Dm7。按"三和弦→七和弦→其他"分组排,方便和弦速查页浏览。
 const Map<String, List<int>> chordShapes = {
+  // —— 大三和弦(Major) ——
   'C': [0, 0, 0, 3],
-  'G': [0, 2, 3, 2],
-  'Am': [2, 0, 0, 0],
+  'D': [2, 2, 2, 0],
   'F': [2, 0, 1, 0],
-  'D': [2, 2, 2, 0], // 三根手指按第2品(G C E)、A 空弦
-  'Em': [0, 4, 3, 2], // G 空弦,C 按第4品、E 第3品、A 第2品(够不着就慢慢练)
+  'G': [0, 2, 3, 2],
+  'A': [2, 1, 0, 0],
+  'Bb': [3, 2, 1, 1],
+
+  // —— 小三和弦(Minor) ——
+  'Am': [2, 0, 0, 0],
+  'Bm': [4, 2, 2, 2],
+  'Cm': [0, 3, 3, 3],
+  'Dm': [2, 2, 1, 0],
+  'Em': [0, 4, 3, 2],
+  'Fm': [1, 0, 1, 3],
+  'Gm': [0, 2, 3, 1],
+
+  // —— 属七和弦(Dominant 7th) ——
+  'A7': [0, 1, 0, 0],
+  'B7': [2, 3, 2, 2],
+  'C7': [0, 0, 0, 1],
+  'D7': [2, 2, 2, 3],
+  'E7': [1, 2, 0, 2],
+  'G7': [0, 2, 1, 2],
+
+  // —— 其他 ——
+  'Dm7': [2, 2, 1, 3],
 };
 
 /// 一拍 = 两个 8 分音符槽位。节奏型就按这些槽位描述,这样"上扫"这种落在后半拍的扫弦才表达得出来。
@@ -388,6 +412,10 @@ List<Section> parseLyrics(String text) {
 /// 原 IZ 版把《Over the Rainbow》和《What a Wonderful World》串成一首串烧(medley),
 /// 这里按"两首就该分两条"的原则拆成两首,免得新手以为后半段是《Over the Rainbow》的词。
 /// 歌词用行内和弦([C]词),比 Web 版(和弦单独一排)更清楚和弦落在哪个词上。
+///
+/// 第52步:加 6 首中文经典/流行歌(月亮代表我的心 / 童年 / 那些花儿 / 后来 / 朋友 / 童话),
+/// 都选和弦简单、传唱度高的,新手友好;和弦从扩过的 20 个 chordShapes 里取。同时把老注释里
+/// "6 个和弦"改成不写死数量——和弦表在持续扩充,数字注释容易过时。
 const List<Song> builtinSongs = [
   Song(
     title: '🌈 Somewhere Over the Rainbow',
@@ -717,6 +745,158 @@ const List<Song> builtinSongs = [
         lines: [
           Line(lyric: "[G]The answer my [C]friend is [G]blowin' in the wind"),
           Line(lyric: "[G]The answer is [C]blowin' in the [D]wind"),
+        ],
+      ),
+    ],
+  ),
+  // —— 第52步:中文经典/流行歌曲(6 首,和弦都从扩过的 20 个 chordShapes 里取,新手友好)——
+  Song(
+    title: "🌙 月亮代表我的心",
+    tempo: 72,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]你问我爱你[Em]有多深,我[Am]爱你有几[F]分"),
+          Line(lyric: "[C]我的情也[Em]真,我的[Dm]爱也[G7]真"),
+          Line(lyric: "[C]你问我爱你[Em]有多深,我[Am]爱你有几[F]分"),
+          Line(lyric: "[C]我的情不[Em]移,我的[Dm]爱不[G7]变,月亮[C]代表[F]我的[C]心"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[Am]轻[F]轻的一个[C]吻,已经打动我的心"),
+          Line(lyric: "[Am]深[F]深的一段[C]情,教我思念到如今"),
+          Line(lyric: "[C]你问我爱你[Em]有多深,我[Am]爱你有几[F]分"),
+          Line(lyric: "[C]你去想一[Em]想,你去[Dm]看一[G7]看,月亮[C]代表[F]我的[C]心"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: "👦 童年",
+    tempo: 120,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]池塘边的[Am]榕树上,知了在[F]声声地叫[G]着夏天"),
+          Line(lyric: "[C]操场边的[Am]秋千上,只有那[F]蝴蝶停在[G]上面"),
+          Line(lyric: "[C]黑板上老师[Am]的粉笔,还在拼命[F]叽叽喳喳[G]写个不停"),
+          Line(lyric: "[C]等待着下课[Am]等待着放学,等待[F]游戏的[G]童年"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]喔—[Am]一天又一天,[F]一年又一[G]年"),
+          Line(lyric: "[C]盼望着长[Am]大的[F]童[G]年"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: "🌸 那些花儿",
+    tempo: 80,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]那片笑声让我[G]想起,我的[Am]那些花[F]儿"),
+          Line(lyric: "[C]在我生命每个[G]角落,静静[Am]为我开[F]着"),
+          Line(lyric: "[C]我曾以为我会[G]永远,守在[Am]她身[F]旁"),
+          Line(lyric: "[C]今天我们[G]已经离去,在人[Am]海茫[F]茫"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]她们都老了[G]吧,她们[Am]在哪里[F]呀"),
+          Line(lyric: "[C]幸运的[G]是,我曾陪她[Am]们开[F]放"),
+          Line(lyric: "[C]啦…[G]啦…[Am]啦…想[F]她"),
+          Line(lyric: "[C]啦…[G]啦…[Am]她还在开[F]吗"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: "💫 后来",
+    tempo: 76,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]后来,我总算[Am]学会了如何去[F]爱"),
+          Line(lyric: "[C]可惜你早已[Am]远去,消失在[F]人[G]海"),
+          Line(lyric: "[C]后来,终于在[Am]眼泪中明[F]白"),
+          Line(lyric: "[C]有些人[Am]一旦[F]错过就[G]不再"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]栀子花[Am]白花[F]瓣,落在你[G]蓝色百褶裙上"),
+          Line(lyric: "[C]爱你,你[Am]轻声[F]说,我低[G]下头闻见一阵芬芳"),
+          Line(lyric: "[C]那个永恒的[Am]夜晚,十七岁[F]仲夏,你吻我[G]的那个夜晚"),
+          Line(lyric: "[Em]让我往后的[Am]时光,每当有[F]感叹,总想起[G]当天的星光"),
+          Line(lyric: "[C]你都如何[Am]回忆[F]我,带着笑[G]或是很沉默"),
+          Line(lyric: "[C]这些年[Am]来,有没有[F]人能让你[G]不寂[C]寞"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: "🤗 朋友",
+    tempo: 98,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[G]这些年[Em]一个人,[C]风也过[D]雨也走"),
+          Line(lyric: "[G]有过泪[Em]有过错,[C]还记得坚持[D]什么"),
+          Line(lyric: "[G]真爱过[Em]才会懂,[C]会寂寞[D]会回首"),
+          Line(lyric: "[G]终有梦[Em]终有你,[C]在心[D]中"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[G]朋友[Em]一生一起走,[C]那些日子[D]不再有"),
+          Line(lyric: "[G]一句话[Em]一辈子,[C]一生情[D]一杯酒"),
+          Line(lyric: "[G]朋友[Em]不曾孤单过,[C]一声朋友[D]你会懂"),
+          Line(lyric: "[G]还有伤[Em]还有痛,[C]还要走[D]还有[G]我"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: "🧚 童话",
+    tempo: 70,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]忘了有多久,[Am]再没听到[F]你,对我说[G]你最爱的故事"),
+          Line(lyric: "[C]我想了很久,[Am]我开始慌[F]了,是不是我[G]又做错了什么"),
+          Line(lyric: "[C]你哭着对我[Am]说,童话里[F]都是骗人[G]的"),
+          Line(lyric: "[Em]我不可能,[Am]是你的[Dm]王[G7]子"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]也许你不会[Am]懂,从你说爱我[F]以后,我的[G]天空星星都亮了"),
+          Line(lyric: "[C]我愿变成[Am]童话里,[F]你爱的那[G]个天使"),
+          Line(lyric: "[Em]张开双手,[Am]变成翅膀[Dm]守护[G7]你"),
+          Line(lyric: "[F]你要相信,[G]相信我们会[Em]像童话[Am]故事里"),
+          Line(lyric: "[F]幸福和[G]快乐是结[C]局"),
         ],
       ),
     ],
