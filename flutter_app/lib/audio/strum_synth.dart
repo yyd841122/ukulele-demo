@@ -37,7 +37,8 @@ class StrumSynth {
 
   /// Karplus-Strong 拨一根频率为 [freq] 的弦,返回该弦的衰减波形(Float64,长度 = durationSec×sampleRate)。
   /// [durationSec] 默认跟扫弦一样(0.8s);调音参考音会传更长的(余音多响一会儿、好边听边拧弦钮)。
-  Float64List _pluck(double freq, {double durationSec = clipDuration}) {
+  /// 公开(不再 _private):指弹练习要单独拨一根弦、打分引擎可能要参考单弦频率——都需要它。
+  Float64List pluck(double freq, {double durationSec = clipDuration}) {
     final n = max(1, (sampleRate / freq).round()); // 环形缓冲长 = 一个周期采样数(至少 1)
     final buf = Float64List(n);
     for (var i = 0; i < n; i++) {
@@ -75,7 +76,7 @@ class StrumSynth {
     final order = up ? const [3, 2, 1, 0] : const [0, 1, 2, 3]; // 下扫 G→A,上扫 A→G
     for (var k = 0; k < 4; k++) {
       final stringIdx = order[k];
-      final tone = _pluck(
+      final tone = pluck(
         freqForString(stringIdx, frets[stringIdx], semitoneOffset: semitoneOffset),
       );
       final offset = k * gapSamples;
@@ -152,12 +153,31 @@ class StrumSynth {
       accent: buildWav(accentSamples, sampleRate: sampleRate),
     );
   }
-  /// 和扫弦用的是同一个 _pluck 引擎 + 同一个 buildWav 头——区别只在扫弦拨四根错开叠起来,
+  /// 和扫弦用的是同一个 pluck 引擎 + 同一个 buildWav 头——区别只在扫弦拨四根错开叠起来,
   /// 这边只拨一根,听上去是"叮——"的单音,正好拿来做调音基准(拿你琴上拨出的声跟它对)。
   /// [durationSec] 默认跟扫弦一样;调音页在 AudioEngine 里传更长的(见 referenceToneSec)。
   Uint8List synthesizeOpenStringWav(int stringIndex, {double durationSec = clipDuration}) {
-    final tone = _pluck(openTuning[stringIndex], durationSec: durationSec);
+    final tone = pluck(openTuning[stringIndex], durationSec: durationSec);
     // 单弦没叠 4 根、峰值约 1.0;归一化到 0.99 顶满音量 + 防意外削顶(跟扫弦同一套保险)。
+    var peak = 0.0;
+    for (final v in tone) {
+      final a = v.abs();
+      if (a > peak) peak = a;
+    }
+    if (peak > 0) {
+      final g = 0.99 / peak;
+      for (var i = 0; i < tone.length; i++) {
+        tone[i] *= g;
+      }
+    }
+    return buildWav(tone, sampleRate: sampleRate);
+  }
+
+  /// 拨一根弦的单音 WAV(给指弹用)。[freq] = 目标频率(Hz)。
+  /// 复用 Karplus-Strong 拨弦 + 峰值归一化 → 包 WAV 头,跟扫弦同款管线,只是只拨一根、不叠四根。
+  /// 和弦指法 → 每根弦频率:用 freqForString(stringIndex, fret, semitoneOffset:) 算好传进来。
+  Uint8List synthesizeStringWav(double freq) {
+    final tone = pluck(freq);
     var peak = 0.0;
     for (final v in tone) {
       final a = v.abs();

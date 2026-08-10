@@ -45,6 +45,12 @@ class AudioEngine {
   // 复用扫弦同款 Karplus-Strong 合成(StrumSynth),只是拨一根而不是扫四根。
   final Map<int, AudioSource> _openStrings = {};
 
+  // —— 单弦拨弦声源(指弹用·第59步)——
+  // 预合成每个和弦×每根弦的单音拨弦 WAV,loadMem 进内存。
+  // 外层 key = 半音偏移(0 = 不移调),内层 key = "chordName_stringIndex"(如 "C_0" = C 和弦拨 G 弦)。
+  // 跟扫弦桶 _chordsByOffset 一样的层级,只是音源是单弦而非整扫。默认只建 0 桶;移调桶 prepareTranspose 时一并建。
+  final Map<int, Map<String, AudioSource>> _stringSourcesByOffset = {};
+
   // —— 跟唱录音回放(第49步)——
   // 一次性声源槽:回放「听刚才」时 loadMem 录音 WAV 进来 → play;播完或下次回放时释放。单槽位复用,
   // 不堆积、path 不撞 key(每次先 dispose 上一个)。null = 当前没有回放声源占着。
@@ -77,6 +83,8 @@ class AudioEngine {
     await _initMetronomeSounds();
     // 再尽力预生成 4 根空弦参考音(调音页用)。同样失败只降级,不影响前两类声。
     await _initOpenStringSources();
+    // 第59步:尽力预生成指弹单弦音源。失败只降级,不影响嗒声/扫弦/参考音。
+    await _initStringSources();
     return true;
   }
 
@@ -146,6 +154,8 @@ class AudioEngine {
     _preparing.add(semitoneOffset);
     try {
       _chordsByOffset[semitoneOffset] = await _buildStrumSources(semitoneOffset);
+      // 第59步:同一个偏移的单弦音源也一并建好(指弹也受益于移调)。
+      _stringSourcesByOffset[semitoneOffset] = await _buildStringSources(semitoneOffset);
     } catch (e) {
       debugPrint('移调声源预生成失败(偏移 $semitoneOffset): $e');
     } finally {
@@ -168,6 +178,39 @@ class AudioEngine {
     } catch (e) {
       debugPrint('空弦参考音预生成失败(嗒声 / 扫弦仍可用): $e');
     }
+  }
+
+  /// 第59步:预生成每个和弦×每根弦的单音拨弦声源(0 桶=原音高),指弹用。
+  /// 跟扫弦一样【尽力而为】:失败只打日志、不影响嗒声/扫弦/参考音。
+  Future<void> _initStringSources() async {
+    try {
+      _stringSourcesByOffset[0] = await _buildStringSources(0);
+    } catch (e) {
+      debugPrint('单弦音源预生成失败(嗒声 / 扫弦仍可用): $e');
+    }
+  }
+
+  /// 合成某个移调偏移下、chordShapes 里每个和弦×每根弦的单音拨弦 WAV,返回 "chordName_stringIndex" → AudioSource。
+  /// 命名约定:key = "和弦名_弦下标"(如 "C_0" = C 和弦 G 弦),移调桶前缀同扫弦桶(如 "2_C_0")。
+  Future<Map<String, AudioSource>> _buildStringSources(int semitoneOffset) async {
+    final synth = StrumSynth(); // 不传 seed → 每次随机起振,更像真琴
+    final out = <String, AudioSource>{};
+    final prefix = semitoneOffset == 0 ? '' : '${semitoneOffset}_';
+    for (final entry in chordShapes.entries) {
+      final name = entry.key;
+      final frets = entry.value;
+      for (var s = 0; s < 4; s++) {
+        final freq = StrumSynth.freqForString(s, frets[s], semitoneOffset: semitoneOffset);
+        final wav = synth.synthesizeStringWav(freq);
+        try {
+          final src = await SoLoud.instance.loadMem('${prefix}string_${name}_$s', wav);
+          out['${name}_$s'] = src;
+        } catch (e) {
+          debugPrint('单弦音源 $name 弦$s 加载失败: $e');
+        }
+      }
+    }
+    return out;
   }
 
   /// 引擎和嗒声都加载好了吗(没好之前 ▶ 按钮变灰、按了也不出声)。
@@ -193,6 +236,20 @@ class AudioEngine {
       return;
     }
     SoLoud.instance.play(up ? s.up : s.down, volume: volume);
+  }
+
+  /// 第59步:拨某个和弦上第 [stringIndex] 根弦的单音(指弹用)。
+  /// stringIndex: G=0, C=1, E=2, A=3(跟 chordShapes frets 数组顺序一致)。
+  /// [semis] = 移调偏移(0 = 原音高)。取声源顺序:先找当前偏移桶,没有就回退 0 桶兜底。
+  /// 两桶都没这个和弦/弦号就跳过 + 打日志。每次 play 起新实例从头播。
+  void playString(String chord, int stringIndex, {int semis = 0}) {
+    final key = '${chord}_$stringIndex';
+    final src = (_stringSourcesByOffset[semis] ?? _stringSourcesByOffset[0])?[key];
+    if (src == null) {
+      debugPrint('单弦:没有「$chord」弦$stringIndex 的声源(没录指法?),跳过');
+      return;
+    }
+    SoLoud.instance.play(src);
   }
 
   /// 播第 stringIndex 根空弦(G=0 / C=1 / E=2 / A=3)的参考音,给调音页用。
@@ -261,6 +318,11 @@ class AudioEngine {
     }
     for (final s in _openStrings.values) {
       SoLoud.instance.disposeSource(s);
+    }
+    for (final bucket in _stringSourcesByOffset.values) {
+      for (final s in bucket.values) {
+        SoLoud.instance.disposeSource(s);
+      }
     }
     if (_voiceSrc != null) SoLoud.instance.disposeSource(_voiceSrc!);
   }

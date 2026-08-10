@@ -252,6 +252,120 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
   return out;
 }
 
+// —— 指弹(第59步) ——
+// 指弹 = 一次只拨一根弦、按特定顺序(如 4321 琶音),扫弦 = 一次拨四根弦。
+// 指弹节奏型描述"在第几个槽位拨哪根弦";没出现的槽位 = 休止(同扫弦的 rest)。
+
+/// 弹奏风格:扫弦(full strum) or 指弹(single-string fingerpicking)。
+enum PlayStyle { strum, fingerpick }
+
+/// 指弹节奏型:在一个和弦内的拨弦序列。
+/// 槽位粒度沿用扫弦的 8 分音符(beatsPerChord × 2),这是因为:
+/// a) 尤克里里常用指弹型(4-3-2-1 琶音/分解和弦)按 8 分音符足够表达;
+/// b) 界面不变定时器粒度,扫弦/指弹切换不改架构。
+/// 每个槽位:非 null = 拨这根弦(0=G, 1=C, 2=E, 3=A,跟 chordShapes frets 和 openTuning 顺序一致);null = 休止。
+@immutable
+class FingerpickPattern {
+  final String name;
+  final List<int?> actions; // 长度 = beatsPerChord * 2,没出现的槽是 null
+
+  const FingerpickPattern({required this.name, required this.actions});
+
+  /// 拍成"按槽位取弦号"的数组(长度 = beatsPerChord × 2),给界面逐槽高亮 + 音频逐弦拨响用。
+  /// 越界的 action 忽略(防节奏型比一小节长)。
+  List<int?> grid(int beatsPerChord) {
+    final g = List<int?>.filled(beatsPerChord * 2, null);
+    for (var i = 0; i < actions.length && i < g.length; i++) {
+      g[i] = actions[i];
+    }
+    return g;
+  }
+}
+
+/// 给一个和弦持续拍数,返回几个常用指弹节奏型供选。
+/// 「4321 琶音」:一拍一拨,从上到下 4→3→2→1(再 1→2→3→4 上),最经典的分解和弦。
+/// 「4323 织体」:4-3-2-3 重复,拇指打低音 + 手指拨上面——Bossa Nova/民谣常用。
+/// 「4231 下行」:4→2→3→1 交替,低音→中音→高音,比纯下行更灵动。
+/// 「3121 上行」:3→1→2→1,高音从头到尾都在,适合明亮欢快的段落。
+/// 「八拍琶音」:4-3-2-1-2-3-2-1 完整琶音,适合慢歌长长的和弦。
+/// 「拇指节奏」:4-3-2-3-4-3-2-1 两指交替,像"咚-哒-咚-哒-咚-哒-咚-哒"。
+/// 「根音扫弦」:4-(4)(同时拨3-2-1) 只用拇指打根音,简单但有力。
+/// 「全下拨」:每个正拍拨一次 4 弦 G(拇指),像指弹版的"全下"——新手入门指弹最易上手。
+/// 这些按 beatsPerChord 动态适配(截断 / 扩展),所有拍数都适用。
+List<FingerpickPattern> fingerpickPatternsFor(int beatsPerChord) {
+  final slots = beatsPerChord * 2;
+
+  // 4321 琶音:每 4 个槽为一组拨 4→3→2→1
+  final arpeggio = <int?>[];
+  for (var s = 0; s < slots; s++) {
+    final phase = s % 4;
+    arpeggio.add(phase == 0 ? 3 : (phase == 1 ? 2 : (phase == 2 ? 1 : 0)));
+  }
+
+  // 4323 织体:4-3-2-3 重复
+  final bossa = <int?>[];
+  for (var s = 0; s < slots; s++) {
+    final phase = s % 4;
+    bossa.add(phase == 0 ? 3 : (phase == 1 ? 2 : (phase == 2 ? 1 : 2)));
+  }
+
+  // 4231 下行:4-2-3-1 重复
+  final down4231 = <int?>[];
+  for (var s = 0; s < slots; s++) {
+    final phase = s % 4;
+    down4231.add(phase == 0 ? 3 : (phase == 1 ? 1 : (phase == 2 ? 2 : 0)));
+  }
+
+  // 3121 上行:3-0-1-0 重复(偏亮)
+  final up3121 = <int?>[];
+  for (var s = 0; s < slots; s++) {
+    final phase = s % 4;
+    up3121.add(phase == 0 ? 2 : (phase == 1 ? 0 : (phase == 2 ? 1 : 0)));
+  }
+
+  // 八拍琶音:4-3-2-1-2-3-2-1 循环(每 8 槽)
+  final fullArp = [3, 2, 1, 0, 1, 2, 1, 0];
+  final fullArpList = <int?>[];
+  for (var s = 0; s < slots; s++) {
+    fullArpList.add(fullArp[s % 8]);
+  }
+
+  // 拇指节奏:3-2-1-2-3-2-1-0 循环
+  final thumb = [3, 2, 1, 2, 3, 2, 1, 0];
+  final thumbList = <int?>[];
+  for (var s = 0; s < slots; s++) {
+    thumbList.add(thumb[s % 8]);
+  }
+
+  // 全下拨:每正拍拨 G 弦(拇指打根音),像指弹版"全下"
+  final allDownFp = <int?>[];
+  for (var s = 0; s < slots; s++) {
+    allDownFp.add(s.isEven ? 3 : null); // 正拍拨 G 弦,后半拍休止
+  }
+
+  // 根音+琶音:4-(4321) 第一拍拇指打根音、然后琶音
+  final rootArp = <int?>[];
+  for (var s = 0; s < slots; s++) {
+    if (s == 0) {
+      rootArp.add(3); // 拇指打 G
+    } else {
+      final phase = (s - 1) % 4;
+      rootArp.add(phase == 0 ? 3 : (phase == 1 ? 2 : (phase == 2 ? 1 : 0)));
+    }
+  }
+
+  return [
+    FingerpickPattern(name: '4321 琶音', actions: arpeggio),
+    FingerpickPattern(name: '4323 织体', actions: bossa),
+    FingerpickPattern(name: '4231 下行', actions: down4231),
+    FingerpickPattern(name: '3121 上行', actions: up3121),
+    FingerpickPattern(name: '八拍琶音', actions: fullArpList),
+    FingerpickPattern(name: '拇指节奏', actions: thumbList),
+    FingerpickPattern(name: '全下拨', actions: allDownFp),
+    FingerpickPattern(name: '根音琶音', actions: rootArp),
+  ];
+}
+
 /// 自动提速(渐进提速):每过一遍 +step BPM,封顶 cap 就不再涨。
 /// 本应用里 cap = 歌的原速——_tempo 练到原速就停,符合"从慢练到原速"的练法;
 /// 已经等于/超过 cap(手动加过速)的不再往上加。

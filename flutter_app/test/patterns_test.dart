@@ -1,5 +1,6 @@
-// 节奏型 patternsFor 的无头测试。锁「4 拍给全部 5 个、非 4 拍只给全下/下上、动态两个的槽数对」。
-// 第51步:非 4 拍歌不再返回海岛/民谣/摇滚(它们按 8 槽写死会截断 / 不合乐理)。
+// 节奏型 patternsFor + 指弹 fingerpickPatternsFor 的无头测试。
+// 锁「4 拍给全部 5 个、非 4 拍只给全下/下上、动态两个的槽数对」。
+// 第59步:加指弹节奏型测试(8 个型、grid 长度对、任何拍都适用)。
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ukulele_demo/models.dart';
@@ -34,6 +35,64 @@ void main() {
       final g = patternsFor(3)[1].grid(3); // 下上
       expect(g.length, 6);
       expect(g, [StrumDir.down, StrumDir.up, StrumDir.down, StrumDir.up, StrumDir.down, StrumDir.up]);
+    });
+  });
+
+  group('fingerpickPatternsFor', () {
+    test('4 拍歌:返回 8 个常见指弹型', () {
+      final fps = fingerpickPatternsFor(4);
+      expect(fps.length, 8);
+      expect(fps.map((e) => e.name), [
+        '4321 琶音',
+        '4323 织体',
+        '4231 下行',
+        '3121 上行',
+        '八拍琶音',
+        '拇指节奏',
+        '全下拨',
+        '根音琶音',
+      ]);
+    });
+
+    test('grid 长度 = beatsPerChord × 2', () {
+      for (final bpc in [2, 3, 4, 6, 8]) {
+        for (final fp in fingerpickPatternsFor(bpc)) {
+          expect(fp.grid(bpc).length, bpc * 2);
+        }
+      }
+    });
+
+    test('任何拍数都返回 8 个型(动态适配)', () {
+      for (final bpc in [2, 3, 6, 8]) {
+        expect(fingerpickPatternsFor(bpc).length, 8);
+      }
+    });
+
+    test('全下拨:只有正拍拨 G 弦(偶数槽=3,奇数槽=null)', () {
+      final fp = fingerpickPatternsFor(4).firstWhere((f) => f.name == '全下拨');
+      final g = fp.grid(4);
+      expect(g.length, 8);
+      for (var s = 0; s < 8; s++) {
+        if (s.isEven) {
+          expect(g[s], 3); // G 弦
+        } else {
+          expect(g[s], isNull);
+        }
+      }
+    });
+
+    test('4321 琶音:4 个槽一组循环 3-2-1-0', () {
+      final fp = fingerpickPatternsFor(4).firstWhere((f) => f.name == '4321 琶音');
+      final g = fp.grid(4);
+      expect(g.length, 8);
+      expect(g[0], 3); // G
+      expect(g[1], 2); // E
+      expect(g[2], 1); // C
+      expect(g[3], 0); // A
+      expect(g[4], 3); // G (第二组)
+      expect(g[5], 2);
+      expect(g[6], 1);
+      expect(g[7], 0);
     });
   });
 }
