@@ -1360,6 +1360,13 @@ class SongScreenState extends State<SongScreen> {
             onToggleStrumSound: _toggleStrumSound,
             rampOn: _rampOn,
             onToggleRamp: _toggleRamp,
+            metronomeSound: widget.audio.metronomeSound,
+            metronomeSoundNames: const ['click', 'beep', 'wood', 'rim'],
+            onMetronomeSoundChanged: (s) {
+              widget.audio.setMetronomeSound(s);
+              _prefs?.setMetronomeSound(s);
+              setState(() {}); // 刷新喇叭图标颜色
+            },
             onChordTap: (c) => widget.audio.playChord(c, semis: _transpose), // 点和弦卡 → 听这个和弦的扫弦声(带当前移调)
           ),
           // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。

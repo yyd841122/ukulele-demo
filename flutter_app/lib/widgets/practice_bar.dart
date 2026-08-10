@@ -33,6 +33,10 @@ class PracticeBar extends StatelessWidget {
   final bool rampOn; // 自动提速开吗(每遍+3 BPM、到原速停)
   final VoidCallback onToggleRamp; // 切自动提速开关
   final void Function(String chord)? onChordTap; // 点某个和弦卡 → 听这个和弦的扫弦声(可空)
+  // 第58步-5:节拍器音色
+  final String metronomeSound; // 当前音色名('click'/'beep'/'wood'/'rim')
+  final List<String> metronomeSoundNames; // 所有可用音色名
+  final ValueChanged<String> onMetronomeSoundChanged; // 切音色时回调
 
   const PracticeBar({
     super.key,
@@ -60,7 +64,12 @@ class PracticeBar extends StatelessWidget {
     required this.rampOn,
     required this.onToggleRamp,
     this.onChordTap,
+    this.metronomeSound = 'click',
+    this.metronomeSoundNames = const ['click', 'beep', 'wood', 'rim'],
+    this.onMetronomeSoundChanged = _noop,
   });
+
+  static void _noop(String _) {}
 
   @override
   Widget build(BuildContext context) {
@@ -257,6 +266,18 @@ class PracticeBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
+              // 节拍器音色切换(第58步-5):喇叭图标 → 弹出音色选择
+              IconButton(
+                onPressed: () => _showSoundPicker(context),
+                tooltip: '节拍器音色: ${_soundLabel(metronomeSound)}',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                icon: const Icon(Icons.speaker, size: 20),
+                style: IconButton.styleFrom(
+                  foregroundColor: metronomeSound != 'click' ? cs.primary : cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 4),
               Text(
                 '调速',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
@@ -289,6 +310,53 @@ class PracticeBar extends StatelessWidget {
       ),
     );
   }
+
+  /// 弹出节拍器音色选择(第58步-5)。
+  void _showSoundPicker(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('节拍器音色'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final s in metronomeSoundNames)
+                ListTile(
+                  title: Text(_soundLabel(s)),
+                  leading: Radio<String>(
+                    value: s,
+                    groupValue: metronomeSound,
+                    onChanged: (v) {
+                      if (v != null) onMetronomeSoundChanged(v);
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                  onTap: () {
+                    onMetronomeSoundChanged(s);
+                    Navigator.pop(ctx);
+                  },
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String _soundLabel(String s) => switch (s) {
+    'click' => '嗒声(默认)',
+    'beep'  => '电子嘀',
+    'wood'  => '木鱼',
+    'rim'   => '鼓边',
+    _       => s,
+  };
 }
 
 /// 练习栏那一排里的和弦卡:和弦名(上)+ 指法图(下)。

@@ -100,7 +100,58 @@ class StrumSynth {
     return buildWav(mix, sampleRate: sampleRate);
   }
 
-  /// 合成【单根空弦】的拨弦声(给"调音参考音"用):拨第 stringIndex 根空弦(fret=0),套 WAV 头返回。
+  /// 合成一个短促节拍器声音(第58步-5)。[hz] = 基频, [accent] = true 为重音高音版。
+  /// 短脉冲(≈30ms):简单的 sine 波 + 指数衰减包络。
+  /// [woodHack]:木鱼声=高频短脉冲; [rimHack]:鼓边=噪声短脉冲。
+  static Float64List _synthesizeClick(double hz, bool accent, {String style = 'beep'}) {
+    final dur = 0.030; // 30ms
+    final total = (dur * sampleRate).round();
+    final out = Float64List(total);
+    final hz2 = accent ? hz * 1.5 : hz; // 重音=更高频率
+    final omega = 2 * pi * hz2 / sampleRate;
+    for (var i = 0; i < total; i++) {
+      final t = i / sampleRate;
+      final env = exp(-t / 0.006); // 很快的衰减(≈6ms 包络)
+      double sample;
+      switch (style) {
+        case 'wood':
+          // 木鱼:两个倍频混合(像敲木头)
+          sample = 0.6 * sin(omega * i) + 0.4 * sin(omega * 3 * i);
+          break;
+        case 'rim':
+          // 鼓边:白噪声为主 + 一点点 sine 底座
+          final r = Random(i + (accent ? 7777 : 3333)).nextDouble() * 2 - 1;
+          sample = 0.3 * sin(omega * i) + 0.7 * r;
+          break;
+        default: // beep
+          sample = sin(omega * i);
+          break;
+      }
+      out[i] = sample * env;
+    }
+    // 末尾 3ms 快速淡出防咔
+    final fade = (0.003 * sampleRate).round();
+    for (var i = 0; i < fade; i++) {
+      out[total - fade + i] *= i / fade;
+    }
+    return out;
+  }
+
+  /// 合成一段节拍器嗒声 WAV(第58步-5):普通+重音各一段,全塞一个 stereo-like 返回里?
+  /// 不,返回两个单声道 WAV。给 AudioEngine loadMem 用。
+  /// [style] = 'beep'(电子)/'wood'(木鱼)/'rim'(鼓边)。
+  /// [baseHz] = 普通嗒声基频(默认 880Hz),重音自动升到 1.5×。
+  static ({Uint8List normal, Uint8List accent}) synthesizeClickPair({
+    String style = 'beep',
+    double baseHz = 880,
+  }) {
+    final normalSamples = _synthesizeClick(baseHz, false, style: style);
+    final accentSamples = _synthesizeClick(baseHz, true, style: style);
+    return (
+      normal: buildWav(normalSamples, sampleRate: sampleRate),
+      accent: buildWav(accentSamples, sampleRate: sampleRate),
+    );
+  }
   /// 和扫弦用的是同一个 _pluck 引擎 + 同一个 buildWav 头——区别只在扫弦拨四根错开叠起来,
   /// 这边只拨一根,听上去是"叮——"的单音,正好拿来做调音基准(拿你琴上拨出的声跟它对)。
   /// [durationSec] 默认跟扫弦一样;调音页在 AudioEngine 里传更长的(见 referenceToneSec)。

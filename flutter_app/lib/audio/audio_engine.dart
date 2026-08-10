@@ -23,6 +23,12 @@ class AudioEngine {
   AudioSource? _normalSrc; // 普通"嗒"
   AudioSource? _accentSrc; // 高音重音
 
+  // —— 多音色节拍器(第58步-5)——
+  // key = 音色名('click'/'beep'/'wood'/'rim'), value = (普通, 重音) 两个 AudioSource。
+  // 'click' 桶就是上面的 _normalSrc/_accentSrc(asset wav,默认音色)。
+  final Map<String, ({AudioSource normal, AudioSource accent})> _metronomeSounds = {};
+  String _currentMetronomeSound = 'click';
+
   // —— 扫弦声源(按和弦名 × 移调偏移取)——
   // 启动时给 chordShapes 里每个和弦 × 2 方向各合成一段 WAV、loadMem 进内存,放【0 偏移】那一桶。
   // 播放时按 (和弦名, 当前移调偏移) 查出来 play。没在里面的(没录指法的和弦)→ playChord 跳过、不崩。
@@ -57,6 +63,8 @@ class AudioEngine {
       await SoLoud.instance.init();
       _normalSrc = await SoLoud.instance.loadAsset('assets/click.wav');
       _accentSrc = await SoLoud.instance.loadAsset('assets/click_accent.wav');
+      // 默认音色 'click' 指向 asset wav 桶
+      _metronomeSounds['click'] = (normal: _normalSrc!, accent: _accentSrc!);
       _initialized = true;
     } catch (e) {
       // 万一加载失败,这条会进 logcat / 控制台,方便排查。
@@ -65,10 +73,34 @@ class AudioEngine {
     }
     // 嗒声好了,再尽力预生成扫弦声源(失败只降级,不拖垮嗒声)。
     await _initStrumSources();
+    // 第58步-5:尽力预生成另外3种节拍器音色(beep/wood/rim)。失败不影响默认音色。
+    await _initMetronomeSounds();
     // 再尽力预生成 4 根空弦参考音(调音页用)。同样失败只降级,不影响前两类声。
     await _initOpenStringSources();
     return true;
   }
+
+  /// 第58步-5:用 StrumSynth 合成 beep/wood/rim 三种节拍器音色,loadMem 进 _metronomeSounds。
+  Future<void> _initMetronomeSounds() async {
+    for (final style in ['beep', 'wood', 'rim']) {
+      try {
+        final pair = StrumSynth.synthesizeClickPair(style: style);
+        final nSrc = await SoLoud.instance.loadMem('click_${style}_normal', pair.normal);
+        final aSrc = await SoLoud.instance.loadMem('click_${style}_accent', pair.accent);
+        _metronomeSounds[style] = (normal: nSrc, accent: aSrc);
+      } catch (e) {
+        debugPrint('节拍器音色 $style 合成失败: $e');
+      }
+    }
+  }
+
+  /// 选节拍器音色(第58步-5)。[name] = 'click'/'beep'/'wood'/'rim'。不在 map 里就退回 click。
+  void setMetronomeSound(String name) {
+    if (_metronomeSounds.containsKey(name)) _currentMetronomeSound = name;
+  }
+
+  /// 当前选的音色名(给持久化 + 界面显示用)
+  String get metronomeSound => _currentMetronomeSound;
 
   /// 给 chordShapes 里每个和弦合成下扫 / 上扫两段 WAV,loadMem 进【0 偏移】桶(原音高)。
   Future<void> _initStrumSources() async {
@@ -141,11 +173,13 @@ class AudioEngine {
   /// 引擎和嗒声都加载好了吗(没好之前 ▶ 按钮变灰、按了也不出声)。
   bool get isReady => _initialized;
 
-  /// 播一声嗒。play(src) 每次起一个全新实例从头播 → 低延迟、每次从头响、连播不会变小声。
-  /// accent=true 播高音重音(第 1 拍),否则普通嗒。引擎还没加载好时 src 为 null,跳过。
+  /// 播一声嗒(第58步-5:按当前选中的音色播)。play(src) 每次起全新实例从头播。
+  /// accent=true 播高音重音(第 1 拍),否则普通嗒。引擎没好时 src 为 null,跳过。
   void playClick({bool accent = false}) {
-    final src = accent ? _accentSrc : _normalSrc;
-    if (src != null) SoLoud.instance.play(src);
+    final pair = _metronomeSounds[_currentMetronomeSound];
+    if (pair == null) return;
+    final src = accent ? pair.accent : pair.normal;
+    SoLoud.instance.play(src);
   }
 
   /// 播某个和弦的扫弦声。up=false 下扫、up=true 上扫。[semis] = 移调偏移(0 = 原音高)。
@@ -208,10 +242,17 @@ class AudioEngine {
     }
   }
 
-  /// 释放所有声源(嗒声 + 扫弦 × 各移调桶)。页面销毁时调,否则占资源。
+  /// 释放所有声源(嗒声 × 多音色 + 扫弦 × 各移调桶)。页面销毁时调,否则占资源。
   void dispose() {
-    if (_normalSrc != null) SoLoud.instance.disposeSource(_normalSrc!);
-    if (_accentSrc != null) SoLoud.instance.disposeSource(_accentSrc!);
+    // 多音色节拍器:每个音色桶有两个声源,分开 dispose
+    for (final pair in _metronomeSounds.values) {
+      try { SoLoud.instance.disposeSource(pair.normal); } catch (_) {}
+      try { SoLoud.instance.disposeSource(pair.accent); } catch (_) {}
+    }
+    // _normalSrc/_accentSrc 也在 _metronomeSounds['click'] 里,上面的循环已 dispose 过;
+    // 再调 disposeSource 同一个声源会崩(SoLoud 内部断言),所以这里清 null 跳过。
+    _normalSrc = null;
+    _accentSrc = null;
     for (final bucket in _chordsByOffset.values) {
       for (final s in bucket.values) {
         SoLoud.instance.disposeSource(s.down);
