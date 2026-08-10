@@ -104,6 +104,11 @@ class SongScreenState extends State<SongScreen> {
   // 歌词字号缩放(1.0 = 默认;界面 Slider 限定 0.8~1.8)。全局偏好——跟哪首歌无关。
   double _lyricScale = 1.0;
 
+  // 移调(虚拟变调夹,半音偏移)。0 = 不移调(原音高);界面 Slider 限定 -6~+6。
+  // 按歌存:每首歌贴合嗓音要的移调不一样,跟 tempo 一个套路,切歌不串。照旧按原和弦指法,
+  // app 把扫弦声整体升 / 降这么多半音重新合成出来(双向都行,不像真变调夹只能升)。
+  int _transpose = 0;
+
   // —— 分段 AB 循环 ——
   // _markerA / _markerB:用户在歌词上点的两个"循环点"(行下标)。两个都标好 → 引擎到 B 行末尾跳回 A 行开头反复。
   // 只标了 A(_markerB 仍 null)= 还没成区间,只在那一行显示 A 徽标。换歌清空(行下标是按某首歌的行算的,不能跨歌保留)。
@@ -159,6 +164,7 @@ class SongScreenState extends State<SongScreen> {
       _lyricScale = p.getLyricScale(1.0).clamp(0.8, 1.8); // Slider 区间,防存了个越界值
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
       _tempo = p.getTempo(songs[_selected].id) ?? songs[_selected].tempo;
+      _transpose = p.getTranspose(songs[_selected].id); // 这首歌上次的移调(没存过 = 0)
       _totalLoops = p.getLoops(songs[_selected].id); // 上次这首歌累计练的遍数
       _totalSec = p.getSec(songs[_selected].id); // 上次这首歌累计练的秒数
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
@@ -167,6 +173,8 @@ class SongScreenState extends State<SongScreen> {
       _markerA = _validLine(ab?.a);
       _markerB = _validLine(ab?.b);
     });
+    // 载入的移调 ≠ 0 → 预生成对应偏移的扫弦声源(后台;没好之前 playChord 回退原音高,不静音)。
+    widget.audio.prepareTranspose(_transpose);
   }
 
   /// 校验一个载入的 AB 行下标是否还在当前歌的合法行范围内;不在就返回 null(丢弃)。
@@ -340,9 +348,10 @@ class SongScreenState extends State<SongScreen> {
     _setWakelock(false); // 换歌 = 停下,屏幕恢复正常(新歌默认不播,要按 ▶ 才再亮)
     _accumulateSec(); // 把正在播放的这段时间结进【旧歌】的 _totalSec
     final p = _prefs;
-    // 切走前先把【当前这首】(还没换的 _selected)的速度、AB、累计打卡都存下来——下次回来才接得上。
+    // 切走前先把【当前这首】(还没换的 _selected)的速度、移调、AB、累计打卡都存下来——下次回来才接得上。
     if (p != null) {
       p.setTempo(songs[_selected].id, _tempo);
+      p.setTranspose(songs[_selected].id, _transpose);
       p.setAb(songs[_selected].id, _markerA, _markerB);
       p.setLoops(songs[_selected].id, _totalLoops);
       p.setSec(songs[_selected].id, _totalSec);
@@ -362,11 +371,14 @@ class SongScreenState extends State<SongScreen> {
       _markerB = null;
       // 切到新歌:用它【上次调到的速度】(没调过就原速)——每首歌记住自己的速度,来回切不丢。
       _tempo = p?.getTempo(songs[i].id) ?? songs[i].tempo;
+      _transpose = p?.getTranspose(songs[i].id) ?? 0; // 新歌的移调(没存过 = 0)
       _rebuildFlat();
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
     });
     // 切完记下新选的歌【id】(下次启动直接进这首;按 id 存,加 / 删别的歌不会串位)。
     p?.setSelectedSongId(songs[i].id);
+    // 新歌移调 ≠ 0 → 预生成对应声源(跟 _loadPrefs 一个套路)。
+    widget.audio.prepareTranspose(_transpose);
   }
 
   /// 点"添加自己的歌":开表单 → 校验通过拿到 Song → 加进歌库 → 切到这首新歌。
@@ -488,6 +500,16 @@ class SongScreenState extends State<SongScreen> {
     }
   }
 
+  /// 设移调(虚拟变调夹):钳到 -6~+6、存下来(按歌)、预生成对应偏移的扫弦声源。
+  /// 不用停节拍器:声源在后台生成,没好之前 playChord 回退原音高兜底、不静音,好了下一拍就准。
+  void _setTranspose(int v) {
+    final clamped = v.clamp(-6, 6);
+    if (clamped == _transpose) return;
+    setState(() => _transpose = clamped);
+    _prefs?.setTranspose(songs[_selected].id, clamped);
+    widget.audio.prepareTranspose(clamped);
+  }
+
   /// 自动提速:每过一遍 +3 BPM、封顶原速(nextRampTempo 算)。到原速不再涨。改了 _tempo 要重启定时器。
   /// 只在 _rampOn 开着、且循环真正完成一遍(整曲到尾 / AB 到 B)时调。
   void _applyRamp() {
@@ -559,9 +581,9 @@ class SongScreenState extends State<SongScreen> {
     } else if (_strumSoundOn && _flat.isNotEmpty && _idx < _flat.length) {
       final dir = _strumDirForCurrentSlot();
       if (dir == StrumDir.down) {
-        widget.audio.playChord(_flat[_idx]); // 当前和弦=_flat[_idx](推进已在 _onTimerTick 里做完)
+        widget.audio.playChord(_flat[_idx], semis: _transpose); // 当前和弦=_flat[_idx](推进已在 _onTimerTick 里做完)
       } else if (dir == StrumDir.up) {
-        widget.audio.playChord(_flat[_idx], up: true);
+        widget.audio.playChord(_flat[_idx], up: true, semis: _transpose);
       }
       // StrumDir.rest:休止,静音不响
     } else {
@@ -610,14 +632,14 @@ class SongScreenState extends State<SongScreen> {
     });
   }
 
-  /// 试听里响一下当前槽:下扫 / 上扫播和弦声,休止静音。跟正式播放的扫弦响法一致。
+  /// 试听里响一下当前槽:下扫 / 上扫播和弦声,休止静音。跟正式播放的扫弦响法一致(带当前移调)。
   void _playPreviewSlot(List<StrumDir> grid, String chord) {
     if (_previewSlot < 0 || _previewSlot >= grid.length) return;
     final dir = grid[_previewSlot];
     if (dir == StrumDir.down) {
-      widget.audio.playChord(chord);
+      widget.audio.playChord(chord, semis: _transpose);
     } else if (dir == StrumDir.up) {
-      widget.audio.playChord(chord, up: true);
+      widget.audio.playChord(chord, up: true, semis: _transpose);
     }
     // StrumDir.rest:休止,静音不响
   }
@@ -741,6 +763,72 @@ class SongScreenState extends State<SongScreen> {
   }
 
   /// 秒数格式化已上移为 models.dart 的 formatPracticeSec(顶栏 + 统计页共用)。
+
+  /// 移调(虚拟变调夹)对话框:Slider 拖 -6~+6 半音,松手就存(按歌、跨重启保留)。复位一键回 0。
+  /// 用 StatefulBuilder 让对话框里的文案 / 滑块跟着拖动刷新;同时调本页 setState,信息行实时变。
+  /// 解释:照旧按原和弦指法(还是 C/G/Am/F),app 把扫弦声整体升 / 降这么多半音重新合成——
+  /// 不用学新和弦(尤其大横按),声音却贴合自己嗓音。双向都行(真变调夹只能升)。
+  void _showTransposeDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSt) {
+            final sign = _transpose > 0 ? '+' : '';
+            return AlertDialog(
+              title: const Text('移调(虚拟变调夹)'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _transpose == 0 ? '原调(不移调)' : '$sign$_transpose 半音',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(ctx).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '照旧按原和弦指法,扫弦声整体升 / 降这么多半音',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Slider(
+                    min: -6,
+                    max: 6,
+                    divisions: 12, // 半音一档
+                    value: _transpose.toDouble(),
+                    label: '${_transpose > 0 ? '+' : ''}$_transpose',
+                    onChanged: (nv) {
+                      final v = nv.round();
+                      setSt(() {}); // 刷新对话框文案
+                      _setTranspose(v); // 钳到范围、存、预生成声源、刷信息行
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    setSt(() {});
+                    _setTranspose(0);
+                  },
+                  child: const Text('复位'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('完成'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -878,7 +966,7 @@ class SongScreenState extends State<SongScreen> {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                '$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${formatPracticeSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
+                '${formatTranspose(_transpose)}$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${formatPracticeSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -886,7 +974,7 @@ class SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
-        // 顶栏右侧图标:用户歌才出 编辑 / 删除(第43c步;内置歌不可改不可删);字号一直有。
+        // 顶栏右侧图标:用户歌才出 编辑 / 删除(第43c步;内置歌不可改不可删);移调 + 字号一直有。
         actions: [
           if (widget.store.isUserSong(song))
             IconButton(
@@ -900,6 +988,15 @@ class SongScreenState extends State<SongScreen> {
               tooltip: '删除这首歌',
               onPressed: _deleteCurrentSong,
             ),
+          IconButton(
+            // 移调 ≠ 0 时图标用主色点亮,一眼看出当前在移调练习。
+            icon: const Icon(Icons.tune_rounded),
+            tooltip: _transpose == 0
+                ? '移调(虚拟变调夹)'
+                : '移调(虚拟变调夹)· 当前 ${_transpose > 0 ? '+' : ''}$_transpose 半音',
+            onPressed: _showTransposeDialog,
+            color: _transpose != 0 ? theme.colorScheme.primary : null,
+          ),
           IconButton(
             icon: const Icon(Icons.format_size_rounded),
             tooltip: '歌词字号',
@@ -944,7 +1041,7 @@ class SongScreenState extends State<SongScreen> {
             onToggleStrumSound: _toggleStrumSound,
             rampOn: _rampOn,
             onToggleRamp: _toggleRamp,
-            onChordTap: (c) => widget.audio.playChord(c), // 点和弦卡 → 听这个和弦的扫弦声
+            onChordTap: (c) => widget.audio.playChord(c, semis: _transpose), // 点和弦卡 → 听这个和弦的扫弦声(带当前移调)
           ),
           // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。
           LinearProgressIndicator(

@@ -103,6 +103,13 @@ class AppPreferences {
   Future<void> setTempo(String songId, int v) =>
       _prefs.setInt('$_kTempoPrefix$songId', v);
 
+  // 某首歌的移调(虚拟变调夹,半音偏移)。没存过返回 0(不移调 = 原音高)。按歌存——每首歌贴合
+  // 嗓音要的移调不一样,跟 tempo 一个套路;切歌不串。范围由界面 Slider 限定(-6~+6)。
+  int getTranspose(String songId) =>
+      _prefs.getInt('$_kTransposePrefix$songId') ?? 0;
+  Future<void> setTranspose(String songId, int v) =>
+      _prefs.setInt('$_kTransposePrefix$songId', v);
+
   // 某首歌设的 AB 循环区间(起止行下标)。两个都 null = 没设。a、b 任一 null 视为不完整。
   ({int? a, int? b})? getAb(String songId) {
     final a = _prefs.getInt('$_kAbAPrefix$songId');
@@ -141,6 +148,7 @@ class AppPreferences {
   /// 清掉某首歌的所有偏好(删用户歌时调,免得留垃圾 key)。内置歌不走这(不可删)。
   Future<void> clearSong(String id) async {
     await _prefs.remove('$_kTempoPrefix$id');
+    await _prefs.remove('$_kTransposePrefix$id');
     await _prefs.remove('$_kAbAPrefix$id');
     await _prefs.remove('$_kAbBPrefix$id');
     await _prefs.remove('$_kLoopsPrefix$id');
@@ -178,6 +186,7 @@ class AppPreferences {
   static const _kUserSongs = 'pref_user_songs'; // 用户自加的歌:JSON 字符串列表
   static const _kUserSongSeq = 'pref_user_song_seq'; // 用户歌 id 计数器(u1、u2…)
   static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲 id,如 pref_tempo_0(内置)、pref_tempo_u1(用户)
+  static const _kTransposePrefix = 'pref_transpose_'; // 后接歌曲 id;移调半音偏移(0=不移调)
   static const _kAbAPrefix = 'pref_ab_a_'; // 后接歌曲 id
   static const _kAbBPrefix = 'pref_ab_b_';
   static const _kLoopsPrefix = 'pref_loops_'; // 后接歌曲 id

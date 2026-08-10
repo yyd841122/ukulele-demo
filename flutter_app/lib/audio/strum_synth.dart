@@ -28,8 +28,11 @@ class StrumSynth {
 
   /// 第 stringIndex 根弦(G=0,C=1,E=2,A=3)按第 fret 品的频率。
   /// 每品升一个半音 = 频率 ×2^(1/12)。
-  static double freqForString(int stringIndex, int fret) {
-    return (openTuning[stringIndex] * pow(2, fret / 12)).toDouble();
+  /// [semitoneOffset] = 移调(虚拟变调夹):整把琴整体再升 / 降这么多半音,不改变指法形状。
+  /// 合成「移调后的扫弦声」用:同一个 C 和弦指法 [0,0,0,3],offset=+2 → 听上去像 D 调,
+  /// 拿来「照旧按简单和弦、声音却贴合自己嗓音」。默认 0 = 不移调(老行为)。
+  static double freqForString(int stringIndex, int fret, {int semitoneOffset = 0}) {
+    return (openTuning[stringIndex] * pow(2, (fret + semitoneOffset) / 12)).toDouble();
   }
 
   /// Karplus-Strong 拨一根频率为 [freq] 的弦,返回该弦的衰减波形(Float64,长度 = durationSec×sampleRate)。
@@ -60,7 +63,9 @@ class StrumSynth {
   /// 给定和弦指法 frets(GCEA 顺序,0=空弦),合成一段扫弦的完整 WAV(44字节头 + 单声道16位PCM)。
   /// up=false(下扫):弦按物理顺序 G→C→E→A 依次拨响(模拟拨片从上往下扫过琴弦);
   /// up=true(上扫):A→E→C→G。
-  Uint8List synthesizeStrumWav(List<int> frets, {bool up = false}) {
+  /// [semitoneOffset] = 移调(虚拟变调夹):整段扫弦整体升 / 降这么多半音、指法形状不变
+  /// (走 freqForString 的 semitoneOffset)。默认 0 = 不移调(老行为)。
+  Uint8List synthesizeStrumWav(List<int> frets, {bool up = false, int semitoneOffset = 0}) {
     final gapSamples = (strumGapSec * sampleRate).round();
     final perString = (clipDuration * sampleRate).round();
     // 总长 = 第 4 根弦(最晚)等 3 个间隔才开始 + 它自己持续 perString。
@@ -70,7 +75,9 @@ class StrumSynth {
     final order = up ? const [3, 2, 1, 0] : const [0, 1, 2, 3]; // 下扫 G→A,上扫 A→G
     for (var k = 0; k < 4; k++) {
       final stringIdx = order[k];
-      final tone = _pluck(freqForString(stringIdx, frets[stringIdx]));
+      final tone = _pluck(
+        freqForString(stringIdx, frets[stringIdx], semitoneOffset: semitoneOffset),
+      );
       final offset = k * gapSamples;
       for (var s = 0; s < perString; s++) {
         mix[offset + s] += tone[s];

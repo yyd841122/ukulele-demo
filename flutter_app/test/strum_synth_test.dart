@@ -24,6 +24,30 @@ void main() {
       // chordShapes['C'] = [0,0,0,3] → A 弦(index 3)按 3 品
       expect(StrumSynth.freqForString(3, 3), closeTo(523.25, 0.05));
     });
+
+    test('移调(虚拟变调夹):+12 半音 = 升一个八度(频率×2),与按 12 品等价', () {
+      // semitoneOffset 不改指法形状,只整体移频:offset +12 应等于 fret+12 的频率。
+      expect(
+        StrumSynth.freqForString(0, 0, semitoneOffset: 12),
+        closeTo(392.00 * 2, 0.05),
+      );
+      expect(
+        StrumSynth.freqForString(3, 0, semitoneOffset: 12),
+        closeTo(440.00 * 2, 0.05),
+      );
+      // 等价性:C 和弦指法 [0,0,0,3],A 弦 offset+2 应等于 A 弦按 5 品(3+2)。
+      expect(
+        StrumSynth.freqForString(3, 3, semitoneOffset: 2),
+        closeTo(StrumSynth.freqForString(3, 5), 0.001),
+      );
+    });
+
+    test('移调:负偏移降频(−12 = 频率÷2)', () {
+      expect(
+        StrumSynth.freqForString(3, 0, semitoneOffset: -12),
+        closeTo(440.00 / 2, 0.05),
+      );
+    });
   });
 
   group('WAV 字节布局', () {
@@ -103,6 +127,18 @@ void main() {
       final down = StrumSynth(seed: 42).synthesizeStrumWav([0, 0, 0, 3]);
       final up = StrumSynth(seed: 42).synthesizeStrumWav([0, 0, 0, 3], up: true);
       expect(down, isNot(equals(up)));
+    });
+
+    test('移调:同种子下,offset≠0 与 offset=0 输出不同(整段移了频),且 WAV 自洽不崩', () {
+      final base = StrumSynth(seed: 42).synthesizeStrumWav([0, 0, 0, 3]);
+      final shifted = StrumSynth(seed: 42).synthesizeStrumWav(
+        [0, 0, 0, 3],
+        semitoneOffset: 3,
+      );
+      expect(shifted, isNot(equals(base))); // 移调后波形不同
+      // 移调版仍是合法 WAV(长度自洽):data 长度 = 文件长 - 44。
+      final bd = shifted.buffer.asByteData();
+      expect(bd.getUint32(40, Endian.little), shifted.length - 44);
     });
   });
 

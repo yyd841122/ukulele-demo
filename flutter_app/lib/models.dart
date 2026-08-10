@@ -195,6 +195,15 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
 int nextRampTempo(int current, int cap, {int step = 3}) =>
     current < cap ? min(current + step, cap) : current;
 
+/// 移调(虚拟变调夹)在练习页信息行里的显示片段:
+/// 0 → 空串(不移调就不显示);否则形如「移调 +2半音 · 」,直接拼在信息行最前面。
+/// 抽成纯函数:跟 formatPracticeSec 一个套路,锁住正 / 负 / 零三种显示,无头可测。
+String formatTranspose(int semis) {
+  if (semis == 0) return '';
+  final sign = semis > 0 ? '+' : '';
+  return '移调 $sign$semis半音 · ';
+}
+
 /// 秒数 → "Xs" / "Xm" / "XhYm",给"练了多久"显示用。
 /// <60s 显示秒,够 1 分钟显示分,够 1 小时显示"时分"(如 1h12m)。
 /// 抽成纯函数放这:SongScreen 顶栏和统计页都要格式化时长,共用一份;也能在无头测试里直接锁它。

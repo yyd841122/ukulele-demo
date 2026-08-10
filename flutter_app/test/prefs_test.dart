@@ -47,6 +47,19 @@ void main() {
     expect(p2.getTempo('c'), isNull); // 别的歌没存
   });
 
+  test('移调(虚拟变调夹)按歌存:存了能读回、没存过给默认 0、不同歌不串', () async {
+    final p = await AppPreferences.load();
+    expect(p.getTranspose('a'), 0); // 没存过 → 0(不移调)
+
+    await p.setTranspose('a', 3);
+    await p.setTranspose('b', -5);
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getTranspose('a'), 3);
+    expect(p2.getTranspose('b'), -5);
+    expect(p2.getTranspose('c'), 0); // 别的歌没存 → 0
+  });
+
   test('AB 区间:成对存 / 成对清', () async {
     final p = await AppPreferences.load();
     expect(p.getAb('x'), isNull); // 没设过
@@ -137,6 +150,7 @@ void main() {
   test('clearSong:清掉某首歌的所有偏好(删用户歌时调)', () async {
     final p = await AppPreferences.load();
     await p.setTempo('u1', 90);
+    await p.setTranspose('u1', 4);
     await p.setAb('u1', 2, 5);
     await p.setLoops('u1', 7);
     await p.setSec('u1', 200);
@@ -145,6 +159,7 @@ void main() {
 
     final p2 = await AppPreferences.load(); // 模拟重启
     expect(p2.getTempo('u1'), isNull);
+    expect(p2.getTranspose('u1'), 0); // 移调也清掉 → 回到默认 0
     expect(p2.getAb('u1'), isNull);
     expect(p2.getLoops('u1'), 0);
     expect(p2.getSec('u1'), 0);

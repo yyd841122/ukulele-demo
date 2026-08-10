@@ -26,4 +26,20 @@ void main() {
       expect(formatPracticeSec(7325), '2h2m'); // 7325s = 122m5s = 2h2m
     });
   });
+
+  group('formatTranspose 移调格式化', () {
+    test('0:空串(不移调就不显示)', () {
+      expect(formatTranspose(0), '');
+    });
+
+    test('正偏移:带 + 号、末尾带分隔符(拼信息行用)', () {
+      expect(formatTranspose(2), '移调 +2半音 · ');
+      expect(formatTranspose(6), '移调 +6半音 · ');
+    });
+
+    test('负偏移:带 - 号', () {
+      expect(formatTranspose(-3), '移调 -3半音 · ');
+      expect(formatTranspose(-6), '移调 -6半音 · ');
+    });
+  });
 }

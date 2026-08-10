@@ -23,10 +23,16 @@ class AudioEngine {
   AudioSource? _normalSrc; // 普通"嗒"
   AudioSource? _accentSrc; // 高音重音
 
-  // —— 扫弦声源(按和弦名取)——
-  // 启动时给 chordShapes 里每个和弦 × 2 方向各合成一段 WAV、loadMem 进内存。
-  // 播放时按和弦名查出来 play。没在这里面(没录指法的和弦)→ playChord 跳过、不崩。
-  final Map<String, ChordSamples> _chords = {};
+  // —— 扫弦声源(按和弦名 × 移调偏移取)——
+  // 启动时给 chordShapes 里每个和弦 × 2 方向各合成一段 WAV、loadMem 进内存,放【0 偏移】那一桶。
+  // 播放时按 (和弦名, 当前移调偏移) 查出来 play。没在里面的(没录指法的和弦)→ playChord 跳过、不崩。
+  //
+  // 第48步(移调·虚拟变调夹):移调偏移 ≠ 0 的声源按需预生成(prepareTranspose)、单独放一桶。
+  // 外层的 key = 半音偏移(0 = 不移调;+2 = 升 2 半音……)。和弦速查 / 换和弦 tab 只用 0 桶(原音高),
+  // 练习 tab 按当前歌的移调取对应桶——同一引擎、各 tab 各取所需,互不污染。
+  final Map<int, Map<String, ChordSamples>> _chordsByOffset = {};
+  // 正在后台生成某偏移桶的标记:免得同偏移被并发重复生成。
+  final Set<int> _preparing = {};
 
   // —— 空弦参考音(调音用)——
   // 启动时给 4 根空弦(G/C/E/A)各合成一段单音拨弦、loadMem 进内存。调音页点某根弦 → play 对应声源。
@@ -59,26 +65,54 @@ class AudioEngine {
     return true;
   }
 
-  /// 给 chordShapes 里每个和弦合成下扫 / 上扫两段 WAV,loadMem 进内存。
+  /// 给 chordShapes 里每个和弦合成下扫 / 上扫两段 WAV,loadMem 进【0 偏移】桶(原音高)。
   Future<void> _initStrumSources() async {
     try {
-      final synth = StrumSynth(); // 不传 seed → 每次随机起振,更像真琴
-      for (final entry in chordShapes.entries) {
-        final name = entry.key;
-        final frets = entry.value;
-        final down = await SoLoud.instance.loadMem(
-          'strum_${name}_down', // path 要唯一(同名会撞),和弦名×方向天然唯一
-          synth.synthesizeStrumWav(frets),
-          // mode 默认 LoadMode.memory:解压进内存、低延迟,适合反复快速播。
-        );
-        final up = await SoLoud.instance.loadMem(
-          'strum_${name}_up',
-          synth.synthesizeStrumWav(frets, up: true),
-        );
-        _chords[name] = (down: down, up: up);
-      }
+      _chordsByOffset[0] = await _buildStrumSources(0);
     } catch (e) {
       debugPrint('扫弦声源预生成失败(嗒声仍可用): $e');
+    }
+  }
+
+  /// 合成某个移调偏移下、chordShapes 里每个和弦的下扫 / 上扫声源,返回「和弦名 → 两方向声源」。
+  /// [semitoneOffset] = 0 是原音高(启动时建);≠ 0 给移调用(prepareTranspose 按需建)。
+  /// 同一个和弦指法,偏移不同 → 合成出的频率不同 → 听上去是移调后的扫弦。path 带偏移前缀防撞 key。
+  Future<Map<String, ChordSamples>> _buildStrumSources(int semitoneOffset) async {
+    final synth = StrumSynth(); // 不传 seed → 每次随机起振,更像真琴
+    final out = <String, ChordSamples>{};
+    final prefix = semitoneOffset == 0 ? '' : '${semitoneOffset}_';
+    for (final entry in chordShapes.entries) {
+      final name = entry.key;
+      final frets = entry.value;
+      final down = await SoLoud.instance.loadMem(
+        '${prefix}strum_${name}_down', // path 要唯一(同名会撞);偏移前缀 + 和弦名×方向天然唯一
+        synth.synthesizeStrumWav(frets, semitoneOffset: semitoneOffset),
+        // mode 默认 LoadMode.memory:解压进内存、低延迟,适合反复快速播。
+      );
+      final up = await SoLoud.instance.loadMem(
+        '${prefix}strum_${name}_up',
+        synth.synthesizeStrumWav(frets, up: true, semitoneOffset: semitoneOffset),
+      );
+      out[name] = (down: down, up: up);
+    }
+    return out;
+  }
+
+  /// 预生成某个移调偏移的声源桶(给练习页设了移调后调,提前建好、播放时不卡顿)。
+  /// 0 桶启动时就有;已建过 / 正在建的偏移直接返回;引擎没好(如测试环境)也直接返回。
+  /// fire-and-forget:调用方不必 await——没建好期间 playChord 会回退到 0 桶(原音高)兜底,不静音。
+  Future<void> prepareTranspose(int semitoneOffset) async {
+    if (semitoneOffset == 0) return; // 0 桶启动时就建好了
+    if (_chordsByOffset.containsKey(semitoneOffset)) return; // 已建过
+    if (_preparing.contains(semitoneOffset)) return; // 正在建
+    if (!_initialized) return; // 引擎没好(测试环境),不建
+    _preparing.add(semitoneOffset);
+    try {
+      _chordsByOffset[semitoneOffset] = await _buildStrumSources(semitoneOffset);
+    } catch (e) {
+      debugPrint('移调声源预生成失败(偏移 $semitoneOffset): $e');
+    } finally {
+      _preparing.remove(semitoneOffset);
     }
   }
 
@@ -109,10 +143,12 @@ class AudioEngine {
     if (src != null) SoLoud.instance.play(src);
   }
 
-  /// 播某个和弦的扫弦声。up=false 下扫、up=true 上扫。没有这个和弦的声源(没录指法)就跳过 + 打日志。
-  /// 多声部:每次 play 起一个新声部从头播,所以连发 / 叠着播都不互相影响。
-  void playChord(String chord, {bool up = false, double volume = 0.9}) {
-    final s = _chords[chord];
+  /// 播某个和弦的扫弦声。up=false 下扫、up=true 上扫。[semis] = 移调偏移(0 = 原音高)。
+  /// 取声源顺序:先找【当前偏移】桶,没有(还没 prepare 好)就回退到【0 桶】原音高兜底——
+  /// 这样刚设移调、声源还在后台生成的那一小段不会静音(顶多短暂是原音高,生成完就准了)。
+  /// 两桶都没这个和弦(没录指法)就跳过 + 打日志。多声部:每次 play 起新实例从头播,连发 / 叠着不互相影响。
+  void playChord(String chord, {bool up = false, double volume = 0.9, int semis = 0}) {
+    final s = (_chordsByOffset[semis] ?? _chordsByOffset[0])?[chord];
     if (s == null) {
       debugPrint('扫弦:没有「$chord」的声源(没录指法?),跳过');
       return;
@@ -131,13 +167,15 @@ class AudioEngine {
     SoLoud.instance.play(src, volume: volume);
   }
 
-  /// 释放所有声源(嗒声 + 扫弦)。页面销毁时调,否则占资源。
+  /// 释放所有声源(嗒声 + 扫弦 × 各移调桶)。页面销毁时调,否则占资源。
   void dispose() {
     if (_normalSrc != null) SoLoud.instance.disposeSource(_normalSrc!);
     if (_accentSrc != null) SoLoud.instance.disposeSource(_accentSrc!);
-    for (final s in _chords.values) {
-      SoLoud.instance.disposeSource(s.down);
-      SoLoud.instance.disposeSource(s.up);
+    for (final bucket in _chordsByOffset.values) {
+      for (final s in bucket.values) {
+        SoLoud.instance.disposeSource(s.down);
+        SoLoud.instance.disposeSource(s.up);
+      }
     }
     for (final s in _openStrings.values) {
       SoLoud.instance.disposeSource(s);
