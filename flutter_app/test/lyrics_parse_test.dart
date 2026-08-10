@@ -45,4 +45,18 @@ void main() {
     expect(s.length, 1);
     expect(s.first.name, isNull); // 空 # 归一成匿名
   });
+
+  test('#名字 行带了 [和弦]:和弦剥掉、名字只留文字(第51步:修 #副歌 [C] → 名字「副歌」)', () {
+    final s = parseLyrics('#副歌 [C]\n[F]高潮');
+    expect(s.length, 1);
+    expect(s.first.name, '副歌'); // 不是「副歌 [C]」
+    expect(s.first.lines.first.lyric, '[F]高潮'); // 歌词不受影响
+  });
+
+  test('#名字 行只有和弦没文字 → 剥完成空 → 匿名段(不造空名字)', () {
+    final s = parseLyrics('#[C]\n词');
+    expect(s.length, 1);
+    expect(s.first.name, isNull); // 剥掉 [C] 后空了 → 匿名
+    expect(s.first.lines.first.lyric, '词');
+  });
 }

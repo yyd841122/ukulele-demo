@@ -133,10 +133,11 @@ class StrumPattern {
 /// 「海岛」(Island/Calypso):D - D U - U D U——尤克里里最招牌的节奏,练熟它能弹一大半流行歌。
 /// 「民谣」(Folk):D - D U U - D U——民谣弹唱常用,比海岛多一个正拍下扫、更稳。
 /// 「摇滚」:D - D U D U D U——密集连续扫,鼓点感强、推得动。
-///   注:海岛/民谣/摇滚都按 4 拍和弦(8 槽)写的;别的拍数会自动截断(grid 会忽略越界槽),不崩但形状会怪。
-///   现有歌曲都是 4 拍,所以没问题。
+///   全下 / 下上 按拍数【动态生成】,任何拍数都正常。
+///   海岛 / 民谣 / 摇滚 按 4 拍(8 槽)写死(第51步起):非 4 拍歌(如 3 拍华尔兹)不返回它们——
+///   否则 grid 会截断、形状怪;而且这仨本就是 4/4 招牌节奏,硬塞别的拍数也不合乐理。非 4 拍只给前两个。
 List<StrumPattern> patternsFor(int beatsPerChord) {
-  return [
+  final out = <StrumPattern>[
     StrumPattern(
       name: '全下',
       strums: [
@@ -151,41 +152,47 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
           Strum(s, s.isEven ? StrumDir.down : StrumDir.up),
       ],
     ),
-    const StrumPattern(
-      name: '海岛',
-      strums: [
-        Strum(0, StrumDir.down),
-        Strum(2, StrumDir.down),
-        Strum(3, StrumDir.up),
-        Strum(5, StrumDir.up),
-        Strum(6, StrumDir.down),
-        Strum(7, StrumDir.up),
-      ],
-    ),
-    const StrumPattern(
-      name: '民谣',
-      strums: [
-        Strum(0, StrumDir.down),
-        Strum(2, StrumDir.down),
-        Strum(3, StrumDir.up),
-        Strum(4, StrumDir.up),
-        Strum(6, StrumDir.down),
-        Strum(7, StrumDir.up),
-      ],
-    ),
-    const StrumPattern(
-      name: '摇滚',
-      strums: [
-        Strum(0, StrumDir.down),
-        Strum(2, StrumDir.down),
-        Strum(3, StrumDir.up),
-        Strum(4, StrumDir.down),
-        Strum(5, StrumDir.up),
-        Strum(6, StrumDir.down),
-        Strum(7, StrumDir.up),
-      ],
-    ),
   ];
+  // 4 拍才给三个招牌节奏(它们按 8 槽写死,别的拍数会截断 / 不合乐理)。
+  if (beatsPerChord == 4) {
+    out.addAll(const [
+      StrumPattern(
+        name: '海岛',
+        strums: [
+          Strum(0, StrumDir.down),
+          Strum(2, StrumDir.down),
+          Strum(3, StrumDir.up),
+          Strum(5, StrumDir.up),
+          Strum(6, StrumDir.down),
+          Strum(7, StrumDir.up),
+        ],
+      ),
+      StrumPattern(
+        name: '民谣',
+        strums: [
+          Strum(0, StrumDir.down),
+          Strum(2, StrumDir.down),
+          Strum(3, StrumDir.up),
+          Strum(4, StrumDir.up),
+          Strum(6, StrumDir.down),
+          Strum(7, StrumDir.up),
+        ],
+      ),
+      StrumPattern(
+        name: '摇滚',
+        strums: [
+          Strum(0, StrumDir.down),
+          Strum(2, StrumDir.down),
+          Strum(3, StrumDir.up),
+          Strum(4, StrumDir.down),
+          Strum(5, StrumDir.up),
+          Strum(6, StrumDir.down),
+          Strum(7, StrumDir.up),
+        ],
+      ),
+    ]);
+  }
+  return out;
 }
 
 /// 自动提速(渐进提速):每过一遍 +step BPM,封顶 cap 就不再涨。
@@ -363,8 +370,10 @@ List<Section> parseLyrics(String text) {
       flush(); // 空行 = 分段
     } else if (trimmed.startsWith('#')) {
       flush(); // 先收尾当前段,再用这行给下一段命名
-      final n = trimmed.substring(1).trim();
-      pendingName = n.isEmpty ? null : n; // 空 # → 匿名(不造空名字)
+      // 名字 = '#' 后面的文字,但剥掉行内 [和弦](第51步:修 #副歌 [C] → 名字别把 [C] 也吃进去。
+      // # 行本身不是歌词,上面的 [和弦] 没有词可挂,只能丢弃;留它会让段名变成「副歌 [C]」很怪)。
+      final rawName = trimmed.substring(1).replaceAll(RegExp(r'\[[^\]]*\]'), '').trim();
+      pendingName = rawName.isEmpty ? null : rawName; // 剥完空白 → 匿名(不造空名字)
     } else {
       current.add(Line(lyric: raw));
     }
