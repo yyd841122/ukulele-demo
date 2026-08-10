@@ -153,7 +153,15 @@ class AppPreferences {
     await _prefs.remove('$_kAbBPrefix$id');
     await _prefs.remove('$_kLoopsPrefix$id');
     await _prefs.remove('$_kSecPrefix$id');
+    await _prefs.remove('$_kLastPracticedPrefix$id');
   }
+
+  // —— 上次练习日期(按歌存,第55步)——
+  // 存 ISO 日期字符串 'yyyy-MM-dd';读的时候折回 DateTime。没存过返回 null。
+  String? getLastPracticed(String songId) =>
+      _prefs.getString('$_kLastPracticedPrefix$songId');
+  Future<void> setLastPracticed(String songId, String isoDate) =>
+      _prefs.setString('$_kLastPracticedPrefix$songId', isoDate);
 
   // —— 练习日历(哪天练过,跨歌汇总)——
   // 存 practiceDayKey 字符串('yyyy-MM-dd')列表、去重。给统计页画日历热力图 + 算"连续打卡 N 天"。
@@ -192,4 +200,5 @@ class AppPreferences {
   static const _kLoopsPrefix = 'pref_loops_'; // 后接歌曲 id
   static const _kSecPrefix = 'pref_sec_'; // 后接歌曲 id
   static const _kPracticeDays = 'pref_practice_days'; // 'yyyy-MM-dd' 字符串列表
+  static const _kLastPracticedPrefix = 'pref_last_practiced_'; // 后接歌曲 id;上次练习日期 ISO string
 }

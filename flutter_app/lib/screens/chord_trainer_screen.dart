@@ -292,7 +292,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
     );
   }
 
-  /// 一张和弦选择卡:标签 + 和弦名 + 小指法图 + "换"提示。点整张 → 循环换和弦 + 试听。
+  /// 一张和弦选择卡:标签 + 和弦名 + 小指法图。点整张 → 循环换和弦 + 试听。
   Widget _buildPickerCard(bool isA, String label, String name) {
     final cs = Theme.of(context).colorScheme;
     return InkWell(
@@ -319,8 +319,6 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
             ),
             const SizedBox(height: 4),
             ChordDiagram(frets: chordShapes[name]!, scale: 1.0),
-            const SizedBox(height: 2),
-            Text('👆 换', style: TextStyle(fontSize: 11, color: cs.outline)),
           ],
         ),
       ),
@@ -328,6 +326,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
   }
 
   /// 当前和弦大显示:超大和弦名 + 大指法图,底下小字提示下一个换到哪个 / 时间到。
+  /// 第55步:用 AnimatedSwitcher 缩放动画,切换和弦时不突兀。
   Widget _buildCurrentDisplay(ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -337,9 +336,15 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
       ),
       child: Column(
         children: [
-          Text(
-            _current,
-            style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: cs.onPrimaryContainer),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, animation) =>
+                ScaleTransition(scale: animation, child: child),
+            child: Text(
+              _current,
+              key: ValueKey(_current),
+              style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: cs.onPrimaryContainer),
+            ),
           ),
           const SizedBox(height: 6),
           ChordDiagram(frets: chordShapes[_current]!, scale: 2.2),

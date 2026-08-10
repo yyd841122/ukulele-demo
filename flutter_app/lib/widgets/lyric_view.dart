@@ -37,16 +37,17 @@ class SectionHeader extends StatelessWidget {
 /// 间隙不固定,由和弦宽度和词长决定(目标是练习弹奏:和弦该在哪、词就给哪腾地方)。
 /// lineKey 定位自动滚动;isCurrentLine 时整行加底色;chordStart+currentChord 判断当前和弦;
 /// marker / inRange 给 AB 循环画徽标和区间底色;onTap 点这行设 AB 循环点。
-class LineView extends StatelessWidget {
+/// 第55步:改为 StatefulWidget,parseWords 缓存到 State 里,不再每帧重解析。
+class LineView extends StatefulWidget {
   final Line line;
   final GlobalKey lineKey;
   final bool isCurrentLine;
-  final int chordStart; // 这一行第 1 个和弦在全局 _flat 里的下标
-  final int currentChord; // 当前全局和弦下标(_idx)
-  final AbMarker marker; // 这行的 AB 标记(none/a/b)
-  final bool inRange; // 这行在 AB 区间内吗(区间内的行加左边框、淡底色)
-  final VoidCallback? onTap; // 点这行 → 设 AB 循环点
-  final double fontScale; // 歌词字号缩放(1.0 = 默认):同时缩歌词词文字和上方和弦贴片字号
+  final int chordStart;
+  final int currentChord;
+  final AbMarker marker;
+  final bool inRange;
+  final VoidCallback? onTap;
+  final double fontScale;
 
   const LineView({
     super.key,
@@ -62,52 +63,54 @@ class LineView extends StatelessWidget {
   });
 
   @override
+  State<LineView> createState() => _LineViewState();
+}
+
+class _LineViewState extends State<LineView> {
+  late final List<WordUnit> _units = parseWords(widget.line.lyric);
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final units = parseWords(line.lyric);
-    var localChord = 0; // 这一行里数到第几个和弦
+    final units = _units;
+    var localChord = 0;
     final children = <Widget>[];
     for (final u in units) {
-      final isCurrent = u.hasChord && chordStart + localChord == currentChord;
+      final isCurrent = u.hasChord && widget.chordStart + localChord == widget.currentChord;
       if (u.hasChord) localChord++;
       children.add(
         _WordUnitView(
           chord: u.chord,
           word: u.word,
           isCurrent: isCurrent,
-          fontScale: fontScale,
+          fontScale: widget.fontScale,
         ),
       );
     }
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
-        key: lineKey,
+        key: widget.lineKey,
         padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
         decoration: BoxDecoration(
-          color: isCurrentLine
+          color: widget.isCurrentLine
               ? cs.primaryContainer.withValues(alpha: 0.3)
-              : (inRange ? cs.primaryContainer.withValues(alpha: 0.12) : null),
+              : (widget.inRange ? cs.primaryContainer.withValues(alpha: 0.12) : null),
           borderRadius: BorderRadius.circular(6),
-          // 注意:不在区间内时 border 必须给 null,不能给 width:0 的边框——
-          // "宽度0的细线边框 + borderRadius"会被 Flutter 断言拒掉(paint 时抛异常、疯狂刷错)。
-          border: inRange
+          border: widget.inRange
               ? Border(left: BorderSide(color: cs.primary, width: 3))
               : null,
         ),
-        // 左边可能一个 AB 徽标,右边是歌词词单元(Wrap)。徽标顶对齐,词按基线排。
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (marker != AbMarker.none)
+            if (widget.marker != AbMarker.none)
               Padding(
                 padding: const EdgeInsets.only(top: 3, right: 6),
-                child: _AbBadge(marker),
+                child: _AbBadge(widget.marker),
               ),
             Expanded(
-              // Wrap:词单元横向排开、窄屏自动换行。crossAxisAlignment=end → 所有词同基线,
-              // 和弦只浮在"有和弦的词"上方(没和弦的词不占和弦槽,连贯)。
               child: Wrap(
                 crossAxisAlignment: WrapCrossAlignment.end,
                 spacing: 4,

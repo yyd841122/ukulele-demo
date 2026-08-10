@@ -428,6 +428,7 @@ class StatsScreenState extends State<StatsScreen> {
               loops: p.getLoops(songs[i].id),
               sec: p.getSec(songs[i].id),
               lastTempo: p.getTempo(songs[i].id),
+              lastPracticed: p.getLastPracticed(songs[i].id),
             ),
         ],
       ),
@@ -435,25 +436,41 @@ class StatsScreenState extends State<StatsScreen> {
   }
 }
 
-/// 一首歌的统计卡:左边歌名 + 原速/最近速度(或「还没练过」),右边累计遍数 + 时长。
+/// 一首歌的统计卡:左边歌名 + 原速/最近速度 + 上次练习(或「还没练过」),右边累计遍数 + 时长。
 class _SongStatsCard extends StatelessWidget {
   final Song song;
   final int loops;
   final int sec;
-  final int? lastTempo; // 这首歌上次调到的速度(没存过 = null = 从没练到要存的程度)
+  final int? lastTempo;
+  final String? lastPracticed; // ISO 日期字符串 'yyyy-MM-dd'(第55步)
 
   const _SongStatsCard({
     required this.song,
     required this.loops,
     required this.sec,
     required this.lastTempo,
+    required this.lastPracticed,
   });
+
+  /// 把 ISO 日期字符串折成中文"上次:今天/昨天/N天前/还没练过"。
+  String _lastPracticeLabel(String? iso) {
+    if (iso == null) return '还没练过';
+    final d = DateTime.tryParse(iso);
+    if (d == null) return '还没练过';
+    final today = DateTime.now();
+    final daysAgo = DateTime(today.year, today.month, today.day)
+        .difference(DateTime(d.year, d.month, d.day))
+        .inDays;
+    if (daysAgo == 0) return '上次: 今天';
+    if (daysAgo == 1) return '上次: 昨天';
+    return '上次: $daysAgo 天前';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final practiced = loops > 0 || sec > 0; // 遍数或时长有一个 > 0 就算练过
+    final practiced = loops > 0 || sec > 0;
     return Card(
       color: cs.surfaceContainerHighest,
       margin: const EdgeInsets.only(bottom: 8),
@@ -477,7 +494,8 @@ class _SongStatsCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     practiced
-                        ? '原速 ${song.tempo} BPM'
+                        ? '${_lastPracticeLabel(lastPracticed)} · '
+                            '原速 ${song.tempo} BPM'
                             '${lastTempo != null && lastTempo != song.tempo ? ' · 最近 $lastTempo' : ''}'
                         : '还没练过',
                     style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
@@ -558,7 +576,32 @@ class _PracticeCalendar extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: columns,
+      children: [
+        // 星期标签(第55步):左边一列 一二三四五六日
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final l in ['一', '二', '三', '四', '五', '六', '日'])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: Center(
+                      child: Text(
+                        l,
+                        style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        ...columns,
+      ],
     );
   }
 

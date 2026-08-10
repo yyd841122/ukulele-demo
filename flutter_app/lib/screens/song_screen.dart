@@ -107,6 +107,10 @@ class SongScreenState extends State<SongScreen> {
   // 歌词字号缩放(1.0 = 默认;界面 Slider 限定 0.8~1.8)。全局偏好——跟哪首歌无关。
   double _lyricScale = 1.0;
 
+  // 下拉框 items 缓存(第55步):歌单不变就不用重建 items,避免每 tick 都重建 26+ 个 DropdownMenuItem。
+  List<DropdownMenuItem<int>>? _cachedDropdownItems;
+  int _cachedSongCount = -1;
+
   // 移调(虚拟变调夹,半音偏移)。0 = 不移调(原音高);界面 Slider 限定 -6~+6。
   // 按歌存:每首歌贴合嗓音要的移调不一样,跟 tempo 一个套路,切歌不串。照旧按原和弦指法,
   // app 把扫弦声整体升 / 降这么多半音重新合成出来(双向都行,不像真变调夹只能升)。
@@ -140,6 +144,7 @@ class SongScreenState extends State<SongScreen> {
 
   /// 歌单变了(加 / 删用户歌):刷新下拉框。_selected 可能越界(删歌时),夹回合法范围。
   void _onStoreChanged() {
+    _cachedDropdownItems = null; // 歌单变了,清缓存重建
     if (!mounted || songs.isEmpty) return;
     setState(() {
       _selected = _selected.clamp(0, songs.length - 1);
@@ -661,6 +666,9 @@ class SongScreenState extends State<SongScreen> {
   }
 
   /// 当前行变了,就把它滚到屏幕中间。每拍都调,但只有跨行才真滚,不会一拍一抖。
+  /// 第55步:加防抖——两次滚动间隔 < 300ms 时用瞬时跳转(jumpTo),避免动画叠加抖动。
+  DateTime? _lastScrollTime;
+
   void _maybeScrollToCurrentLine() {
     if (_flat.isEmpty || _idx >= _lineOfChord.length) return;
     final li = _lineOfChord[_idx];
@@ -669,12 +677,49 @@ class SongScreenState extends State<SongScreen> {
     if (li >= _lineKeys.length) return;
     final ctx = _lineKeys[li].currentContext;
     if (ctx != null) {
+      final now = DateTime.now();
+      final rapid = _lastScrollTime != null &&
+          now.difference(_lastScrollTime!).inMilliseconds < 300;
+      _lastScrollTime = now;
       Scrollable.ensureVisible(
         ctx,
-        alignment: 0.5, // 居中
-        duration: const Duration(milliseconds: 250),
+        alignment: 0.5,
+        duration: rapid ? Duration.zero : const Duration(milliseconds: 250),
       );
     }
+  }
+
+  /// 构建下拉框 items,仅歌单变化时重建(第55步缓存:避免每 tick 重建 26+ DropdownMenuItem)。
+  List<DropdownMenuItem<int>> _buildDropdownItems(ThemeData theme) {
+    if (_cachedDropdownItems != null && songs.length == _cachedSongCount) {
+      return _cachedDropdownItems!;
+    }
+    _cachedSongCount = songs.length;
+    _cachedDropdownItems = [
+      for (var i = 0; i < songs.length; i++)
+        DropdownMenuItem(
+          value: i,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              songs[i].title,
+              style: TextStyle(color: theme.colorScheme.onSurface),
+            ),
+          ),
+        ),
+      DropdownMenuItem(
+        value: -1,
+        child: Row(
+          children: [
+            Icon(Icons.add, size: 18, color: theme.colorScheme.primary),
+            const SizedBox(width: 6),
+            Text('添加自己的歌', style: TextStyle(color: theme.colorScheme.primary)),
+          ],
+        ),
+      ),
+    ];
+    return _cachedDropdownItems!;
   }
 
   /// 把"从 _playStart 到现在"的秒数结进 _totalSec,然后清掉 _playStart。
@@ -689,6 +734,11 @@ class SongScreenState extends State<SongScreen> {
       // 真正练了一会(>= 1 秒)→ 标记今天练过(去重),给统计页的日历 / 连续打卡用。
       // fire-and-forget,跟其它 prefs 写一个套路(不 await,不卡节拍)。
       _prefs?.markPracticedToday();
+      // 第55步:记录这首歌上次练习日期(今天的 ISO 日期),给统计页"上次练习"显示用。
+      _prefs?.setLastPracticed(
+        songs[_selected].id,
+        practiceDayKey(DateTime.now()),
+      );
     }
   }
 
@@ -1001,32 +1051,7 @@ class SongScreenState extends State<SongScreen> {
           underline: const SizedBox.shrink(),
           // 让下拉框占满整行宽度:歌名才有地方放,而且下面的 FittedBox 才知道往多窄缩。
           isExpanded: true,
-          items: [
-            for (var i = 0; i < songs.length; i++)
-              DropdownMenuItem(
-                value: i,
-                // FittedBox(scaleDown):歌名短就原样大小;太长就自动缩小字号塞进去,绝不溢出。
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    songs[i].title,
-                    style: TextStyle(color: theme.colorScheme.onSurface),
-                  ),
-                ),
-              ),
-            // 第43b步:末尾一项"添加自己的歌"——哨兵值 -1(不对应真歌),点它开表单、不切歌。
-            DropdownMenuItem(
-              value: -1,
-              child: Row(
-                children: [
-                  Icon(Icons.add, size: 18, color: theme.colorScheme.primary),
-                  const SizedBox(width: 6),
-                  Text('添加自己的歌', style: TextStyle(color: theme.colorScheme.primary)),
-                ],
-              ),
-            ),
-          ],
+          items: _buildDropdownItems(theme),
           onChanged: (i) {
             if (i == null) return;
             if (i == -1) {
