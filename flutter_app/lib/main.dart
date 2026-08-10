@@ -13,6 +13,7 @@
 // 测试 test/widget_test.dart import 的是这个文件 + UkuleleApp,所以这两样留在 main.dart 里不动。
 import 'package:flutter/material.dart';
 
+import 'audio/reminder_service.dart';
 import 'main_scaffold.dart';
 import 'prefs/app_preferences.dart';
 import 'theme_controller.dart';
@@ -37,12 +38,20 @@ class _UkuleleAppState extends State<UkuleleApp> {
   void initState() {
     super.initState();
     _initTheme(); // 后台读回上次选的主题(默认 system),不卡首帧
+    _initReminder(); // 第58步-4:按用户偏好设置练习提醒
   }
 
   Future<void> _initTheme() async {
     final p = await AppPreferences.load();
     if (!mounted) return;
     await _theme.init(p);
+  }
+
+  /// 第58步-4:初始化通知 + 按用户偏好同步提醒(开/关/时间)。
+  Future<void> _initReminder() async {
+    final p = await AppPreferences.load();
+    if (!mounted) return;
+    await ReminderService().sync(p);
   }
 
   @override

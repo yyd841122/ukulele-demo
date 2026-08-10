@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Clipboard:备份一键复制 / 导入粘贴
 import 'package:share_plus/share_plus.dart'; // 系统分享面板:把备份文本一键发出去(第50步)
 
+import '../audio/reminder_service.dart'; // 练习提醒(第58步-4)
 import '../models.dart';
 import '../prefs/app_preferences.dart';
 import '../song_backup.dart'; // encodeBackup / decodeBackup(第50步)
@@ -404,6 +405,10 @@ class StatsScreenState extends State<StatsScreen> {
           _DailyGoalCard(p: p),
           const SizedBox(height: 12),
 
+          // 练习提醒卡(第58步-4):开关+时间设置
+          _ReminderCard(p: p),
+          const SizedBox(height: 12),
+
           // 日历热力图:最近 13 周(≈3 个月),深色 = 练过。横向往左是更早的周。
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 6),
@@ -625,6 +630,101 @@ class _PracticeCalendar extends StatelessWidget {
         borderRadius: BorderRadius.circular(3),
       ),
     );
+  }
+}
+
+/// 练习提醒卡(第58步-4):开关 + 时间选择,改完立刻同步到系统通知。
+class _ReminderCard extends StatefulWidget {
+  final AppPreferences p;
+  const _ReminderCard({required this.p});
+
+  @override
+  State<_ReminderCard> createState() => _ReminderCardState();
+}
+
+class _ReminderCardState extends State<_ReminderCard> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final enabled = widget.p.getReminderEnabled();
+    final hour = widget.p.getReminderHour(19);
+    final minute = widget.p.getReminderMinute(0);
+    final timeLabel = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🔔', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '练习提醒',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Switch(
+                value: enabled,
+                onChanged: (v) async {
+                  if (v) {
+                    // Android 13+ 先请求通知权限
+                    await ReminderService().requestPermission();
+                  }
+                  widget.p.setReminderEnabled(v);
+                  await ReminderService().sync(widget.p);
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+          if (enabled)
+            GestureDetector(
+              onTap: () => _pickTime(context, hour, minute),
+              child: Row(
+                children: [
+                  const SizedBox(width: 30),
+                  Icon(Icons.access_time, size: 18, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Text(
+                    '每天 $timeLabel',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '点此改时间',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickTime(BuildContext context, int hour, int minute) async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: hour, minute: minute),
+    );
+    if (time == null) return;
+    widget.p.setReminderHour(time.hour);
+    widget.p.setReminderMinute(time.minute);
+    await ReminderService().sync(widget.p);
+    setState(() {});
   }
 }
 
