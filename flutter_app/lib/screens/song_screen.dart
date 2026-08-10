@@ -288,10 +288,6 @@ class SongScreenState extends State<SongScreen> {
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
       _tempo = p.getTempo(songs[_selected].id) ?? songs[_selected].tempo;
       _transpose = p.getTranspose(songs[_selected].id); // 这首歌上次的移调(没存过 = 0)
-      // 第60步:奏法 + 指弹型(按歌存,缺省 strum/0)
-      final ps = p.getPlayStyle(songs[_selected].id);
-      _playStyle = ps == 'fingerpick' ? PlayStyle.fingerpick : PlayStyle.strum;
-      _fingerpickPatternIndex = p.getFingerpickPattern(songs[_selected].id).clamp(0, 7); // 8 个指弹型
       _totalLoops = p.getLoops(songs[_selected].id); // 上次这首歌累计练的遍数
       _totalSec = p.getSec(songs[_selected].id); // 上次这首歌累计练的秒数
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
@@ -484,8 +480,6 @@ class SongScreenState extends State<SongScreen> {
       p.setAb(songs[_selected].id, _markerA, _markerB);
       p.setLoops(songs[_selected].id, _totalLoops);
       p.setSec(songs[_selected].id, _totalSec);
-      p.setPlayStyle(songs[_selected].id, _playStyle.name);
-      p.setFingerpickPattern(songs[_selected].id, _fingerpickPatternIndex);
     }
     setState(() {
       _playing = false;
@@ -505,10 +499,6 @@ class SongScreenState extends State<SongScreen> {
       _transpose = p?.getTranspose(songs[i].id) ?? 0; // 新歌的移调(没存过 = 0)
       _rebuildFlat();
       _lastLine = _lineOfChord.isNotEmpty ? _lineOfChord[0] : 0;
-      // 第60步:奏法+指弹型也切到新歌的偏好(按歌存)
-      _playStyle = (p?.getPlayStyle(songs[i].id) ?? 'strum') == 'fingerpick'
-          ? PlayStyle.fingerpick : PlayStyle.strum;
-      _fingerpickPatternIndex = (p?.getFingerpickPattern(songs[i].id) ?? 0).clamp(0, 7);
     });
     // 切完记下新选的歌【id】(下次启动直接进这首;按 id 存,加 / 删别的歌不会串位)。
     p?.setSelectedSongId(songs[i].id);
@@ -661,103 +651,6 @@ class SongScreenState extends State<SongScreen> {
     _prefs?.setRamp(_rampOn);
   }
 
-  // —— 指弹(第60步) ——
-  // 奏法:扫弦(复用 strumGrid) or 指弹(用 fingerpickGrid + playString 逐弦拨响)。
-  // 按歌存:不同歌可能适合不同奏法。
-  PlayStyle _playStyle = PlayStyle.strum;
-  int _fingerpickPatternIndex = 0; // 指弹节奏型下标(按歌存)
-
-  // —— 自由指弹(第64步) ——
-  bool _freeFingerpick = false; // 指弹子模式:不在整曲里走,选和弦+指弹型循环练
-  String _freeChord = 'C'; // 当前自由指弹的和弦(初始 C,用户可切)
-
-  /// 切换奏法:扫弦 ↔ 指弹。从指弹切回扫弦 → 退出自由模式。
-  void _togglePlayStyle() {
-    setState(() {
-      _playStyle = _playStyle == PlayStyle.strum ? PlayStyle.fingerpick : PlayStyle.strum;
-      if (_playStyle == PlayStyle.strum) _freeFingerpick = false;
-    });
-    _prefs?.setPlayStyle(songs[_selected].id, _playStyle.name);
-    _previewTimer?.cancel();
-    _previewTimer = null;
-  }
-
-  /// 切指弹节奏型:存(按歌) + 试听(没在播放时)。
-  void _setFingerpickPattern(int i) {
-    setState(() => _fingerpickPatternIndex = i);
-    _prefs?.setFingerpickPattern(songs[_selected].id, i);
-    if (widget.audio.isReady && !_playing) _previewFingerpickPattern(i);
-  }
-
-  /// 自由指弹(第64步):开关子模式。
-  void _toggleFreeFingerpick() {
-    setState(() => _freeFingerpick = !_freeFingerpick);
-    _previewTimer?.cancel();
-    _previewTimer = null;
-  }
-
-  /// 自由指弹:切到下一个和弦(按字母排)。
-  void _freeNextChord() {
-    final sng = songs[_selected];
-    final all = <String>{};
-    for (final s in sng.sections) {
-      for (final l in s.lines) { all.addAll(l.chords); }
-    }
-    if (all.isEmpty) return;
-    final l = all.toList()..sort();
-    final i = l.indexOf(_freeChord);
-    setState(() => _freeChord = l[(i + 1) % l.length]);
-  }
-
-  /// 自由指弹:切到上一个和弦。
-  void _freePrevChord() {
-    final sng = songs[_selected];
-    final all = <String>{};
-    for (final s in sng.sections) {
-      for (final l in s.lines) { all.addAll(l.chords); }
-    }
-    if (all.isEmpty) return;
-    final l = all.toList()..sort();
-    final i = l.indexOf(_freeChord);
-    final prev = i <= 0 ? l.length - 1 : i - 1;
-    setState(() => _freeChord = l[prev]);
-  }
-
-  /// 自由指弹:选指弹型(不持久——自由模式只是临时练习)。
-  void _freeSetPattern(int i) {
-    setState(() => _fingerpickPatternIndex = i);
-    if (widget.audio.isReady && !_playing) _previewFingerpickPattern(i);
-  }
-
-  /// 指弹节奏型试听:跟扫弦试听同套路——独立定时器按 90BPM 走完一小节、逐弦拨响。
-  void _previewFingerpickPattern(int fi) {
-    _previewTimer?.cancel();
-    final bpc = songs[_selected].beatsPerChord;
-    final fps = fingerpickPatternsFor(bpc);
-    final fp = fps[fi.clamp(0, fps.length - 1)];
-    final grid = fp.grid(bpc);
-    final chord = _flat.isNotEmpty ? _flat[_idx.clamp(0, _flat.length - 1)] : 'C';
-    final halfBeat = Duration(milliseconds: (30000 / 90).round());
-    _previewSlot = 0;
-    // 立刻响第 0 槽
-    _playPreviewFingerpickSlot(grid, chord);
-    _previewTimer = Timer.periodic(halfBeat, (_) {
-      _previewSlot++;
-      if (_previewSlot >= grid.length) {
-        _previewTimer?.cancel();
-        _previewTimer = null;
-        return;
-      }
-      _playPreviewFingerpickSlot(grid, chord);
-    });
-  }
-
-  void _playPreviewFingerpickSlot(List<int?> grid, String chord) {
-    if (_previewSlot < 0 || _previewSlot >= grid.length) return;
-    final s = grid[_previewSlot];
-    if (s != null) widget.audio.playString(chord, s, semis: _transpose);
-  }
-
   /// 起/重启半拍定时器:每个槽(8分音符)推进一下 + 响 + 刷新。按▶、调速都走它,推进逻辑只此一份。
   void _startTimer() {
     _timer = Timer.periodic(_halfBeat, (_) => _onTimerTick());
@@ -810,28 +703,13 @@ class SongScreenState extends State<SongScreen> {
   void _tick() {
     if (_inCountIn) {
       if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
-    } else if (_strumSoundOn) {
-      if (_freeFingerpick) {
-        // 自由指弹:单和弦+指弹型+循环
-        final fp = fingerpickPatternsFor(4)[_fingerpickPatternIndex.clamp(0, 7)];
-        final grid = fp.grid(4);
-        final si = (_slot >= 0 && _slot < grid.length) ? grid[_slot] : null;
-        if (si != null) widget.audio.playString(_freeChord, si, semis: _transpose);
-      } else if (_flat.isNotEmpty && _idx < _flat.length) {
-      if (_playStyle == PlayStyle.fingerpick) {
-        // 指弹:逐弦拨响
-        final si = _stringForCurrentSlot();
-        if (si != null) widget.audio.playString(_flat[_idx], si, semis: _transpose);
-      } else {
-        // 扫弦:复用 _strumDirForCurrentSlot
-        final dir = _strumDirForCurrentSlot();
-        if (dir == StrumDir.down) {
-          widget.audio.playChord(_flat[_idx], semis: _transpose);
-        } else if (dir == StrumDir.up) {
-          widget.audio.playChord(_flat[_idx], up: true, semis: _transpose);
-        }
+    } else if (_strumSoundOn && _flat.isNotEmpty && _idx < _flat.length) {
+      final dir = _strumDirForCurrentSlot();
+      if (dir == StrumDir.down) {
+        widget.audio.playChord(_flat[_idx], semis: _transpose);
+      } else if (dir == StrumDir.up) {
+        widget.audio.playChord(_flat[_idx], up: true, semis: _transpose);
       }
-      } // _flat not empty close
       // 休止:静音不响
     } else {
       if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
@@ -848,14 +726,6 @@ class SongScreenState extends State<SongScreen> {
     final grid = pattern.grid(bpc);
     if (_slot >= 0 && _slot < grid.length) return grid[_slot];
     return StrumDir.rest;
-  }
-  int? _stringForCurrentSlot() {
-    final bpc = songs[_selected].beatsPerChord;
-    final fps = fingerpickPatternsFor(bpc);
-    final fp = fps[_fingerpickPatternIndex.clamp(0, fps.length - 1)];
-    final grid = fp.grid(bpc);
-    if (_slot >= 0 && _slot < grid.length) return grid[_slot];
-    return null;
   }
 
   /// 试听一段节奏型:用独立定时器按固定 90 BPM 半拍粒度,把所选节奏型的 grid 走一遍,
@@ -1509,15 +1379,6 @@ class SongScreenState extends State<SongScreen> {
             onChordTap: (c) => widget.audio.playChord(c, semis: _transpose),
             fullscreen: _fullscreen,
             onToggleFullscreen: _toggleFullscreen,
-            // 第60步:指弹
-            playStyle: _playStyle,
-            onTogglePlayStyle: _togglePlayStyle,
-            fingerpickGrid: _playStyle == PlayStyle.fingerpick
-                ? fingerpickPatternsFor(song.beatsPerChord)[_fingerpickPatternIndex.clamp(0, 7)].grid(song.beatsPerChord)
-                : [],
-            fingerpickPatternNames: [for (final fp in fingerpickPatternsFor(song.beatsPerChord)) fp.name],
-            fingerpickPatternIndex: _fingerpickPatternIndex,
-            onFingerpickPatternChanged: _setFingerpickPattern,
           ),
           // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。
           LinearProgressIndicator(
