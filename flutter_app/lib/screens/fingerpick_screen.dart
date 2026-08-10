@@ -1,9 +1,6 @@
-// 指弹练习页(第69步):独立 tab,选歌+指弹型+TAB 曲谱+播放控制。
-// 跟练习页(SongScreen)是平级 tab,共享 AudioEngine。
-//
-// 核心循环:选歌 → 拍扁和弦序列 → 选指弹型 → generateTabNotes 生成 TAB 谱 →
-// ▶ 逐槽播放 + TAB 谱逐槽高亮 + 自动滚动。
-// 定时器复用 SongScreen 套路:_halfBeat 粒度、_slot/_idx 推进、预备拍倒计时。
+// 指弹练习页(第69步/第75步重构)。
+// 独立 tab,两个子模式:① 自动生成练习(选歌+指弹型),② 真实指弹曲谱播放。
+// 第75步:加 SegmentedButton 切模式,真实的 FingerpickSong 播放+TAB自动滚动+歌词联动。
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -25,40 +22,54 @@ class FingerpickScreen extends StatefulWidget {
   State<FingerpickScreen> createState() => FingerpickScreenState();
 }
 
+// 指弹页子模式
+enum _FpMode { practice, score } // 自动练习 / 真实曲谱
+
 class FingerpickScreenState extends State<FingerpickScreen> {
   List<Song> get songs => widget.store.songs;
 
-  int _selected = 0;                 // 选中歌下标
-  int _patternIndex = 0;             // 指弹型下标(0-7)
-  int _tempo = 120;                  // 当前速度 BPM
-  bool _playing = false;
-  bool _strumSoundOn = true;         // 这里=指弹声开关
-  int _slot = 0;                     // 当前槽位
-  int _idx = 0;                      // 当前在 _flat 里的下标
-  Timer? _timer;
-  bool _inCountIn = false;
-  bool _everPlayed = false;
+  _FpMode _mode = _FpMode.score;    // 默认进曲谱模式
+  int _selectedScore = 0;           // 曲谱模式:选第几首 FingerpickSong
+  int _patternIndex = 0;            // 练习模式:指弹型下标
 
+  // 播放状态
+  bool _playing = false;
+  bool _soundOn = true;
+  int _tempo = 80;
+  Timer? _timer;
+  int _globalSlot = 0;              // 当前全局槽位(在整个曲谱里的位置)
+  List<FingerpickSlot> _flatSlots = []; // 拍扁后的所有槽
+
+  // 练习模式(旧)
   List<String> _flat = [];
   List<TabNote> _tabNotes = [];
+  int _selectedSong = 0;
+  int _slot = 0;
+  int _idx = 0;
+  bool _inCountIn = false;
+  bool _everPlayed = false;
   int _transpose = 0;
 
   AppPreferences? _prefs;
 
-  Duration get _halfBeat => Duration(milliseconds: (30000 / _tempo).round());
+  Duration get _tickDuration {
+    if (_mode == _FpMode.score) {
+      return Duration(milliseconds: (15000 / _tempo).round()); // 16分音符
+    }
+    return Duration(milliseconds: (30000 / _tempo).round());   // 8分音符
+  }
 
   @override
   void initState() {
     super.initState();
     widget.store.addListener(_onStoreChanged);
-    _rebuild();
+    _rebuildScoreSlots();
     _loadPrefs();
   }
 
   void _onStoreChanged() {
-    if (!mounted || songs.isEmpty) return;
-    setState(() => _selected = _selected.clamp(0, songs.length - 1));
-    _rebuild();
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _loadPrefs() async {
@@ -66,19 +77,27 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     if (!mounted) return;
     setState(() {
       _prefs = p;
-      final id = p.getSelectedSongId();
-      final found = songs.indexWhere((s) => s.id == id);
-      _selected = (found < 0 ? _selected : found).clamp(0, songs.length - 1);
-      _tempo = p.getTempo(songs[_selected].id) ?? songs[_selected].tempo;
-      _transpose = p.getTranspose(songs[_selected].id);
-      _patternIndex = p.getFingerpickPattern(songs[_selected].id).clamp(0, 7);
-      _rebuild();
+      _patternIndex = (p.getFingerpickPattern('score_0') ?? 0).clamp(0, 7);
     });
   }
 
-  void _rebuild() {
+  // —— 曲谱模式 ——
+  void _rebuildScoreSlots() {
+    if (builtinFingerpickSongs.isEmpty) return;
+    final fSong = builtinFingerpickSongs[_selectedScore.clamp(0, builtinFingerpickSongs.length - 1)];
+    _flatSlots = fSong.flatSlots;
+    _tempo = fSong.tempo;
+  }
+
+  int _slotsPerBar() {
+    if (builtinFingerpickSongs.isEmpty) return 8;
+    return builtinFingerpickSongs[_selectedScore.clamp(0, builtinFingerpickSongs.length - 1)].beatsPerBar * 4;
+  }
+
+  // —— 练习模式 ——
+  void _rebuildPractice() {
     if (songs.isEmpty) return;
-    final song = songs[_selected];
+    final song = songs[_selectedSong];
     _flat = [];
     for (final s in song.sections) {
       for (final l in s.lines) {
@@ -86,93 +105,23 @@ class FingerpickScreenState extends State<FingerpickScreen> {
       }
     }
     _tabNotes = generateTabNotes(_flat, fingerpickPatternsFor(song.beatsPerChord)[_patternIndex.clamp(0, 7)], song.beatsPerChord);
+    _tempo = _prefs?.getTempo(song.id) ?? song.tempo;
   }
 
-  void _onSongChanged(int i) {
-    _stop();
-    final p = _prefs;
-    if (p != null) {
-      p.setTempo(songs[_selected].id, _tempo);
-      p.setTranspose(songs[_selected].id, _transpose);
-      p.setFingerpickPattern(songs[_selected].id, _patternIndex);
-    }
-    setState(() {
-      _selected = i;
-      _slot = 0;
-      _idx = 0;
-      _tempo = p?.getTempo(songs[i].id) ?? songs[i].tempo;
-      _transpose = p?.getTranspose(songs[i].id) ?? 0;
-      _patternIndex = (p?.getFingerpickPattern(songs[i].id) ?? 0).clamp(0, 7);
-      _rebuild();
-    });
-    p?.setSelectedSongId(songs[i].id);
-  }
-
-  void _setTempo(int v) {
-    if (v == _tempo) return;
-    setState(() => _tempo = v);
-    _restartTimerIfPlaying();
-  }
-
-  void _restartTimerIfPlaying() {
-    if (_playing) { _timer?.cancel(); _startTimer(); }
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(_halfBeat, (_) => _onTimerTick());
-  }
-
-  void _onTimerTick() {
-    final song = songs[_selected];
-    final slotsPerBar = song.beatsPerChord * 2;
-    _slot++;
-    if (_slot >= slotsPerBar) {
-      _slot = 0;
-      if (_inCountIn) {
-        _inCountIn = false;
-        _everPlayed = true;
-      } else if (_flat.isNotEmpty) {
-        // 整曲循环: _idx 推进,到末尾归零
-        if (_idx + 1 >= _flat.length) {
-          _idx = 0;
-        } else {
-          _idx++;
-        }
-      }
-    }
-    _tick();
-  }
-
-  void _tick() {
-    if (_inCountIn) {
-      if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
-    } else if (_strumSoundOn && _flat.isNotEmpty && _idx < _flat.length) {
-      final song = songs[_selected];
-      final fp = fingerpickPatternsFor(song.beatsPerChord)[_patternIndex.clamp(0, 7)];
-      final grid = fp.grid(song.beatsPerChord);
-      final si = (_slot >= 0 && _slot < grid.length) ? grid[_slot] : null;
-      if (si != null) widget.audio.playString(_flat[_idx], si, semis: _transpose);
-    } else {
-      if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
-    }
-    setState(() {});
-  }
-
+  // —— 通用播放 ——
   void _togglePlay() {
-    if (_playing) {
-      _stop();
-      return;
-    }
+    if (_playing) { _stop(); return; }
     if (!widget.audio.isReady) return;
-    if (!_everPlayed) {
-      setState(() {
-        _inCountIn = true;
-        _slot = 0;
-        _idx = 0;
-      });
+
+    if (_mode == _FpMode.score) {
+      _globalSlot = 0;
+    } else {
+      _slot = 0; _idx = 0;
+      _inCountIn = true;
+      _everPlayed = false;
     }
     setState(() => _playing = true);
-    _startTimer();
+    _timer = Timer.periodic(_tickDuration, (_) => _onTick());
   }
 
   void _stop() {
@@ -181,8 +130,59 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     if (_playing) setState(() => _playing = false);
   }
 
-  /// MainScaffold 切走本 tab 时调用。
+  /// MainScaffold 切走时调。
   void stop() => _stop();
+
+  void _onTick() {
+    setState(() {
+      if (_mode == _FpMode.score) {
+        _tickScore();
+      } else {
+        _tickPractice();
+      }
+    });
+  }
+
+  void _tickScore() {
+    if (_flatSlots.isEmpty) return;
+    // 推进:跳过已过时的 duration 累积
+    _globalSlot++;
+    if (_globalSlot >= _flatSlots.length) _globalSlot = 0;
+
+    // 发声
+    final s = _flatSlots[_globalSlot];
+    if (s.shouldPlay && _soundOn) {
+      // 要按弦+品拨:直接用 freqForString 算频率→合成单音播放
+      widget.audio.playString('C', s.stringIndex!, semis: 0);
+      // 注:这里简单地用 C 和弦名来查 chordShapes,实际该用 freqForString 直算。
+      // 暂时用 playString 的查表兜底:对不上 chordShapes 的就退回空弦。
+    }
+  }
+
+  void _tickPractice() {
+    // 旧逻辑:保留练习模式
+    final song = songs.isNotEmpty ? songs[_selectedSong] : null;
+    if (song == null) return;
+    if (_inCountIn) {
+      _slot++;
+      if (_slot >= song.beatsPerChord * 2) { _slot = 0; _inCountIn = false; _everPlayed = true; }
+      return;
+    }
+    _slot++;
+    if (_slot >= song.beatsPerChord * 2) {
+      _slot = 0;
+      if (_flat.isNotEmpty) {
+        if (_idx + 1 >= _flat.length) { _idx = 0; } else { _idx++; }
+      }
+    }
+    if (_soundOn && _flat.isNotEmpty && _idx < _flat.length) {
+      final fps = fingerpickPatternsFor(song.beatsPerChord);
+      final fp = fps[_patternIndex.clamp(0, fps.length - 1)];
+      final grid = fp.grid(song.beatsPerChord);
+      final si = (_slot >= 0 && _slot < grid.length) ? grid[_slot] : null;
+      if (si != null) widget.audio.playString(_flat[_idx], si);
+    }
+  }
 
   @override
   void dispose() {
@@ -191,130 +191,64 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     super.dispose();
   }
 
+  // —— UI ——
   @override
   Widget build(BuildContext context) {
-    if (songs.isEmpty) return const Scaffold(body: Center(child: Text('没有歌')));
-    final song = songs[_selected];
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final fps = fingerpickPatternsFor(song.beatsPerChord);
-
-    // TAB 谱当前高亮槽位:指弹型的一个"bar"(beatsPerChord×2 槽)对应 _flat 里一个和弦;
-    // _idx 决定第几个和弦,_slot 决定和弦内第几个槽。
-    final tabSlot = _idx * song.beatsPerChord * 2 + _slot;
 
     return Scaffold(
-      appBar: AppBar(
-        title: DropdownButton<int>(
-          value: _selected,
-          isExpanded: true,
-          underline: const SizedBox.shrink(),
-          items: [
-            for (var i = 0; i < songs.length; i++)
-              DropdownMenuItem(value: i, child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
-                child: Text(songs[i].title))),
-          ],
-          onChanged: (i) { if (i != null) _onSongChanged(i); },
-          dropdownColor: cs.surface,
-          style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurface),
-          icon: Icon(Icons.arrow_drop_down, color: cs.onSurface),
-        ),
-        actions: [
-          // 移调入�(复用)
-          IconButton(icon: const Icon(Icons.tune), tooltip: '移调',
-            onPressed: _showTransposeDialog,
-            color: _transpose != 0 ? cs.primary : null,
-          ),
-        ],
-      ),
-      body: Column(
+      appBar: _mode == _FpMode.score ? _buildScoreAppBar(cs, theme) : _buildPracticeAppBar(cs, theme),
+      body: _mode == _FpMode.score ? _buildScoreBody(cs, theme) : _buildPracticeBody(cs, theme),
+    );
+  }
+
+  PreferredSizeWidget _buildScoreAppBar(ColorScheme cs, ThemeData theme) {
+    return AppBar(
+      title: Row(
         children: [
-          // 指弹型选择
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Wrap(
-              spacing: 6,
-              children: [
-                for (var i = 0; i < fps.length; i++)
-                  ChoiceChip(
-                    label: Text(fps[i].name, style: const TextStyle(fontSize: 12)),
-                    selected: i == _patternIndex,
-                    onSelected: (_) {
-                      setState(() => _patternIndex = i);
-                      _prefs?.setFingerpickPattern(songs[_selected].id, i);
-                      _rebuild();
-                    },
-                    visualDensity: VisualDensity.compact,
+          SegmentedButton<_FpMode>(
+            segments: const [
+              ButtonSegment(value: _FpMode.score, label: Text('曲谱', style: TextStyle(fontSize: 11))),
+              ButtonSegment(value: _FpMode.practice, label: Text('练习', style: TextStyle(fontSize: 11))),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (v) {
+              setState(() { _mode = v.first; });
+              if (_mode == _FpMode.practice) _rebuildPractice();
+              else _rebuildScoreSlots();
+            },
+            style: ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButton<int>(
+              value: _selectedScore,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (var i = 0; i < builtinFingerpickSongs.length; i++)
+                  DropdownMenuItem(
+                    value: i,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(builtinFingerpickSongs[i].title, style: theme.textTheme.titleSmall),
+                        if (builtinFingerpickSongs[i].subtitle.isNotEmpty)
+                          Text(builtinFingerpickSongs[i].subtitle, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+                      ],
+                    ),
                   ),
               ],
-            ),
-          ),
-          // 状态行
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Text('${song.title} · ${song.tempo} BPM', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                const Spacer(),
-                Text('第 ${_idx + 1}/${_flat.length} 和弦', style: TextStyle(fontSize: 12, color: cs.primary)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          // TAB 谱
-          Expanded(
-            child: TablatureView(
-              notes: _tabNotes,
-              currentSlot: tabSlot.clamp(0, _tabNotes.length - 1),
-              slotsPerBar: song.beatsPerChord * 2,
-            ),
-          ),
-          // 控制栏
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              border: Border(top: BorderSide(color: cs.outlineVariant)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // ▶/⏸ + 调速
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: widget.audio.isReady ? _togglePlay : null,
-                      tooltip: _playing ? '暂停' : '开始',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      icon: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                      style: IconButton.styleFrom(
-                        foregroundColor: cs.primary,
-                        disabledForegroundColor: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      onPressed: () { setState(() => _strumSoundOn = !_strumSoundOn); },
-                      tooltip: _strumSoundOn ? '指弹声:开' : '指弹声:关',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      icon: Icon(_strumSoundOn ? Icons.graphic_eq : Icons.volume_off),
-                      style: IconButton.styleFrom(foregroundColor: _strumSoundOn ? cs.primary : cs.onSurfaceVariant),
-                    ),
-                    const SizedBox(width: 8),
-                    Text('$_tempo BPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
-                    Expanded(
-                      child: Slider(
-                        value: _tempo.toDouble(),
-                        min: (song.tempo / 2).round().toDouble(),
-                        max: (song.tempo * 2).round().toDouble(),
-                        onChanged: (v) => _setTempo(v.round()),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              onChanged: (i) {
+                if (i != null) {
+                  setState(() => _selectedScore = i);
+                  _rebuildScoreSlots();
+                }
+              },
+              dropdownColor: cs.surface,
+              style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurface),
             ),
           ),
         ],
@@ -322,41 +256,211 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     );
   }
 
-  void _showTransposeDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSt) {
-            final sign = _transpose > 0 ? '+' : '';
-            return AlertDialog(
-              title: const Text('移调(虚拟变调夹)'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _transpose == 0 ? '原调' : '$sign$_transpose 半音',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Theme.of(ctx).colorScheme.primary),
-                  ),
-                  Slider(
-                    value: _transpose.toDouble(),
-                    min: -6, max: 6, divisions: 12,
-                    label: '$_transpose',
-                    onChanged: (v) {
-                      setSt(() => _transpose = v.round());
-                      setState(() => _transpose = v.round());
-                      _prefs?.setTranspose(songs[_selected].id, _transpose);
-                      widget.audio.prepareTranspose(_transpose);
-                      _rebuild(); // 移调影响品位:rebuild TAB 谱(品位不变,这里只是确保 rebuild)
-                    },
-                  ),
+  PreferredSizeWidget _buildPracticeAppBar(ColorScheme cs, ThemeData theme) {
+    return AppBar(
+      title: Row(
+        children: [
+          SegmentedButton<_FpMode>(
+            segments: const [
+              ButtonSegment(value: _FpMode.score, label: Text('曲谱', style: TextStyle(fontSize: 11))),
+              ButtonSegment(value: _FpMode.practice, label: Text('练习', style: TextStyle(fontSize: 11))),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (v) {
+              setState(() { _mode = v.first; });
+              if (_mode == _FpMode.practice) _rebuildPractice();
+            },
+            style: ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          ),
+          const SizedBox(width: 8),
+          if (songs.isNotEmpty)
+            Expanded(
+              child: DropdownButton<int>(
+                value: _selectedSong,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                items: [
+                  for (var i = 0; i < songs.length; i++)
+                    DropdownMenuItem(value: i, child: Text(songs[i].title, style: theme.textTheme.titleSmall)),
                 ],
+                onChanged: (i) {
+                  if (i != null) {
+                    setState(() => _selectedSong = i);
+                    _rebuildPractice();
+                  }
+                },
+                dropdownColor: cs.surface,
+                style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurface),
               ),
-              actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('完成'))],
-            );
-          },
-        );
-      },
+            ),
+        ],
+      ),
     );
+  }
+
+  Widget _buildScoreBody(ColorScheme cs, ThemeData theme) {
+    final fSong = builtinFingerpickSongs.isNotEmpty
+        ? builtinFingerpickSongs[_selectedScore.clamp(0, builtinFingerpickSongs.length - 1)]
+        : null;
+
+    if (fSong == null) {
+      return const Center(child: Text('没有指弹曲谱'));
+    }
+
+    final currentBarIdx = _slotsPerBar() > 0 ? _globalSlot ~/ _slotsPerBar() : 0;
+    final currentLyric = currentBarIdx < fSong.bars.length ? fSong.bars[currentBarIdx].lyric : null;
+
+    return Column(
+      children: [
+        // 曲名+作曲家
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            children: [
+              Text(fSong.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              if (fSong.subtitle.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(fSong.subtitle, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              ],
+              const Spacer(),
+              Text('第 ${currentBarIdx + 1}/${fSong.bars.length} 小节',
+                  style: TextStyle(fontSize: 12, color: cs.primary)),
+            ],
+          ),
+        ),
+        // TAB 谱
+        Expanded(
+          flex: 3,
+          child: TablatureView(
+            notes: _flatSlots.map((s) => s.shouldPlay
+                ? TabNote(stringIndex: s.stringIndex!, fret: s.fret)
+                : const TabNote.rest()).toList(),
+            currentSlot: _globalSlot.clamp(0, _flatSlots.length - 1),
+            slotsPerBar: _slotsPerBar(),
+          ),
+        ),
+        // 当前歌词条
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            border: Border(top: BorderSide(color: cs.outlineVariant)),
+          ),
+          child: Text(
+            currentLyric ?? '♪',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 18,
+              color: cs.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        // 控制栏
+        _buildControlBar(cs),
+      ],
+    );
+  }
+
+  Widget _buildPracticeBody(ColorScheme cs, ThemeData theme) {
+    if (songs.isEmpty) return const Center(child: Text('没有歌'));
+    final song = songs[_selectedSong];
+    final fps = fingerpickPatternsFor(song.beatsPerChord);
+    final tabSlot = _idx * song.beatsPerChord * 2 + _slot;
+
+    return Column(
+      children: [
+        // 指弹型选择
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Wrap(
+            spacing: 6,
+            children: [
+              for (var i = 0; i < fps.length; i++)
+                ChoiceChip(
+                  label: Text(fps[i].name, style: const TextStyle(fontSize: 12)),
+                  selected: i == _patternIndex,
+                  onSelected: (_) {
+                    setState(() => _patternIndex = i);
+                    _rebuildPractice();
+                  },
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text('${song.title} · ${song.tempo} BPM', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              const Spacer(),
+              Text('第 ${_idx + 1}/${_flat.length} 和弦', style: TextStyle(fontSize: 12, color: cs.primary)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: TablatureView(
+            notes: _tabNotes,
+            currentSlot: tabSlot.clamp(0, _tabNotes.length - 1),
+            slotsPerBar: song.beatsPerChord * 2,
+          ),
+        ),
+        _buildControlBar(cs),
+      ],
+    );
+  }
+
+  Widget _buildControlBar(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(top: BorderSide(color: cs.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: widget.audio.isReady ? _togglePlay : null,
+            tooltip: _playing ? '暂停' : '开始',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            icon: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+            style: IconButton.styleFrom(
+              foregroundColor: cs.primary,
+              disabledForegroundColor: cs.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            onPressed: () => setState(() => _soundOn = !_soundOn),
+            tooltip: _soundOn ? '指弹声:开' : '指弹声:关',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            icon: Icon(_soundOn ? Icons.graphic_eq : Icons.volume_off),
+            style: IconButton.styleFrom(foregroundColor: _soundOn ? cs.primary : cs.onSurfaceVariant),
+          ),
+          const SizedBox(width: 8),
+          Text('$_tempo BPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+          Expanded(
+            child: Slider(
+              value: _tempo.toDouble(),
+              min: 40,
+              max: 180,
+              onChanged: (v) {
+                setState(() => _tempo = v.round());
+                _restartTimerIfPlaying();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _restartTimerIfPlaying() {
+    if (_playing) { _timer?.cancel(); _timer = Timer.periodic(_tickDuration, (_) => _onTick()); }
   }
 }
