@@ -68,31 +68,31 @@ void main() {
       }
     });
 
-    test('全下拨:只有正拍拨 G 弦(偶数槽=3,奇数槽=null)', () {
+    test('全下拨:只有正拍拨 G 弦(偶数槽=0,奇数槽=null)', () {
       final fp = fingerpickPatternsFor(4).firstWhere((f) => f.name == '全下拨');
       final g = fp.grid(4);
       expect(g.length, 8);
       for (var s = 0; s < 8; s++) {
         if (s.isEven) {
-          expect(g[s], 3); // G 弦
+          expect(g[s], 0); // G 弦(stringIndex 0)
         } else {
           expect(g[s], isNull);
         }
       }
     });
 
-    test('4321 琶音:4 个槽一组循环 3-2-1-0', () {
+    test('4321 琶音:物理 4-3-2-1 = stringIndex 0-1-2-3(G-C-E-A) 循环', () {
       final fp = fingerpickPatternsFor(4).firstWhere((f) => f.name == '4321 琶音');
       final g = fp.grid(4);
       expect(g.length, 8);
-      expect(g[0], 3); // G
-      expect(g[1], 2); // E
-      expect(g[2], 1); // C
-      expect(g[3], 0); // A
-      expect(g[4], 3); // G (第二组)
-      expect(g[5], 2);
-      expect(g[6], 1);
-      expect(g[7], 0);
+      expect(g[0], 0); // G
+      expect(g[1], 1); // C
+      expect(g[2], 2); // E
+      expect(g[3], 3); // A
+      expect(g[4], 0); // G (第二组)
+      expect(g[5], 1);
+      expect(g[6], 2);
+      expect(g[7], 3);
     });
   });
 }

@@ -74,6 +74,12 @@ class FingerpickScreenState extends State<FingerpickScreen> {
 
   void _onStoreChanged() {
     if (!mounted) return;
+    // 歌单变了(加/删歌):练习模式的 _selectedSong 可能越界 → 夹回合法范围 + 重建数据。
+    // 不处理的话 _buildPracticeBody 的 songs[_selectedSong] 会 RangeError 崩。
+    if (songs.isNotEmpty && _selectedSong >= songs.length) {
+      _selectedSong = songs.length - 1;
+      _rebuildPractice();
+    }
     setState(() {});
   }
 
@@ -82,7 +88,8 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     if (!mounted) return;
     setState(() {
       _prefs = p;
-      _patternIndex = p.getFingerpickPattern('score_0').clamp(0, 7);
+      // 练习模式的指弹型用全局 key 'practice'(不绑具体歌);曲谱模式自带数据不用 prefs。
+      _patternIndex = p.getFingerpickPattern('practice').clamp(0, 7);
     });
   }
 
@@ -408,7 +415,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
             ChoiceChip(
               label: Text(fps[i].name, style: const TextStyle(fontSize: 12)),
               selected: i == _patternIndex,
-              onSelected: (_) { _stop(); setState(() => _patternIndex = i); _rebuildPractice(); },
+              onSelected: (_) { _stop(); setState(() => _patternIndex = i); _prefs?.setFingerpickPattern('practice', i); _rebuildPractice(); },
               visualDensity: VisualDensity.compact,
             ),
         ]),

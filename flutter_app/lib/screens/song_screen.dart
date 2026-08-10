@@ -350,8 +350,9 @@ class SongScreenState extends State<SongScreen> {
     widget.store.removeListener(_onStoreChanged); // 页面销毁:别再收歌库通知
     _searchCtl.dispose(); // 搜索框控制器(第58步-1)
     // 页面销毁前最后存一次当前歌的速度(滑块拖动时不存、怕写太勤;走这里兜底)。
+    // ramp 开着时存原速:别把自动提速的值落盘,否则下次进来直接原速、渐进提速失效。
     _accumulateSec(); // 把正在播放的尾段时间结进 _totalSec(没在播就是 no-op)
-    _prefs?.setTempo(songs[_selected].id, _tempo);
+    _prefs?.setTempo(songs[_selected].id, _rampOn ? songs[_selected].tempo : _tempo);
     _saveStats(); // 兜底存累计遍数 + 秒数
     _setWakelock(false); // 离开页面:释放屏幕常亮,别一直亮着耗电
     // 页面销毁时收尾:停闹钟、释放预览定时器。_audio 不在这释放——它归 MainScaffold 拥有。
@@ -475,7 +476,7 @@ class SongScreenState extends State<SongScreen> {
     final p = _prefs;
     // 切走前先把【当前这首】(还没换的 _selected)的速度、移调、AB、累计打卡都存下来——下次回来才接得上。
     if (p != null) {
-      p.setTempo(songs[_selected].id, _tempo);
+      p.setTempo(songs[_selected].id, _rampOn ? songs[_selected].tempo : _tempo);
       p.setTranspose(songs[_selected].id, _transpose);
       p.setAb(songs[_selected].id, _markerA, _markerB);
       p.setLoops(songs[_selected].id, _totalLoops);

@@ -370,5 +370,6 @@ class AudioEngine {
       SoLoud.instance.disposeSource(s);
     }
     if (_voiceSrc != null) SoLoud.instance.disposeSource(_voiceSrc!);
+    _initialized = false; // 复位:dispose 后 isReady 应回 false,避免误判还能播
   }
 }

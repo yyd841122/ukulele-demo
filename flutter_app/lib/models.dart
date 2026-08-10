@@ -295,62 +295,63 @@ class FingerpickPattern {
 List<FingerpickPattern> fingerpickPatternsFor(int beatsPerChord) {
   final slots = beatsPerChord * 2;
 
-  // 4321 琶音:每 4 个槽为一组拨 4→3→2→1
+  // 弦序约定:stringIndex 0=G, 1=C, 2=E, 3=A(物理弦号 4,3,2,1 → stringIndex = 4 - 物理弦号)。
+  // 指弹指法 p-i-m-a(拇指-食-中-无名)对应 G-C-E-A = stringIndex [0,1,2,3]。
+
+  // 4321 琶音:物理 4-3-2-1 = G-C-E-A = stringIndex [0,1,2,3]
   final arpeggio = <int?>[];
   for (var s = 0; s < slots; s++) {
-    final phase = s % 4;
-    arpeggio.add(phase == 0 ? 3 : (phase == 1 ? 2 : (phase == 2 ? 1 : 0)));
+    arpeggio.add(s % 4); // 0,1,2,3 循环
   }
 
-  // 4323 织体:4-3-2-3 重复
+  // 4323 织体:物理 4-3-2-3 = G-C-E-C = stringIndex [0,1,2,1]
   final bossa = <int?>[];
   for (var s = 0; s < slots; s++) {
-    final phase = s % 4;
-    bossa.add(phase == 0 ? 3 : (phase == 1 ? 2 : (phase == 2 ? 1 : 2)));
+    final p = s % 4;
+    bossa.add(p == 0 ? 0 : (p == 1 ? 1 : (p == 2 ? 2 : 1)));
   }
 
-  // 4231 下行:4-2-3-1 重复
+  // 4231 下行:物理 4-2-3-1 = G-E-C-A = stringIndex [0,2,1,3]
   final down4231 = <int?>[];
   for (var s = 0; s < slots; s++) {
-    final phase = s % 4;
-    down4231.add(phase == 0 ? 3 : (phase == 1 ? 1 : (phase == 2 ? 2 : 0)));
+    final p = s % 4;
+    down4231.add(p == 0 ? 0 : (p == 1 ? 2 : (p == 2 ? 1 : 3)));
   }
 
-  // 3121 上行:3-0-1-0 重复(偏亮)
+  // 3121 上行:物理 3-1-2-1 = C-A-E-A = stringIndex [1,3,2,3]
   final up3121 = <int?>[];
   for (var s = 0; s < slots; s++) {
-    final phase = s % 4;
-    up3121.add(phase == 0 ? 2 : (phase == 1 ? 0 : (phase == 2 ? 1 : 0)));
+    final p = s % 4;
+    up3121.add(p == 0 ? 1 : (p == 1 ? 3 : (p == 2 ? 2 : 3)));
   }
 
-  // 八拍琶音:4-3-2-1-2-3-2-1 循环(每 8 槽)
-  final fullArp = [3, 2, 1, 0, 1, 2, 1, 0];
+  // 八拍琶音:物理 4-3-2-1-2-3-2-1 = stringIndex [0,1,2,3,2,1,2,3]
+  final fullArp = [0, 1, 2, 3, 2, 1, 2, 3];
   final fullArpList = <int?>[];
   for (var s = 0; s < slots; s++) {
     fullArpList.add(fullArp[s % 8]);
   }
 
-  // 拇指节奏:3-2-1-2-3-2-1-0 循环
-  final thumb = [3, 2, 1, 2, 3, 2, 1, 0];
+  // 拇指节奏:拇指(G)打根音 + 手指拨中高音,stringIndex [0,2,1,2, 0,2,1,3]
+  final thumb = [0, 2, 1, 2, 0, 2, 1, 3];
   final thumbList = <int?>[];
   for (var s = 0; s < slots; s++) {
     thumbList.add(thumb[s % 8]);
   }
 
-  // 全下拨:每正拍拨 G 弦(拇指打根音),像指弹版"全下"
+  // 全下拨:每正拍拨 G 弦(stringIndex 0,拇指打根音),像指弹版"全下"
   final allDownFp = <int?>[];
   for (var s = 0; s < slots; s++) {
-    allDownFp.add(s.isEven ? 3 : null); // 正拍拨 G 弦,后半拍休止
+    allDownFp.add(s.isEven ? 0 : null); // 正拍拨 G 弦,后半拍休止
   }
 
-  // 根音+琶音:4-(4321) 第一拍拇指打根音、然后琶音
+  // 根音琶音:第一拍拇指打 G 弦根音、然后 4321 琶音
   final rootArp = <int?>[];
   for (var s = 0; s < slots; s++) {
     if (s == 0) {
-      rootArp.add(3); // 拇指打 G
+      rootArp.add(0); // 拇指打 G 弦(stringIndex 0)
     } else {
-      final phase = (s - 1) % 4;
-      rootArp.add(phase == 0 ? 3 : (phase == 1 ? 2 : (phase == 2 ? 1 : 0)));
+      rootArp.add((s - 1) % 4); // 0,1,2,3 琶音
     }
   }
 
@@ -1363,7 +1364,7 @@ final builtinFingerpickSongs = <FingerpickSong>[
   ),
 
   // ═══ 2. Greensleeves (绿袖子) ═══
-  // 英国传统民谣,Am 调,6/8 感觉用 3/4 节拍。旋律优美下行。
+  // 英国传统民谣,Am 调。原曲 6/8 拍,这里按 4/4 改编(每小节 16 个 16 分 tick,8 个 8 分音符)。
   FingerpickSong(
     title: 'Greensleeves (绿袖子)',
     subtitle: '英国传统民谣 · Am 调',

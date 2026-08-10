@@ -28,8 +28,8 @@ String encodeBackup(List<Song> songs) {
 
 /// 把备份 JSON 文本解析回 Song 列表。
 /// 认两种形态:{"songs":[...]} 带壳备份,或光秃秃 [...] 数组。不是合法 JSON / 没有 songs → 抛 FormatException。
-/// 单首歌用 Song.fromJson 解(它对缺字段给默认值,跨版本向前兼容);类型不对的元素抛(让调用方提示)。
-/// 解析后检查:len(songs) ≠ len(raw) → 有非对象元素被丢弃,抛 FormatException 告知用户(防止静默丢歌)。
+/// 单首歌用 Song.fromJson 解(它对缺字段给默认值,跨版本向前兼容)。
+/// 数组里任何非对象元素 → 立刻抛 FormatException 告知用户(不静默丢歌,宁可拒收也不让用户以为全导入成功了)。
 List<Song> decodeBackup(String text) {
   final Object decoded;
   try {
