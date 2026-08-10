@@ -2,7 +2,7 @@
 
 一个跟着**节拍器**练尤克里里弹唱的安卓 app(Flutter):告诉你现在该按哪个和弦、怎么按、什么时候换、扫几下;还能给琴调音、专项练和弦切换、看练习打卡。
 
-> 跟着 Claude Code 一步步从零做出来的第一个项目(第8步起从 PWA 迁到 Flutter 安卓,做到第51步)。领域词汇见 [CONTEXT.md](CONTEXT.md),架构决策见 [docs/adr/](docs/adr/)。
+> 跟着 Claude Code 一步步从零做出来的第一个项目(第8步起从 PWA 迁到 Flutter 安卓,做到第57步)。领域词汇见 [CONTEXT.md](CONTEXT.md),架构决策见 [docs/adr/](docs/adr/)。
 
 ## 能干啥
 
@@ -15,7 +15,7 @@
 - 🎙 **跟唱录音**:练琴时录人声,顶栏「听刚才」回放最后一段
 - 📊 本次 / 累计遍数 + 时长、整首进度条
 
-**和弦** tab:全部和弦大图速查,点一下听扫弦声。
+**和弦** tab:43 个和弦大图速查(分 9 组:大三/小三/属七/大七/小七/sus4/sus2/dim/aug),点一下听扫弦声。
 
 **统计** tab:总计遍数 / 时长 + 🔥 连续练琴天数 + 13 周练习日历热力图 + 每首歌明细;顶栏 🎨 可切主题(跟随系统 / 浅色 / 深色);顶栏 ☁ **备份/分享/导入**自加歌(导出 JSON 文本 → 复制或系统分享;粘贴文本导回)。
 
@@ -23,7 +23,7 @@
 
 **换和弦** tab:挑两个和弦跟着节拍按时切换、数你换了多少次,带「60 秒挑战」;记住上次选的弦对 / 速度 / 档位。
 
-**13 首内置歌** + 你自己加的歌。内置:Somewhere Over the Rainbow、What a Wonderful World、Let It Be、You Are My Sunshine、Riptide、I'm Yours、Stand By Me、Hey Soul Sister、Zombie、Counting Stars、Can't Help Falling in Love、Lean on Me、Blowin' in the Wind。还能在 app 里**加自己的歌**(选歌下拉框 →「➕ 添加自己的歌」,填歌名 + 速度 + **每和弦几拍(2/3/4/6/8)** + 歌词带和弦;点和弦按钮在光标处插 `[C]`、行首写 `#副歌` 给段落命名),加完跟内置歌一样能跟练、能改、能删。
+**26 首内置歌**(13 英文 + 13 中文) + 你自己加的歌。英文:Somewhere Over the Rainbow、What a Wonderful World、Let It Be、You Are My Sunshine、Riptide、I'm Yours、Stand By Me、Hey Soul Sister、Zombie、Counting Stars、Can't Help Falling in Love、Lean on Me、Blowin' in the Wind、Three Little Birds、Hallelujah、No Woman No Cry、Country Roads。中文:月亮代表我的心、童年、那些花儿、后来、朋友、童话、那些年、小幸运、遇见。支持 3/4 拍(如"遇见")。还能在 app 里**加自己的歌**(选歌下拉框 →「➕ 添加自己的歌」,填歌名 + 速度 + **每和弦几拍(2/3/4/6/8)** + 歌词带和弦;点和弦按钮在光标处插 `[C]`、行首写 `#副歌` 给段落命名),加完跟内置歌一样能跟练、能改、能删。练习页顶栏 **FilterChip** 可筛 全部/英文/中文。
 
 ## 在安卓手机上用
 

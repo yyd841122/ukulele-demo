@@ -111,6 +111,17 @@ class SongScreenState extends State<SongScreen> {
   List<DropdownMenuItem<int>>? _cachedDropdownItems;
   int _cachedSongCount = -1;
 
+  // 语言筛选(第57步):'全部' / '英文' / '中文'。默认全部。切筛选时清 items 缓存。
+  String _languageFilter = '全部';
+
+  /// 按当前语言筛选后的歌单。
+  List<Song> get _filteredSongs {
+    if (_languageFilter == '全部') return songs;
+    final reg = RegExp(r'[一-鿿]');
+    final wantChinese = _languageFilter == '中文';
+    return songs.where((s) => wantChinese ? reg.hasMatch(s.title) : !reg.hasMatch(s.title)).toList();
+  }
+
   // 移调(虚拟变调夹,半音偏移)。0 = 不移调(原音高);界面 Slider 限定 -6~+6。
   // 按歌存:每首歌贴合嗓音要的移调不一样,跟 tempo 一个套路,切歌不串。照旧按原和弦指法,
   // app 把扫弦声整体升 / 降这么多半音重新合成出来(双向都行,不像真变调夹只能升)。
@@ -148,6 +159,24 @@ class SongScreenState extends State<SongScreen> {
     if (!mounted || songs.isEmpty) return;
     setState(() {
       _selected = _selected.clamp(0, songs.length - 1);
+    });
+  }
+
+  /// 切语言筛选(第57步):清 items 缓存、防 _selected 越界。当前歌不在筛选结果中→自动跳到筛后第一首。
+  void _setLanguageFilter(String v) {
+    if (v == _languageFilter) return;
+    setState(() {
+      _languageFilter = v;
+      _cachedDropdownItems = null;
+      final filtered = _filteredSongs;
+      if (filtered.isNotEmpty) {
+        final current = songs[_selected];
+        final idx = filtered.indexOf(current);
+        if (idx == -1) {
+          // 当前歌不在筛选结果里→跳到第一首
+          _onSongChanged(songs.indexOf(filtered.first));
+        }
+      }
     });
   }
 
@@ -690,20 +719,23 @@ class SongScreenState extends State<SongScreen> {
   }
 
   /// 构建下拉框 items,仅歌单变化时重建(第55步缓存:避免每 tick 重建 26+ DropdownMenuItem)。
+  /// 第57步:改用 _filteredSongs,筛选后只显示对应语言的歌。
   List<DropdownMenuItem<int>> _buildDropdownItems(ThemeData theme) {
+    final filtered = _filteredSongs;
+    // 缓存 key = 歌单长度 + 筛选值,确保切筛选时重建
     if (_cachedDropdownItems != null && songs.length == _cachedSongCount) {
       return _cachedDropdownItems!;
     }
     _cachedSongCount = songs.length;
     _cachedDropdownItems = [
-      for (var i = 0; i < songs.length; i++)
+      for (final s in filtered)
         DropdownMenuItem(
-          value: i,
+          value: songs.indexOf(s), // 映射回真实下标
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
-              songs[i].title,
+              s.title,
               style: TextStyle(color: theme.colorScheme.onSurface),
             ),
           ),
@@ -1067,22 +1099,52 @@ class SongScreenState extends State<SongScreen> {
           ),
           icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurface),
         ),
-        // 第二行:速度信息。用 AppBar 的 bottom 槽放,跟标题各占一行,互不重叠。
+        // 第二行:语言筛选芯片 + 速度信息(第57步加 FilterChip)。
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(24),
+          preferredSize: const Size.fromHeight(48),
           child: Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            // FittedBox(scaleDown):文字太长(累计/时长一加就长)就自动缩字号塞进 24px 高的条,绝不溢出。
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${_recording ? '🔴 录音中 · ' : ''}${formatTranspose(_transpose)}$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${formatPracticeSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 语言筛选芯片:全部 / 英文 / 中文
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _filterChip(
+                      label: '全部',
+                      selected: _languageFilter == '全部',
+                      onTap: () => _setLanguageFilter('全部'),
+                    ),
+                    const SizedBox(width: 4),
+                    _filterChip(
+                      label: '英文(${songs.where((s) => !RegExp(r'[一-鿿]').hasMatch(s.title)).length})',
+                      selected: _languageFilter == '英文',
+                      onTap: () => _setLanguageFilter('英文'),
+                    ),
+                    const SizedBox(width: 4),
+                    _filterChip(
+                      label: '中文(${songs.where((s) => RegExp(r'[一-鿿]').hasMatch(s.title)).length})',
+                      selected: _languageFilter == '中文',
+                      onTap: () => _setLanguageFilter('中文'),
+                    ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 2),
+                // 速度信息
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${_recording ? '🔴 录音中 · ' : ''}${formatTranspose(_transpose)}$_tempo BPM${_tempo == song.tempo ? '' : (_tempo < song.tempo ? ' · 慢练' : ' · 加速')} · ${song.beatsPerChord}拍 · 本次 $_loops / 累计 $_totalLoops 遍 · 练了 ${formatPracticeSec(_totalSec)}${_rampOn && _tempo < song.tempo ? ' · 自动提速→${song.tempo}' : ''}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1186,6 +1248,33 @@ class SongScreenState extends State<SongScreen> {
         ],
       ),
       // ▶/⏸ 已挪进练习栏的调速行(最左小图标),不再用右下大圆按钮——它会在歌长时挡住歌词。
+    );
+  }
+
+  /// 一个语言筛选芯片(第57步):选中时填充主色,未选中用轮廓。
+  Widget _filterChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? cs.primary : null,
+          borderRadius: BorderRadius.circular(12),
+          border: selected ? null : Border.all(color: cs.outlineVariant),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 }
