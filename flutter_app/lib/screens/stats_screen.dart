@@ -400,6 +400,10 @@ class StatsScreenState extends State<StatsScreen> {
           ),
           const SizedBox(height: 12),
 
+          // 每日目标卡(第58步-3):今天练了多少 vs 目标
+          _DailyGoalCard(p: p),
+          const SizedBox(height: 12),
+
           // 日历热力图:最近 13 周(≈3 个月),深色 = 练过。横向往左是更早的周。
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 6),
@@ -619,6 +623,127 @@ class _PracticeCalendar extends StatelessWidget {
       decoration: BoxDecoration(
         color: did ? cs.primary : cs.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(3),
+      ),
+    );
+  }
+}
+
+/// 每日练习目标卡(第58步-3):今天练了多久 vs 目标,线性进度条 + 设置入口。
+class _DailyGoalCard extends StatelessWidget {
+  final AppPreferences p;
+  const _DailyGoalCard({required this.p});
+
+  /// 弹对话框设目标:10/20/30/45/60 分钟,点完立刻存。
+  void _showGoalDialog(BuildContext context) {
+    final goal = p.getDailyGoalMin(30);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('每日练琴目标'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '目标: $goal 分钟',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(ctx).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [10, 20, 30, 45, 60]
+                    .map((m) => ChoiceChip(
+                          label: Text('$m 分'),
+                          selected: goal == m,
+                          onSelected: (_) {
+                            p.setDailyGoalMin(m);
+                            Navigator.pop(ctx);
+                          },
+                        ))
+                    .toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final goalMin = p.getDailyGoalMin(30);
+    final today = practiceDayKey(DateTime.now());
+    final todaySec = p.getTodaySec(today);
+    final todayMin = (todaySec / 60).round();
+    final progress = goalMin > 0 ? (todayMin / goalMin).clamp(0.0, 1.0) : 0.0;
+    final reached = progress >= 1.0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: reached ? cs.primaryContainer : cs.tertiaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: GestureDetector(
+        onTap: () => _showGoalDialog(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  reached ? '🎉' : '🎯',
+                  style: const TextStyle(fontSize: 22),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    reached ? '今日目标达成!' : '今日目标',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: reached ? cs.onPrimaryContainer : cs.onTertiaryContainer,
+                    ),
+                  ),
+                ),
+                Icon(Icons.settings_outlined, size: 18,
+                    color: reached ? cs.onPrimaryContainer : cs.onTertiaryContainer),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '今天练了 ${formatPracticeSec(todaySec)} / 目标 $goalMin 分钟',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: reached ? cs.onPrimaryContainer : cs.onTertiaryContainer,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 8,
+                backgroundColor: (reached ? cs.onPrimaryContainer : cs.onTertiaryContainer).withValues(alpha: 0.2),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  reached ? cs.onPrimaryContainer : cs.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
