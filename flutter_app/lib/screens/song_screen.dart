@@ -162,6 +162,16 @@ class SongScreenState extends State<SongScreen> {
   int? _markerA;
   int? _markerB;
 
+  // —— 全屏练习模式(第58步-6)——
+  bool _fullscreen = false;
+
+  /// 给 MainScaffold 读:决定是否隐藏底部导航栏。
+  bool get isFullscreen => _fullscreen;
+
+  void _toggleFullscreen() {
+    setState(() => _fullscreen = !_fullscreen);
+  }
+
   // 持久化:记住上次的歌 / 速度 / 节奏型 / AB 区间。initState 里异步加载(_loadPrefs),
   // 没加载好之前是 null —— 各保存点都用 ?. 守住,加载好才真写。
   AppPreferences? _prefs;
@@ -1150,7 +1160,8 @@ class SongScreenState extends State<SongScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
+      // 全屏模式(第58步-6):隐藏顶栏
+      appBar: _fullscreen ? null : AppBar(
         // 标题行:选歌下拉框(独占整行宽度,不再和 BPM 抢,就不会重叠出斑马纹)。
         title: DropdownButton<int>(
           value: _selected,
@@ -1368,6 +1379,9 @@ class SongScreenState extends State<SongScreen> {
               setState(() {}); // 刷新喇叭图标颜色
             },
             onChordTap: (c) => widget.audio.playChord(c, semis: _transpose), // 点和弦卡 → 听这个和弦的扫弦声(带当前移调)
+            // 全屏模式按钮(第58步-6)
+            fullscreen: _fullscreen,
+            onToggleFullscreen: _toggleFullscreen,
           ),
           // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。
           LinearProgressIndicator(

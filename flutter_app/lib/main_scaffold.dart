@@ -104,6 +104,8 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    // 第58步-6:全屏模式隐藏底导航
+    final fullscreen = _index == 0 && (_songKey.currentState?.isFullscreen ?? false);
     return Scaffold(
       // IndexedStack 保活:切 tab 不重建子页,练习页节拍器状态不丢。
       body: IndexedStack(
@@ -116,7 +118,7 @@ class _MainScaffoldState extends State<MainScaffold> {
           ChordTrainerScreen(key: _trainerKey, audio: _audio),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
+      bottomNavigationBar: fullscreen ? null : BottomNavigationBar(
         // fixed:选中/未选中的 label 都常显。底导航有 4 个 tab,默认会变 shifting(label 忽隐忽现),
         // 显式 fixed 让 4 个 label 都常显。
         type: BottomNavigationBarType.fixed,

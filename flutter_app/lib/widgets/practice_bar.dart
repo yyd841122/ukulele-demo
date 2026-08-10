@@ -37,6 +37,9 @@ class PracticeBar extends StatelessWidget {
   final String metronomeSound; // 当前音色名('click'/'beep'/'wood'/'rim')
   final List<String> metronomeSoundNames; // 所有可用音色名
   final ValueChanged<String> onMetronomeSoundChanged; // 切音色时回调
+  // 第58步-6:全屏模式
+  final bool fullscreen;
+  final VoidCallback onToggleFullscreen;
 
   const PracticeBar({
     super.key,
@@ -67,9 +70,12 @@ class PracticeBar extends StatelessWidget {
     this.metronomeSound = 'click',
     this.metronomeSoundNames = const ['click', 'beep', 'wood', 'rim'],
     this.onMetronomeSoundChanged = _noop,
+    this.fullscreen = false,
+    this.onToggleFullscreen = _noopVoid,
   });
 
   static void _noop(String _) {}
+  static void _noopVoid() {}
 
   @override
   Widget build(BuildContext context) {
@@ -278,6 +284,18 @@ class PracticeBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
+              // 全屏模式切换(第58步-6)
+              IconButton(
+                onPressed: onToggleFullscreen,
+                tooltip: fullscreen ? '退出全屏' : '全屏练习',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen, size: 20),
+                style: IconButton.styleFrom(
+                  foregroundColor: fullscreen ? cs.primary : cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 4),
               Text(
                 '调速',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
@@ -324,13 +342,9 @@ class PracticeBar extends StatelessWidget {
               for (final s in metronomeSoundNames)
                 ListTile(
                   title: Text(_soundLabel(s)),
-                  leading: Radio<String>(
-                    value: s,
-                    groupValue: metronomeSound,
-                    onChanged: (v) {
-                      if (v != null) onMetronomeSoundChanged(v);
-                      Navigator.pop(ctx);
-                    },
+                  leading: Icon(
+                    metronomeSound == s ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                    color: metronomeSound == s ? Theme.of(ctx).colorScheme.primary : null,
                   ),
                   onTap: () {
                     onMetronomeSoundChanged(s);
