@@ -114,13 +114,36 @@ class SongScreenState extends State<SongScreen> {
   // 语言筛选(第57步):'全部' / '英文' / '中文'。默认全部。切筛选时清 items 缓存。
   String _languageFilter = '全部';
 
-  /// 按当前语言筛选后的歌单。
+  // 收藏筛选(第58步-2):'全部' / '收藏'。默认全部。
+  String _favoriteFilter = '全部';
+
+  // 歌曲搜索(第58步-1)。
+  String _searchQuery = '';
+  bool _showSearch = false;
+  final TextEditingController _searchCtl = TextEditingController();
+
+  /// 按当前语言+收藏+搜索词筛选后的歌单。
   List<Song> get _filteredSongs {
-    if (_languageFilter == '全部') return songs;
-    final reg = RegExp(r'[一-鿿]');
-    final wantChinese = _languageFilter == '中文';
-    return songs.where((s) => wantChinese ? reg.hasMatch(s.title) : !reg.hasMatch(s.title)).toList();
+    var result = songs;
+    // 语言筛选
+    if (_languageFilter != '全部') {
+      final reg = RegExp(r'[一-鿿]');
+      final wantChinese = _languageFilter == '中文';
+      result = result.where((s) => wantChinese ? reg.hasMatch(s.title) : !reg.hasMatch(s.title)).toList();
+    }
+    // 收藏筛选
+    if (_favoriteFilter == '收藏') {
+      result = result.where((s) => _favorites.contains(s.id)).toList();
+    }
+    // 搜索词筛选
+    if (_searchQuery.isNotEmpty) {
+      result = result.where((s) => s.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    }
+    return result;
   }
+
+  // 收藏歌曲(第58步-2):id 集合,从 prefs 读写。
+  Set<String> _favorites = {};
 
   // 移调(虚拟变调夹,半音偏移)。0 = 不移调(原音高);界面 Slider 限定 -6~+6。
   // 按歌存:每首歌贴合嗓音要的移调不一样,跟 tempo 一个套路,切歌不串。照旧按原和弦指法,
@@ -168,16 +191,62 @@ class SongScreenState extends State<SongScreen> {
     setState(() {
       _languageFilter = v;
       _cachedDropdownItems = null;
-      final filtered = _filteredSongs;
-      if (filtered.isNotEmpty) {
-        final current = songs[_selected];
-        final idx = filtered.indexOf(current);
-        if (idx == -1) {
-          // 当前歌不在筛选结果里→跳到第一首
-          _onSongChanged(songs.indexOf(filtered.first));
-        }
+      _reconcileFilteredSelection();
+    });
+  }
+
+  /// 切收藏筛选(第58步-2):跟语言筛选同套路,选收藏时把不在收藏里的歌跳过。
+  void _setFavoriteFilter(String v) {
+    if (v == _favoriteFilter) return;
+    setState(() {
+      _favoriteFilter = v;
+      _cachedDropdownItems = null;
+      _reconcileFilteredSelection();
+    });
+  }
+
+  /// 筛选变了→当前歌可能不在新筛选结果里,自动跳到第一首。
+  void _reconcileFilteredSelection() {
+    final filtered = _filteredSongs;
+    if (filtered.isEmpty) return; // 全不匹配时不动(比如搜了不存在的歌);下拉框会空但不会越界
+    final current = songs[_selected];
+    final idx = filtered.indexOf(current);
+    if (idx == -1) {
+      _onSongChanged(songs.indexOf(filtered.first));
+    }
+  }
+
+  /// 搜索框输入变化(第58步-1):更新查询词、刷新下拉框缓存、防越界。
+  void _onSearchChanged(String v) {
+    setState(() {
+      _searchQuery = v;
+      _cachedDropdownItems = null;
+      _reconcileFilteredSelection();
+    });
+  }
+
+  /// 展开/收起搜索框(第58步-1)。
+  void _toggleSearch() {
+    setState(() {
+      _showSearch = !_showSearch;
+      if (!_showSearch) {
+        _searchCtl.clear();
+        _onSearchChanged('');
       }
     });
+  }
+
+  /// 切收藏状态(第58步-2):点心形图标 → 收藏/取消当前歌。
+  void _toggleFavorite() {
+    final id = songs[_selected].id;
+    setState(() {
+      if (_favorites.contains(id)) {
+        _favorites.remove(id);
+      } else {
+        _favorites.add(id);
+      }
+    });
+    _prefs?.setFavorites(_favorites.toList());
   }
 
   /// 异步读持久化偏好,读好把状态 reconcile 到上次的值(上次的歌、那首歌的速度、节奏型、AB)。
@@ -205,6 +274,7 @@ class SongScreenState extends State<SongScreen> {
       _strumSoundOn = p.getStrumSound(true);
       _rampOn = p.getRamp();
       _lyricScale = p.getLyricScale(1.0).clamp(0.8, 1.8); // Slider 区间,防存了个越界值
+      _favorites = p.getFavorites(); // 收藏列表(第58步-2),跨重启保留
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
       _tempo = p.getTempo(songs[_selected].id) ?? songs[_selected].tempo;
       _transpose = p.getTranspose(songs[_selected].id); // 这首歌上次的移调(没存过 = 0)
@@ -268,6 +338,7 @@ class SongScreenState extends State<SongScreen> {
   @override
   void dispose() {
     widget.store.removeListener(_onStoreChanged); // 页面销毁:别再收歌库通知
+    _searchCtl.dispose(); // 搜索框控制器(第58步-1)
     // 页面销毁前最后存一次当前歌的速度(滑块拖动时不存、怕写太勤;走这里兜底)。
     _accumulateSec(); // 把正在播放的尾段时间结进 _totalSec(没在播就是 no-op)
     _prefs?.setTempo(songs[_selected].id, _tempo);
@@ -771,6 +842,10 @@ class SongScreenState extends State<SongScreen> {
         songs[_selected].id,
         practiceDayKey(DateTime.now()),
       );
+      // 第58步-3:增量累加今天的练琴秒数(给每日目标用)。
+      final today = practiceDayKey(DateTime.now());
+      final prev = _prefs?.getTodaySec(today) ?? 0;
+      _prefs?.setTodaySec(today, prev + secs);
     }
   }
 
@@ -1099,9 +1174,9 @@ class SongScreenState extends State<SongScreen> {
           ),
           icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurface),
         ),
-        // 第二行:语言筛选芯片 + 速度信息(第57步加 FilterChip)。
+        // 第二行:语言筛选芯片 + 搜索框 + 速度信息(第57步加 FilterChip,第58步加搜索+收藏)。
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
+          preferredSize: Size.fromHeight(_showSearch ? 88 : 48),
           child: Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1109,29 +1184,70 @@ class SongScreenState extends State<SongScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 语言筛选芯片:全部 / 英文 / 中文
+                // 筛选芯片:全部 / 英文 / 中文 / 收藏
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _filterChip(
                       label: '全部',
-                      selected: _languageFilter == '全部',
-                      onTap: () => _setLanguageFilter('全部'),
+                      selected: _languageFilter == '全部' && _favoriteFilter == '全部',
+                      onTap: () { _setLanguageFilter('全部'); _setFavoriteFilter('全部'); },
                     ),
                     const SizedBox(width: 4),
                     _filterChip(
                       label: '英文(${songs.where((s) => !RegExp(r'[一-鿿]').hasMatch(s.title)).length})',
                       selected: _languageFilter == '英文',
-                      onTap: () => _setLanguageFilter('英文'),
+                      onTap: () { _setFavoriteFilter('全部'); _setLanguageFilter('英文'); },
                     ),
                     const SizedBox(width: 4),
                     _filterChip(
                       label: '中文(${songs.where((s) => RegExp(r'[一-鿿]').hasMatch(s.title)).length})',
                       selected: _languageFilter == '中文',
-                      onTap: () => _setLanguageFilter('中文'),
+                      onTap: () { _setFavoriteFilter('全部'); _setLanguageFilter('中文'); },
+                    ),
+                    const SizedBox(width: 4),
+                    _filterChip(
+                      label: '收藏(${_favorites.length})',
+                      selected: _favoriteFilter == '收藏',
+                      onTap: () { _setLanguageFilter('全部'); _setFavoriteFilter('收藏'); },
                     ),
                   ],
                 ),
+                // 搜索框(第58步-1):展开时显示在芯片行下面
+                if (_showSearch)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: SizedBox(
+                      height: 32,
+                      child: TextField(
+                        controller: _searchCtl,
+                        autofocus: true,
+                        style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface),
+                        decoration: InputDecoration(
+                          hintText: '搜索歌名…',
+                          hintStyle: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
+                          prefixIcon: Icon(Icons.search, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? GestureDetector(
+                                  onTap: () {
+                                    _searchCtl.clear();
+                                    _onSearchChanged('');
+                                  },
+                                  child: Icon(Icons.close, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+                          ),
+                          filled: true,
+                          fillColor: theme.colorScheme.surfaceContainerHighest,
+                        ),
+                        onChanged: _onSearchChanged,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 2),
                 // 速度信息
                 FittedBox(
@@ -1148,8 +1264,23 @@ class SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
-        // 顶栏右侧图标:用户歌才出 编辑 / 删除(第43c步;内置歌不可改不可删);移调 + 字号 + 跟唱录音一直有。
+        // 顶栏右侧图标:搜索 + 收藏 + 用户歌编辑/删除 + 跟唱录音 + 移调 + 字号。
         actions: [
+          // 搜索按钮(第58步-1)
+          IconButton(
+            icon: Icon(_showSearch ? Icons.search_off : Icons.search),
+            tooltip: _showSearch ? '关闭搜索' : '搜索歌曲',
+            onPressed: _toggleSearch,
+          ),
+          // 收藏按钮(第58步-2):实心 = 已收藏,空心 = 未收藏
+          IconButton(
+            icon: Icon(
+              _favorites.contains(song.id) ? Icons.favorite : Icons.favorite_border,
+            ),
+            tooltip: _favorites.contains(song.id) ? '取消收藏' : '收藏这首歌',
+            onPressed: _toggleFavorite,
+            color: _favorites.contains(song.id) ? theme.colorScheme.error : null,
+          ),
           if (widget.store.isUserSong(song))
             IconButton(
               icon: const Icon(Icons.edit_outlined),

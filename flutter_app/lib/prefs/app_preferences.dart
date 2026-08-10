@@ -177,6 +177,64 @@ class AppPreferences {
     await _prefs.setStringList(_kPracticeDays, days);
   }
 
+  // —— 收藏歌曲(第58步-2)——
+  Set<String> getFavorites() =>
+      (_prefs.getStringList(_kFavorites) ?? []).toSet();
+  Future<void> setFavorites(List<String> ids) =>
+      _prefs.setStringList(_kFavorites, ids);
+
+  // —— 每日练习目标(第58步-3)——
+  int getDailyGoalMin([int fallback = 30]) =>
+      _prefs.getInt(_kDailyGoalMin) ?? fallback;
+  Future<void> setDailyGoalMin(int v) =>
+      _prefs.setInt(_kDailyGoalMin, v);
+
+  /// 今天的练琴秒数(第58步-3)。[todayDate] = 今天的日期键(yyyy-MM-dd);
+  /// 如果存的日期跟 [todayDate] 不一致就说明跨天了,归零重计。
+  int getTodaySec(String todayDate) {
+    final storedDate = _prefs.getString(_kTodaySecDate);
+    if (storedDate != todayDate) return 0;
+    return _prefs.getInt(_kTodaySec) ?? 0;
+  }
+
+  Future<void> setTodaySec(String todayDate, int sec) async {
+    await _prefs.setString(_kTodaySecDate, todayDate);
+    await _prefs.setInt(_kTodaySec, sec);
+  }
+
+  // —— 练习提醒(第58步-4)——
+  bool getReminderEnabled([bool fallback = false]) =>
+      _prefs.getBool(_kReminderEnabled) ?? fallback;
+  Future<void> setReminderEnabled(bool v) =>
+      _prefs.setBool(_kReminderEnabled, v);
+
+  int getReminderHour([int fallback = 19]) =>
+      _prefs.getInt(_kReminderHour) ?? fallback;
+  Future<void> setReminderHour(int v) =>
+      _prefs.setInt(_kReminderHour, v);
+
+  int getReminderMinute([int fallback = 0]) =>
+      _prefs.getInt(_kReminderMinute) ?? fallback;
+  Future<void> setReminderMinute(int v) =>
+      _prefs.setInt(_kReminderMinute, v);
+
+  // —— 节拍器声音(第58步-5)——
+  String getMetronomeSound([String fallback = 'click']) =>
+      _prefs.getString(_kMetronomeSound) ?? fallback;
+  Future<void> setMetronomeSound(String v) =>
+      _prefs.setString(_kMetronomeSound, v);
+
+  // —— 换和弦训练增强(第58步-7)——
+  String getTrainerDifficulty([String fallback = 'custom']) =>
+      _prefs.getString(_kTrainerDifficulty) ?? fallback;
+  Future<void> setTrainerDifficulty(String v) =>
+      _prefs.setString(_kTrainerDifficulty, v);
+
+  int getTrainerBest(String difficulty, [int fallback = 0]) =>
+      _prefs.getInt('$_kTrainerBestPrefix$difficulty') ?? fallback;
+  Future<void> setTrainerBest(String difficulty, int v) =>
+      _prefs.setInt('$_kTrainerBestPrefix$difficulty', v);
+
   // key 常量:集中放一处,免得读写各处拼字符串拼错。
   static const _kSongIndex = 'pref_song_index'; // 旧版:上次选歌下标(第45步前)。留作一次性迁移读。
   static const _kSelectedSongId = 'pref_selected_song_id'; // 第45步起:上次选歌按 id 存(替 _kSongIndex)
@@ -201,4 +259,14 @@ class AppPreferences {
   static const _kSecPrefix = 'pref_sec_'; // 后接歌曲 id
   static const _kPracticeDays = 'pref_practice_days'; // 'yyyy-MM-dd' 字符串列表
   static const _kLastPracticedPrefix = 'pref_last_practiced_'; // 后接歌曲 id;上次练习日期 ISO string
+  static const _kFavorites = 'pref_favorites'; // 第58步-2:收藏歌曲 id 列表
+  static const _kDailyGoalMin = 'pref_daily_goal_min'; // 第58步-3:每日练琴目标(分钟,默认30)
+  static const _kTodaySec = 'pref_today_sec'; // 第58步-3:今天已练秒数
+  static const _kTodaySecDate = 'pref_today_sec_date'; // 第58步-3:上面秒数对应的日期
+  static const _kReminderEnabled = 'pref_reminder_enabled'; // 第58步-4:练习提醒开关
+  static const _kReminderHour = 'pref_reminder_hour'; // 第58步-4:提醒时间-时(默认19)
+  static const _kReminderMinute = 'pref_reminder_minute'; // 第58步-4:提醒时间-分(默认0)
+  static const _kMetronomeSound = 'pref_metronome_sound'; // 第58步-5:节拍器音色名
+  static const _kTrainerDifficulty = 'pref_trainer_difficulty'; // 第58步-7:换和弦难度名
+  static const _kTrainerBestPrefix = 'pref_trainer_best_'; // 第58步-7:后接难度名,如 pref_trainer_best_beginner
 }
