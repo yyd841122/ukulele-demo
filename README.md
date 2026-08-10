@@ -2,13 +2,15 @@
 
 一个跟着**节拍器**练尤克里里弹唱的安卓 app(Flutter):告诉你现在该按哪个和弦、怎么按、什么时候换、扫几下;还能给琴调音、专项练和弦切换、看练习打卡。
 
-> 跟着 Claude Code 一步步从零做出来的第一个项目(第8步起从 PWA 迁到 Flutter 安卓,做到第58步)。领域词汇见 [CONTEXT.md](CONTEXT.md),架构决策见 [docs/adr/](docs/adr/)。
+> 跟着 Claude Code 一步步从零做出来的第一个项目(第8步起从 PWA 迁到 Flutter 安卓,做到第64步)。领域词汇见 [CONTEXT.md](CONTEXT.md),架构决策见 [docs/adr/](docs/adr/)。
 
 ## 能干啥
 
 **练习**(主 tab)
 - 🥁 节拍器:嗒声 + 第1拍重音 + 倒计时预备拍;速度可调(半速~两倍)+ 自动提速(每遍 +3 BPM、到原速停);**4 种音色可选(嗒声/电子嘀/木鱼/鼓边)**
 - 🎸 和弦指法图随**当前行**高亮;扫弦节奏型可选(全下 / 下上 / 海岛 / 民谣 / 摇滚),一排 ↓↑ 按节奏高亮
+- 🎵 **指弹模式**:一键切指弹(扫弦↔指弹),8 种指弹节奏型(4321琶音/4323织体/4231下行/3121上行/八拍琶音/拇指节奏/全下拨/根音琶音),弦号 G·C·E·A 高亮逐弦拨响;自由指弹子模式——选和弦+指弹型循环练、不跟整首歌
+- 🎯 **跟弹打分反馈**:麦克风实时检测弹奏,计时准度(good/early/late/missed) + 音高正确率(指弹模式),实时准度小球(绿/黄/红),弹完出评分等级(S/A/B/C/D);统计页按歌展示最近评分
 - 🔁 AB 段落循环:点歌词两行标 A/B,反复练那一段
 - 📜 歌词自动滚动、字号可调、练琴时屏幕常亮
 - 🎚 **移调(虚拟变调夹)**:照旧按原和弦指法,扫弦声整体升/降 ±6 半音贴合嗓音(双向,按歌记)
@@ -41,4 +43,4 @@ flutter build apk --release      # → build/app/outputs/flutter-apk/app-release
 
 ## 项目结构
 
-Flutter 工程在 `flutter_app/`。`lib/` 下:`audio/`(音频引擎 / Karplus-Strong 扫弦合成 / 麦克风采集 / YIN 测音高 / 跟唱录音器)、`prefs/`(SharedPreferences 封装)、`screens/`(各 tab 页 + 自加歌表单)、`widgets/`(和弦图 / 歌词 / 练习栏)、`song_store.dart`(歌库:内置歌 + 用户自加歌,ChangeNotifier)、`song_backup.dart`(歌曲备份/导入纯函数)、`theme_controller.dart`(主题模式控制器:系统 / 浅色 / 深色)、`models.dart`(歌曲数据 + 纯函数)。安卓端是空 `FlutterActivity`——纯 Flutter、无自写平台通道。歌曲按稳定 id 存偏好(不按下标,加 / 删用户歌不会串数据),详见 [docs/adr/0003-song-id-storage.md](docs/adr/0003-song-id-storage.md)。
+Flutter 工程在 `flutter_app/`。`lib/` 下:`audio/`(音频引擎 / Karplus-Strong 扫弦合成 / 麦克风采集 / YIN 测音高 / 跟唱录音器)、`prefs/`(SharedPreferences 封装)、`screens/`(各 tab 页 + 自加歌表单)、`widgets/`(和弦图 / 歌词 / 练习栏)、`scoring/`(打分引擎:起音检测 / 计时准度 / 音高评分)、`song_store.dart`(歌库:内置歌 + 用户自加歌,ChangeNotifier)、`song_backup.dart`(歌曲备份/导入纯函数)、`theme_controller.dart`(主题模式控制器:系统 / 浅色 / 深色)、`models.dart`(歌曲数据 + 纯函数)。安卓端是空 `FlutterActivity`——纯 Flutter、无自写平台通道。歌曲按稳定 id 存偏好(不按下标,加 / 删用户歌不会串数据),详见 [docs/adr/0003-song-id-storage.md](docs/adr/0003-song-id-storage.md)。
