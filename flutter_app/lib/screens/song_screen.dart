@@ -667,13 +667,18 @@ class SongScreenState extends State<SongScreen> {
   PlayStyle _playStyle = PlayStyle.strum;
   int _fingerpickPatternIndex = 0; // 指弹节奏型下标(按歌存)
 
-  /// 切换奏法:扫弦 ↔ 指弹。换奏法后存下来(按歌)、中止试听。
+  // —— 自由指弹(第64步) ——
+  bool _freeFingerpick = false; // 指弹子模式:不在整曲里走,选和弦+指弹型循环练
+  String _freeChord = 'C'; // 当前自由指弹的和弦(初始 C,用户可切)
+
+  /// 切换奏法:扫弦 ↔ 指弹。从指弹切回扫弦 → 退出自由模式。
   void _togglePlayStyle() {
     setState(() {
       _playStyle = _playStyle == PlayStyle.strum ? PlayStyle.fingerpick : PlayStyle.strum;
+      if (_playStyle == PlayStyle.strum) _freeFingerpick = false;
     });
     _prefs?.setPlayStyle(songs[_selected].id, _playStyle.name);
-    _previewTimer?.cancel(); // 打断试听(奏法变了,旧试听没意义)
+    _previewTimer?.cancel();
     _previewTimer = null;
   }
 
@@ -681,6 +686,46 @@ class SongScreenState extends State<SongScreen> {
   void _setFingerpickPattern(int i) {
     setState(() => _fingerpickPatternIndex = i);
     _prefs?.setFingerpickPattern(songs[_selected].id, i);
+    if (widget.audio.isReady && !_playing) _previewFingerpickPattern(i);
+  }
+
+  /// 自由指弹(第64步):开关子模式。
+  void _toggleFreeFingerpick() {
+    setState(() => _freeFingerpick = !_freeFingerpick);
+    _previewTimer?.cancel();
+    _previewTimer = null;
+  }
+
+  /// 自由指弹:切到下一个和弦(按字母排)。
+  void _freeNextChord() {
+    final sng = songs[_selected];
+    final all = <String>{};
+    for (final s in sng.sections) {
+      for (final l in s.lines) { all.addAll(l.chords); }
+    }
+    if (all.isEmpty) return;
+    final l = all.toList()..sort();
+    final i = l.indexOf(_freeChord);
+    setState(() => _freeChord = l[(i + 1) % l.length]);
+  }
+
+  /// 自由指弹:切到上一个和弦。
+  void _freePrevChord() {
+    final sng = songs[_selected];
+    final all = <String>{};
+    for (final s in sng.sections) {
+      for (final l in s.lines) { all.addAll(l.chords); }
+    }
+    if (all.isEmpty) return;
+    final l = all.toList()..sort();
+    final i = l.indexOf(_freeChord);
+    final prev = i <= 0 ? l.length - 1 : i - 1;
+    setState(() => _freeChord = l[prev]);
+  }
+
+  /// 自由指弹:选指弹型(不持久——自由模式只是临时练习)。
+  void _freeSetPattern(int i) {
+    setState(() => _fingerpickPatternIndex = i);
     if (widget.audio.isReady && !_playing) _previewFingerpickPattern(i);
   }
 
@@ -765,7 +810,14 @@ class SongScreenState extends State<SongScreen> {
   void _tick() {
     if (_inCountIn) {
       if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
-    } else if (_strumSoundOn && _flat.isNotEmpty && _idx < _flat.length) {
+    } else if (_strumSoundOn) {
+      if (_freeFingerpick) {
+        // 自由指弹:单和弦+指弹型+循环
+        final fp = fingerpickPatternsFor(4)[_fingerpickPatternIndex.clamp(0, 7)];
+        final grid = fp.grid(4);
+        final si = (_slot >= 0 && _slot < grid.length) ? grid[_slot] : null;
+        if (si != null) widget.audio.playString(_freeChord, si, semis: _transpose);
+      } else if (_flat.isNotEmpty && _idx < _flat.length) {
       if (_playStyle == PlayStyle.fingerpick) {
         // 指弹:逐弦拨响
         final si = _stringForCurrentSlot();
@@ -779,6 +831,7 @@ class SongScreenState extends State<SongScreen> {
           widget.audio.playChord(_flat[_idx], up: true, semis: _transpose);
         }
       }
+      } // _flat not empty close
       // 休止:静音不响
     } else {
       if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
