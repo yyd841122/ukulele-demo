@@ -934,6 +934,179 @@ const List<Song> builtinSongs = [
       ),
     ],
   ),
+
+  // —— 第54步:新加 7 首(4 英文 + 3 中文),含一首 3/4 拍 ——
+
+  Song(
+    title: '🐦 Three Little Birds',
+    tempo: 74,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[A]Don't worry about a thing"),
+          Line(lyric: "[D]Cause every little thing [A]gonna be alright"),
+          Line(lyric: "[A]Singin' don't worry about a thing"),
+          Line(lyric: "[D]Cause every little thing [A]gonna be alright"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[A]Rise up this mornin', smiled with the [D]risin' sun"),
+          Line(lyric: "[A]Three little birds perched [D]by my [A]doorstep"),
+          Line(lyric: "[A]Singin' sweet songs of [D]melodies pure and [A]true"),
+          Line(lyric: "[A]Sayin' this is my [D]message to [A]you"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🎵 Hallelujah',
+    tempo: 66,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]Now I've [Am]heard there was a [C]secret [Am]chord"),
+          Line(lyric: "[C]That [F]David played and it [G]pleased the [C]Lord"),
+          Line(lyric: "[F]But [G]you don't really [C]care for [Am]music, [F]do [G]ya"),
+          Line(lyric: "[C]It goes [F]like this, the [G]fourth, the [Am]fifth"),
+          Line(lyric: "[F]The minor [G]fall, the [E7]major [Am]lift"),
+          Line(lyric: "[F]The baffled king com[G]posing Halle[C]lujah"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]Halle[Am]lujah, [C]Halle[Am]lujah"),
+          Line(lyric: "[C]Halle[F]lujah, [G]Halle[C]lu[G]jah"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🕊 No Woman No Cry',
+    tempo: 78,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: "[C]No woman no [G]cry, [Am]no woman no [F]cry"),
+          Line(lyric: "[C]Said I re[G]member when we used to [Am]sit"),
+          Line(lyric: "[F]In the government yard in [C]Trenchtown"),
+          Line(lyric: "[G]Observing the [Am]hypocrites as they would [F]mingle with the good people we [C]meet"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]Everything's gonna be al[G]right, everything's gonna be al[Am]right"),
+          Line(lyric: "[F]Everything's gonna be al[C]right now, [G]everything's gonna be al[C]right"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🏔 Country Roads',
+    tempo: 82,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[G]Almost heaven, [Em]West Virginia"),
+          Line(lyric: "[D]Blue Ridge Mountains, [C]Shenandoah [G]River"),
+          Line(lyric: "[G]Life is old there, [Em]older than the trees"),
+          Line(lyric: "[D]Younger than the mountains, [C]growin' like a [G]breeze"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[G]Country roads, take me [D]home"),
+          Line(lyric: "[Em]To the [C]place I be[G]long"),
+          Line(lyric: "[G]West Virginia, [D]mountain mama"),
+          Line(lyric: "[C]Take me [G]home, country [D]roads"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🎓 那些年',
+    tempo: 78,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]又回到最初的[G]起点,记忆中你[Am]青涩的[Em]脸"),
+          Line(lyric: "[F]我们终于[G]来到了这一[C]天"),
+          Line(lyric: "[C]桌垫下的老[G]照片,无数回忆[Am]连[Em]结"),
+          Line(lyric: "[F]今天男孩要[G]赴女孩最后[C]的约"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]那些年错过[G]的大雨,那些年[Am]错过的爱[Em]情"),
+          Line(lyric: "[F]好想拥抱你,[G]拥抱错过的[C]勇气"),
+          Line(lyric: "[C]曾经想征服全[G]世界,到最后[Am]回首才发[Em]现"),
+          Line(lyric: "[F]这世界滴滴[G]点点全部都[C]是你"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🍀 小幸运',
+    tempo: 76,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]我听见雨滴[G]落在青青[Am]草[F]地"),
+          Line(lyric: "[C]我听见远方[G]下课钟声[Am]响[F]起"),
+          Line(lyric: "[Am]可是我[F]没有听见[G]你的声音[Em]认真呼唤我[Am]姓名"),
+          Line(lyric: "[F]爱上你的[G]时候还不懂[C]感情"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]原来你是我[G]最想留住的[Am]幸运,[F]原来我们和爱情[C]曾经靠得[G]那么近"),
+          Line(lyric: "[Am]那为我对抗[Em]世界的决[F]定,那陪我[G]淋的雨"),
+          Line(lyric: "[F]一幕幕都[G]是你,一尘不[Em]染的[Am]真心"),
+          Line(lyric: "[F]与你相遇好[G]幸运,可我已失去[C]为你泪流满面的权利"),
+        ],
+      ),
+    ],
+  ),
+  Song(
+    title: '🍂 遇见',
+    tempo: 78,
+    beatsPerChord: 3,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]听见冬天[G]的离开,我[Am]在某年[F]某月醒[G]过来"),
+          Line(lyric: "[C]我想我等[G]我期待,未[Am]来却不能[F]因此安[G]排"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[C]阴天傍晚[G]车窗外,未[Am]来有一个[Em]人在等[F]待"),
+          Line(lyric: "[C]向左向右[G]向前看,爱[Am]要拐几个[F]弯才[G]来"),
+          Line(lyric: "[C]我遇见谁[G]会有怎样的[Am]对白,我[F]等的人[G]他在多远的[C]未来"),
+          Line(lyric: "[C]我听见风[G]来自地铁和[Am]人海,我[F]排着队[G]拿着爱的[C]号码牌"),
+        ],
+      ),
+    ],
+  ),
 ];
 
 /// 【第43a步】内置歌补上稳定 id(= 各自下标)后的歌曲库。界面读这份。
