@@ -14,6 +14,7 @@ import 'audio/audio_engine.dart';
 import 'prefs/app_preferences.dart';
 import 'screens/chord_library_screen.dart';
 import 'screens/chord_trainer_screen.dart';
+import 'screens/fingerpick_screen.dart';
 import 'screens/song_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/tuner_screen.dart';
@@ -45,8 +46,9 @@ class _MainScaffoldState extends State<MainScaffold> {
   final GlobalKey<StatsScreenState> _statsKey = GlobalKey<StatsScreenState>();
   final GlobalKey<TunerScreenState> _tunerKey = GlobalKey<TunerScreenState>();
   final GlobalKey<ChordTrainerState> _trainerKey = GlobalKey<ChordTrainerState>();
+  final GlobalKey<FingerpickScreenState> _fingerpickKey = GlobalKey<FingerpickScreenState>();
 
-  int _index = 0; // 当前选中第几个 tab(0 练习 / 1 和弦 / 2 统计 / 3 调音 / 4 换和弦)
+  int _index = 0; // 当前选中第几个 tab(0 练习 / 1 和弦 / 2 统计 / 3 调音 / 4 换和弦 / 5 指弹)
 
   @override
   void initState() {
@@ -77,6 +79,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     final leavingPractice = _index == 0 && i != 0;
     final leavingTuner = _index == 3 && i != 3;
     final leavingTrainer = _index == 4 && i != 4;
+    final leavingFingerpick = _index == 5 && i != 5;
     setState(() => _index = i);
     if (leavingPractice) {
       _songKey.currentState?.flushStats();
@@ -87,8 +90,10 @@ class _MainScaffoldState extends State<MainScaffold> {
       _tunerKey.currentState?.pause();
     }
     if (leavingTrainer) {
-      // 切走换和弦 tab → 停节拍器(不然嗒声会在别的 tab 继续响)。
       _trainerKey.currentState?.stop();
+    }
+    if (leavingFingerpick) {
+      _fingerpickKey.currentState?.stop();
     }
     if (i == 2) {
       // 统计 tab:tab 平级后 initState 只跑一次,这里手动让它重读最新 prefs。
@@ -116,6 +121,7 @@ class _MainScaffoldState extends State<MainScaffold> {
           StatsScreen(key: _statsKey, store: _songs, theme: widget.theme),
           TunerScreen(key: _tunerKey, audio: _audio),
           ChordTrainerScreen(key: _trainerKey, audio: _audio),
+          FingerpickScreen(key: _fingerpickKey, audio: _audio, store: _songs),
         ],
       ),
       bottomNavigationBar: fullscreen ? null : BottomNavigationBar(
@@ -144,6 +150,10 @@ class _MainScaffoldState extends State<MainScaffold> {
           BottomNavigationBarItem(
             icon: Icon(Icons.fitness_center),
             label: '换和弦',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.piano),
+            label: '指弹',
           ),
         ],
       ),
