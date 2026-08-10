@@ -33,8 +33,62 @@ class ChordTrainerScreen extends StatefulWidget {
 }
 
 class ChordTrainerState extends State<ChordTrainerScreen> {
-  // 可选和弦列表(按 chordShapes 的插入序:C G Am F D Em)。选和弦就在这 6 个里循环。
-  final List<String> _chords = chordShapes.keys.toList();
+  // 全和弦池(按 chordShapes 插入序,第58步-7难度分级用)。
+  final List<String> _allChords = chordShapes.keys.toList();
+
+  // —— 难度分级(第58步-7) ——
+  // beginner: C G Am F (4个核心)
+  // easy: C G Am F D Em Dm A (8个常用)
+  // medium: 所有大三+小三 (14个)
+  // hard: 全部43个
+  // custom: 自选两个(默认,保持旧行为)
+  static const _difficultyPools = {
+    'beginner': ['C', 'G', 'Am', 'F'],
+    'easy': ['C', 'G', 'Am', 'F', 'D', 'Em', 'Dm', 'A'],
+  };
+  String _difficulty = 'custom'; // 默认自定义(跟旧版一样)
+
+  /// 当前难度下的可选和弦(第58步-7)。
+  List<String> _poolForDifficulty(String d) {
+    if (d == 'medium') {
+      return ['C','D','F','G','A','Bb','E','Am','Bm','Cm','Dm','Em','Fm','Gm'];
+    }
+    if (d == 'hard') return _allChords;
+    return _difficultyPools[d] ?? _allChords;
+  }
+
+  List<String> get _pool => _poolForDifficulty(_difficulty);
+
+  /// 从当前难度池随机抽两个不同和弦(第58步-7)。
+  void _randomPick() {
+    final pool = _pool;
+    if (pool.length < 2) return;
+    final t = DateTime.now().microsecondsSinceEpoch;
+    final a = pool[t % pool.length];
+    String b = a;
+    for (var i = 1; i < 50 && b == a; i++) {
+      b = pool[(t + i * 1049) % pool.length];
+    }
+    setState(() { _chordA = a; _chordB = b; });
+    _prefs?.setTrainerChordA(a);
+    _prefs?.setTrainerChordB(b);
+    widget.audio.playChord(a);
+  }
+
+  /// 切难度(第58步-7):当前A/B不在新池里→随机抽一组。
+  void _setDifficulty(String d) {
+    if (d == _difficulty) return;
+    setState(() => _difficulty = d);
+    _prefs?.setTrainerDifficulty(d);
+    final pool = _pool;
+    if (!pool.contains(_chordA) || !pool.contains(_chordB) || _chordA == _chordB) {
+      _randomPick();
+    }
+  }
+
+  /// 当前难度下的最佳成绩(第58步-7)。
+  int get _bestScore =>
+      _difficulty == 'custom' ? 0 : (_prefs?.getTrainerBest(_difficulty) ?? 0);
 
   String _chordA = 'C'; // 当前选的和弦 A(默认 C)
   String _chordB = 'G'; // 当前选的和弦 B(默认 G——C↔G 是入门最常练的切换)
@@ -87,6 +141,8 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
       _beatsPerChange = const {1, 2, 4}.contains(bpc) ? bpc : _beatsPerChange;
       _bpm = p.getTrainerBpm(_bpm);
       _challenge = p.getTrainerChallenge(_challenge);
+      final savedDiff = p.getTrainerDifficulty('custom');
+      _difficulty = (savedDiff == 'beginner' || savedDiff == 'easy' || savedDiff == 'medium' || savedDiff == 'hard' || savedDiff == 'custom') ? savedDiff : 'custom';
     });
   }
 
@@ -145,6 +201,10 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
         _finished = true;
         _timer?.cancel();
         _timer = null;
+        // 第58步-7:更新最佳成绩
+        if (_switches > _bestScore && _difficulty != 'custom') {
+          _prefs?.setTrainerBest(_difficulty, _switches);
+        }
       }
     });
   }
@@ -176,11 +236,13 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
   String _cycleChord(bool isA) {
     final other = isA ? _chordB : _chordA;
     final cur = isA ? _chordA : _chordB;
-    var i = _chords.indexOf(cur);
+    final pool = _pool; // 第58步-7:从当前难度池里循环,而不是全和弦
+    var i = pool.indexOf(cur);
+    if (i < 0) i = 0;
     String next;
     do {
-      i = (i + 1) % _chords.length;
-      next = _chords[i];
+      i = (i + 1) % pool.length;
+      next = pool[i];
     } while (next == other);
     setState(() {
       if (isA) {
@@ -209,6 +271,46 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
             Text(
               '挑两个和弦,跟着嗒声按时切换。点下面的卡片换和弦。',
               style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+
+            // —— 难度分级 + 随机抽(第58步-7)——
+            const Text('难度'),
+            Wrap(
+              spacing: 6,
+              children: [
+                for (final e in const [
+                  ('custom', '自定义'),
+                  ('beginner', '入门(4)'),
+                  ('easy', '初级(8)'),
+                  ('medium', '中级(14)'),
+                  ('hard', '高级(43)'),
+                ])
+                  ChoiceChip(
+                    label: Text(e.$2, style: const TextStyle(fontSize: 11)),
+                    selected: _difficulty == e.$1,
+                    onSelected: (_) => _setDifficulty(e.$1),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+            if (_bestScore > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '🏆 最佳: $_bestScore 次/分',
+                  style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w600),
+                ),
+              ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 36,
+              child: OutlinedButton.icon(
+                onPressed: _randomPick,
+                icon: const Icon(Icons.shuffle, size: 18),
+                label: const Text('随机抽一组'),
+              ),
             ),
             const SizedBox(height: 12),
 
