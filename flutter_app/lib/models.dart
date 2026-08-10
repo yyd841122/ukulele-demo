@@ -1300,3 +1300,165 @@ class FingerpickSlot {
   const FingerpickSlot.rest({int duration = 1})
       : stringIndex = null, fret = 0, duration = duration;
 }
+
+// 便捷:创建一个指弹槽。s=弦(0-3),f=品,t=时值(1=16分,2=8分,4=4分)。
+FingerpickSlot fp(int s, int f, {int t = 1}) => FingerpickSlot(stringIndex: s, fret: f, duration: t);
+// 休止槽。
+FingerpickSlot fpr({int t = 1}) => FingerpickSlot.rest(duration: t);
+
+// —— 内置指弹曲谱(第73步) ——
+// 3 首经典尤克里里指弹曲。每首 = FingerpickSong,按小节组织、每小节含时值槽+歌词提示。
+// 弦下标:0=G,1=C,2=E,3=A。时值:1=16分,2=8分,4=4分。空弦=0。
+
+final builtinFingerpickSongs = <FingerpickSong>[
+  // ═══ 1. Canon in C (卡农 C 调简化版) ═══
+  // 基于经典和声进行:C—G—Am—Em—F—C—F—G,旋律在 A/E 弦上、低音在 G/C 弦伴奏。
+  // tempo 80, 4/4 拍,每小节 8 个 8 分音符槽(= 8×dur=2)。
+  FingerpickSong(
+    title: 'Canon in C (卡农)',
+    subtitle: 'Pachelbel · C 调指弹改编',
+    tempo: 80,
+    bars: [
+      // 第1小节 C:旋律 E-D-C,低音 C-G
+      FingerpickBar(lyric: 'C', slots: [
+        fp(3,3,t:2), fp(2,0,t:2), fp(2,0,t:2), fp(1,0,t:2), // G弦3品 C→E空→E空→C空
+        fp(2,0,t:2), fpr(t:2), fp(0,3,t:2), fpr(t:2),        // E空→休→A3品→休
+      ]),
+      // 第2小节 G:旋律 G-F-E,低音 G-B
+      FingerpickBar(lyric: 'G', slots: [
+        fp(3,2,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(3,3,t:2),
+        fp(1,0,t:2), fpr(t:2), fp(0,2,t:2), fpr(t:2),
+      ]),
+      // 第3小节 Am:旋律 A-C-E,低音 A-E
+      FingerpickBar(lyric: 'Am', slots: [
+        fp(0,0,t:2), fp(2,0,t:2), fp(2,0,t:2), fp(1,0,t:2),
+        fp(2,0,t:2), fpr(t:2), fp(0,0,t:2), fpr(t:2),
+      ]),
+      // 第4小节 Em:旋律 G-F#-E,低音 E-B
+      FingerpickBar(lyric: 'Em', slots: [
+        fp(3,2,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(3,3,t:2),
+        fp(1,0,t:2), fpr(t:2), fp(0,2,t:2), fpr(t:2),
+      ]),
+      // 第5小节 F:旋律 F-A-C,低音 F-C
+      FingerpickBar(lyric: 'F', slots: [
+        fp(3,1,t:2), fp(2,1,t:2), fp(1,0,t:2), fp(3,2,t:2),
+        fp(2,1,t:2), fpr(t:2), fp(0,1,t:2), fpr(t:2),
+      ]),
+      // 第6小节 C:旋律 E-D-C,低音 C-G
+      FingerpickBar(lyric: 'C', slots: [
+        fp(3,3,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(3,3,t:2),
+        fp(2,0,t:2), fpr(t:2), fp(0,3,t:2), fpr(t:2),
+      ]),
+      // 第7小节 F:旋律 F-G-A,低音 F-C
+      FingerpickBar(lyric: 'F', slots: [
+        fp(3,1,t:2), fp(2,1,t:2), fp(1,0,t:2), fp(3,2,t:2),
+        fp(3,3,t:2), fp(2,0,t:2), fp(0,1,t:2), fpr(t:2),
+      ]),
+      // 第8小节 G→回头:旋律 G-F-E-D,低音 G-D
+      FingerpickBar(lyric: 'G', slots: [
+        fp(3,2,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(3,3,t:2),
+        fp(1,0,t:2), fp(2,0,t:2), fp(0,2,t:2), fpr(t:2),
+      ]),
+    ],
+  ),
+
+  // ═══ 2. Greensleeves (绿袖子) ═══
+  // 英国传统民谣,Am 调,6/8 感觉用 3/4 节拍。旋律优美下行。
+  FingerpickSong(
+    title: 'Greensleeves (绿袖子)',
+    subtitle: '英国传统民谣 · Am 调',
+    tempo: 90,
+    bars: [
+      // 第1小节 Am:旋律 A-C-E-D-C-A
+      FingerpickBar(lyric: 'Am · Alas my love', slots: [
+        fp(0,0,t:2), fp(2,0,t:2), fp(2,0,t:2), fp(1,2,t:2), // A空→E空→E空→C2品
+        fp(0,0,t:2), fpr(t:2), fp(3,2,t:2), fpr(t:2),
+      ]),
+      // 第2小节 G:旋律 G-A-C-A-F#-G
+      FingerpickBar(lyric: 'G · you do me wrong', slots: [
+        fp(0,2,t:2), fp(3,2,t:2), fp(0,0,t:2), fp(2,0,t:2),
+        fp(1,0,t:2), fpr(t:2), fp(3,2,t:2), fpr(t:2),
+      ]),
+      // 第3小节 Am:旋律 A-C-E-D-C
+      FingerpickBar(lyric: 'Am · to cast me off', slots: [
+        fp(0,0,t:2), fp(2,0,t:2), fp(2,0,t:2), fp(1,2,t:2),
+        fp(0,0,t:2), fpr(t:2), fp(2,0,t:2), fpr(t:2),
+      ]),
+      // 第4小节 E:旋律 E-F#-G#-A-B
+      FingerpickBar(lyric: 'E · discourteously', slots: [
+        fp(0,2,t:2), fp(3,1,t:2), fp(0,1,t:2), fp(2,1,t:2),
+        fp(1,2,t:2), fpr(t:2), fp(3,2,t:2), fpr(t:2),
+      ]),
+      // 第5小节 C:旋律 C-E-D-C-A
+      FingerpickBar(lyric: 'C · I have loved you', slots: [
+        fp(3,3,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(2,0,t:2),
+        fp(0,3,t:2), fpr(t:2), fp(2,0,t:2), fpr(t:2),
+      ]),
+      // 第6小节 G:旋律 G-A-C-A
+      FingerpickBar(lyric: 'G · so long', slots: [
+        fp(0,2,t:2), fp(3,2,t:2), fp(0,0,t:2), fp(2,0,t:2),
+        fp(1,0,t:2), fpr(t:2), fp(3,2,t:2), fpr(t:2),
+      ]),
+      // 第7小节 Am→E:旋律 A-B-C-C-B-A
+      FingerpickBar(lyric: 'Am E · delighting in', slots: [
+        fp(0,0,t:2), fp(3,2,t:2), fp(2,0,t:2), fp(1,2,t:2),
+        fp(3,0,t:2), fp(2,0,t:2), fp(0,1,t:2), fpr(t:2),
+      ]),
+      // 第8小节 Am:旋律 E-C-A 收尾
+      FingerpickBar(lyric: 'Am · your company', slots: [
+        fp(2,0,t:2), fp(1,2,t:2), fp(0,0,t:2), fpr(t:2),
+        fp(3,2,t:2), fpr(t:2), fp(0,0,t:4), fpr(t:2), // 最后一个音长一些
+      ]),
+    ],
+  ),
+
+  // ═══ 3. Always With Me (千与千寻) ═══
+  // 宫崎骏《千与千寻》主题曲,C 调,尤克里里指弹经典入门曲。
+  FingerpickSong(
+    title: 'Always With Me (千与千寻)',
+    subtitle: '宫崎骏 · C 调指弹',
+    tempo: 96,
+    bars: [
+      // 第1小节 C:前奏 空弦拨 G-C-E 建立 C 和弦氛围
+      FingerpickBar(lyric: 'C · 前奏', slots: [
+        fp(3,3,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(2,0,t:2),
+        fp(3,3,t:2), fp(1,0,t:2), fp(0,3,t:2), fpr(t:2),
+      ]),
+      // 第2小节 G
+      FingerpickBar(lyric: 'G', slots: [
+        fp(3,2,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(2,0,t:2),
+        fp(3,3,t:2), fp(1,0,t:2), fp(0,2,t:2), fpr(t:2),
+      ]),
+      // 第3小节 Am
+      FingerpickBar(lyric: 'Am · 呼んでいる', slots: [
+        fp(0,0,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(2,0,t:2),
+        fp(0,0,t:2), fp(2,0,t:2), fp(1,2,t:2), fpr(t:2),
+      ]),
+      // 第4小节 Em
+      FingerpickBar(lyric: 'Em · 胸のどこかで', slots: [
+        fp(0,2,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(2,0,t:2),
+        fp(3,3,t:2), fp(1,0,t:2), fp(0,2,t:2), fpr(t:2),
+      ]),
+      // 第5小节 F
+      FingerpickBar(lyric: 'F · いつも心', slots: [
+        fp(0,1,t:2), fp(2,1,t:2), fp(1,1,t:2), fp(2,1,t:2),
+        fp(0,1,t:2), fp(2,1,t:2), fp(1,0,t:2), fpr(t:2),
+      ]),
+      // 第6小节 C
+      FingerpickBar(lyric: 'C · 躍る', slots: [
+        fp(3,3,t:2), fp(2,0,t:2), fp(1,0,t:2), fp(2,0,t:2),
+        fp(3,3,t:4), fp(1,0,t:2), fp(0,3,t:2), fpr(t:2),
+      ]),
+      // 第7小节 F
+      FingerpickBar(lyric: 'F · かなしみは', slots: [
+        fp(0,1,t:2), fp(2,1,t:2), fp(1,0,t:2), fp(2,1,t:2),
+        fp(3,3,t:2), fp(1,0,t:2), fp(0,1,t:2), fpr(t:2),
+      ]),
+      // 第8小节 G→收尾:旋律下行 G-F-E-C
+      FingerpickBar(lyric: 'G · 数え切れない', slots: [
+        fp(0,2,t:2), fp(3,2,t:2), fp(2,0,t:2), fp(1,0,t:2),
+        fp(3,3,t:2), fp(2,0,t:2), fp(0,2,t:4), fpr(t:2),
+      ]),
+    ],
+  ),
+];
