@@ -266,7 +266,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
             child: TablatureView(
               notes: _tabNotes,
               currentSlot: tabSlot.clamp(0, _tabNotes.length - 1),
-              beatsPerChord: song.beatsPerChord,
+              slotsPerBar: song.beatsPerChord * 2,
             ),
           ),
           // 控制栏

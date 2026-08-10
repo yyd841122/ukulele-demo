@@ -1,9 +1,9 @@
-// 指弹曲谱(TAB)绘制部件(第67步)。
-// 画 4 条横弦线 + 品位数字 + 当前高亮圆点,像吉他指弹谱一样从左往右滚动(横版 TAB)。
+// 指弹曲谱(TAB)绘制部件(第67步/第74步)。
+// 画 4 条横弦线 + 品位数字 + 当前高亮圆点 + 小节号,像吉他指弹谱一样从左往右滚动(横版 TAB)。
+// 第74步:加自动滚动(ScrollController)、小节号标签、当前小节高亮。
 //
 // 弦序(从上到下):G(0)→C(1)→E(2)→A(3),跟 chordShapes frets 和 openTuning 顺序一致。
 // 品位数字:0=空弦(显示 "0"),>0=数字,休止=不显示。
-// 当前弹到的槽位:数字主色高亮 + 下方小圆点。
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -18,24 +18,24 @@ class TabNote {
   const TabNote.rest() : stringIndex = 0, fret = 0, isRest = true;
 }
 
-/// TAB 谱绘制器(CustomPainter):画 4 条横弦线 + 品位数字 + 当前高亮圆点。
+/// TAB 谱绘制器(CustomPainter):画 4 条横弦线 + 品位数字 + 小节线 + 小节号。
 class _FretboardPainter extends CustomPainter {
   final List<TabNote> notes;      // 全部音符
   final int currentSlot;          // 当前高亮的槽位(-1=不高亮)
-  final int beatsPerChord;        // 每组几拍(画小节线用)
-  final ColorScheme cs;           // 主题色
+  final int slotsPerBar;          // 每小节几槽(给小节线+小节号用)
+  final ColorScheme cs;
 
   // 布局常量
-  static const double stringSpacing = 28.0;  // 弦与弦的垂直间距
-  static const double slotWidth = 36.0;      // 每个槽位的水平宽度
-  static const double topMargin = 12.0;      // 顶部留白
-  static const double leftMargin = 20.0;     // 左侧留白(给弦标签)
-  static const double fontSize = 16.0;       // 品位数字字号
+  static const double stringSpacing = 28.0;
+  static const double slotWidth = 36.0;
+  static const double topMargin = 20.0;      // 加高给小节号
+  static const double leftMargin = 30.0;     // 左侧留白(小节号)
+  static const double fontSize = 16.0;
 
   _FretboardPainter({
     required this.notes,
     required this.currentSlot,
-    required this.beatsPerChord,
+    required this.slotsPerBar,
     required this.cs,
   });
 
@@ -49,12 +49,46 @@ class _FretboardPainter extends CustomPainter {
     for (var s = 0; s < 4; s++) {
       final y = topMargin + s * stringSpacing;
       paint.color = s == 3 ? cs.outlineVariant : cs.outline.withValues(alpha: 0.3);
-      paint.strokeWidth = s == 3 ? 1.5 : 1.0; // A 弦稍微粗一点
+      paint.strokeWidth = s == 3 ? 1.5 : 1.0;
       canvas.drawLine(
         Offset(leftMargin, y),
         Offset(leftMargin + notes.length * slotWidth, y),
         paint,
       );
+    }
+
+    // --- 当前小节高亮底色 ---
+    if (slotsPerBar > 0 && currentSlot >= 0) {
+      final barIdx = currentSlot ~/ slotsPerBar;
+      final barStart = barIdx * slotsPerBar;
+      final barEnd = (barStart + slotsPerBar).clamp(0, notes.length);
+      final fillPaint = Paint()
+        ..color = cs.primaryContainer.withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill;
+      canvas.drawRect(
+        Rect.fromLTRB(
+          leftMargin + barStart * slotWidth,
+          topMargin - 4,
+          leftMargin + barEnd * slotWidth,
+          topMargin + 3 * stringSpacing + 4,
+        ),
+        fillPaint,
+      );
+    }
+
+    // --- 弦标签(左侧) ---
+    final labelText = ui.TextStyle(
+      color: ui.Color.fromARGB(cs.onSurfaceVariant.alpha, cs.onSurfaceVariant.red, cs.onSurfaceVariant.green, cs.onSurfaceVariant.blue),
+      fontSize: 12,
+      fontWeight: ui.FontWeight.w600,
+    );
+    for (var s = 0; s < 4; s++) {
+      final lb = ['G', 'C', 'E', 'A'][s];
+      final builder = ui.ParagraphBuilder(ui.ParagraphStyle(textAlign: ui.TextAlign.center))
+        ..pushStyle(labelText)
+        ..addText(lb);
+      final para = builder.build()..layout(const ui.ParagraphConstraints(width: 20));
+      canvas.drawParagraph(para, Offset(0, topMargin + s * stringSpacing - 7));
     }
 
     // --- 画品位数字 ---
@@ -76,42 +110,37 @@ class _FretboardPainter extends CustomPainter {
       if (n.isRest) continue;
 
       final x = leftMargin + i * slotWidth + slotWidth / 2;
-      // 数字的中心放在弦线上方一点点(避免跟线重叠)
       final y = topMargin + n.stringIndex * stringSpacing - 6;
 
       final isCurrent = i == currentSlot;
-      final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-        textAlign: ui.TextAlign.center,
-      ))
+      final builder = ui.ParagraphBuilder(ui.ParagraphStyle(textAlign: ui.TextAlign.center))
         ..pushStyle(isCurrent ? highlightStyle : textStyle)
         ..addText('${n.fret}');
       final para = builder.build()..layout(const ui.ParagraphConstraints(width: slotWidth));
       canvas.drawParagraph(para, Offset(x - slotWidth / 2, y));
 
-      // 当前高亮:数字下方画一个小圆点
+      // 当前高亮圆点
       if (isCurrent) {
-        final dotPaint = Paint()
-          ..color = cs.primary
-          ..style = PaintingStyle.fill;
-        canvas.drawCircle(
-          Offset(x, topMargin + n.stringIndex * stringSpacing),
-          5,
-          dotPaint,
-        );
+        final dotPaint = Paint()..color = cs.primary..style = PaintingStyle.fill;
+        canvas.drawCircle(Offset(x, topMargin + n.stringIndex * stringSpacing), 5, dotPaint);
       }
     }
 
-    // --- 画小节线(每 beatsPerChord 拍) ---
-    final paintBar = Paint()
-      ..color = cs.outlineVariant
-      ..strokeWidth = 1.5;
-    for (var bar = 1; bar * beatsPerChord * 2 < notes.length; bar++) {
-      final x = leftMargin + bar * beatsPerChord * 2 * slotWidth;
-      canvas.drawLine(
-        Offset(x, topMargin - 4),
-        Offset(x, topMargin + 3 * stringSpacing + 4),
-        paintBar,
-      );
+    // --- 小节线 + 小节号 ---
+    final barPaint = Paint()..color = cs.outlineVariant..strokeWidth = 1.5;
+    final barNumStyle = ui.TextStyle(
+      color: ui.Color.fromARGB(cs.outline.alpha, cs.outline.red, cs.outline.green, cs.outline.blue),
+      fontSize: 10,
+    );
+    for (var bar = 1; bar * slotsPerBar < notes.length; bar++) {
+      final x = leftMargin + bar * slotsPerBar * slotWidth;
+      canvas.drawLine(Offset(x, topMargin - 4), Offset(x, topMargin + 3 * stringSpacing + 4), barPaint);
+      // 小节号
+      final nb = ui.ParagraphBuilder(ui.ParagraphStyle(textAlign: ui.TextAlign.center))
+        ..pushStyle(barNumStyle)
+        ..addText('$bar');
+      final np = nb.build()..layout(const ui.ParagraphConstraints(width: 30));
+      canvas.drawParagraph(np, Offset(x - 15, 0));
     }
   }
 
@@ -121,46 +150,78 @@ class _FretboardPainter extends CustomPainter {
   }
 }
 
-/// TAB 谱视图:横向滚动的指弹谱。
-class TablatureView extends StatelessWidget {
+/// TAB 谱视图:横向滚动的指弹谱。第74步:加 ScrollController 自动滚动。
+class TablatureView extends StatefulWidget {
   final List<TabNote> notes;
   final int currentSlot;
-  final int beatsPerChord;
+  final int slotsPerBar; // 每小节几槽(画小节线+小节号)
 
   const TablatureView({
     super.key,
     required this.notes,
     required this.currentSlot,
-    required this.beatsPerChord,
+    required this.slotsPerBar,
   });
+
+  @override
+  State<TablatureView> createState() => _TablatureViewState();
+}
+
+class _TablatureViewState extends State<TablatureView> {
+  final ScrollController _scrollCtrl = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant TablatureView old) {
+    super.didUpdateWidget(old);
+    if (widget.currentSlot != old.currentSlot && widget.currentSlot >= 0 && widget.notes.isNotEmpty) {
+      _scrollToSlot();
+    }
+  }
+
+  void _scrollToSlot() {
+    final targetX = _FretboardPainter.leftMargin +
+        widget.currentSlot * _FretboardPainter.slotWidth -
+        60; // 左偏移让当前音符在可视区内
+    if (_scrollCtrl.hasClients) {
+      _scrollCtrl.animateTo(
+        targetX.clamp(0.0, _scrollCtrl.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final totalWidth = _FretboardPainter.leftMargin + notes.length * _FretboardPainter.slotWidth + 20;
+    final totalWidth = _FretboardPainter.leftMargin +
+        widget.notes.length * _FretboardPainter.slotWidth + 20;
     final height = _FretboardPainter.topMargin + 3 * _FretboardPainter.stringSpacing + 32;
 
     return Container(
       height: height,
       color: cs.surface,
-      child: LayoutBuilder(
-        builder: (ctx, constraints) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: totalWidth,
-              height: height,
-              child: CustomPaint(
-                painter: _FretboardPainter(
-                  notes: notes,
-                  currentSlot: currentSlot,
-                  beatsPerChord: beatsPerChord,
-                  cs: cs,
-                ),
-              ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        controller: _scrollCtrl,
+        child: SizedBox(
+          width: totalWidth > 0 ? totalWidth : 100,
+          height: height,
+          child: CustomPaint(
+            painter: _FretboardPainter(
+              notes: widget.notes,
+              currentSlot: widget.currentSlot,
+              slotsPerBar: widget.slotsPerBar,
+              cs: cs,
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
