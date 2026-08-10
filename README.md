@@ -2,7 +2,7 @@
 
 一个跟着**节拍器**练尤克里里弹唱的安卓 app(Flutter):告诉你现在该按哪个和弦、怎么按、什么时候换、扫几下;还能给琴调音、专项练和弦切换、看练习打卡。
 
-> 跟着 Claude Code 一步步从零做出来的第一个项目(第8步起从 PWA 迁到 Flutter 安卓,做到第47步)。领域词汇见 [CONTEXT.md](CONTEXT.md),架构决策见 [docs/adr/](docs/adr/)。
+> 跟着 Claude Code 一步步从零做出来的第一个项目(第8步起从 PWA 迁到 Flutter 安卓,做到第51步)。领域词汇见 [CONTEXT.md](CONTEXT.md),架构决策见 [docs/adr/](docs/adr/)。
 
 ## 能干啥
 
@@ -11,11 +11,13 @@
 - 🎸 和弦指法图随**当前行**高亮;扫弦节奏型可选(全下 / 下上 / 海岛 / 民谣 / 摇滚),一排 ↓↑ 按节奏高亮
 - 🔁 AB 段落循环:点歌词两行标 A/B,反复练那一段
 - 📜 歌词自动滚动、字号可调、练琴时屏幕常亮
+- 🎚 **移调(虚拟变调夹)**:照旧按原和弦指法,扫弦声整体升/降 ±6 半音贴合嗓音(双向,按歌记)
+- 🎙 **跟唱录音**:练琴时录人声,顶栏「听刚才」回放最后一段
 - 📊 本次 / 累计遍数 + 时长、整首进度条
 
 **和弦** tab:全部和弦大图速查,点一下听扫弦声。
 
-**统计** tab:总计遍数 / 时长 + 🔥 连续练琴天数 + 13 周练习日历热力图 + 每首歌明细;顶栏 🎨 可切主题(跟随系统 / 浅色 / 深色)。
+**统计** tab:总计遍数 / 时长 + 🔥 连续练琴天数 + 13 周练习日历热力图 + 每首歌明细;顶栏 🎨 可切主题(跟随系统 / 浅色 / 深色);顶栏 ☁ **备份/分享/导入**自加歌(导出 JSON 文本 → 复制或系统分享;粘贴文本导回)。
 
 **调音** tab:真调音器——听麦克风测拨弦音高 → 指针表显示偏低 / 准 / 偏高 + 选弦判对;A4 校准(430~450Hz);GCEA 空弦参考音;选中的弦调准时按钮变绿、4 根全绿 = 全调好。
 
@@ -36,4 +38,4 @@ flutter build apk --release      # → build/app/outputs/flutter-apk/app-release
 
 ## 项目结构
 
-Flutter 工程在 `flutter_app/`。`lib/` 下:`audio/`(音频引擎 / Karplus-Strong 扫弦合成 / 麦克风采集 / YIN 测音高)、`prefs/`(SharedPreferences 封装)、`screens/`(各 tab 页 + 自加歌表单)、`widgets/`(和弦图 / 歌词 / 练习栏)、`song_store.dart`(歌库:内置歌 + 用户自加歌,ChangeNotifier)、`theme_controller.dart`(主题模式控制器:系统 / 浅色 / 深色)、`models.dart`(歌曲数据 + 纯函数)。安卓端是空 `FlutterActivity`——纯 Flutter、无自写平台通道。歌曲按稳定 id 存偏好(不按下标,加 / 删用户歌不会串数据),详见 [docs/adr/0003-song-id-storage.md](docs/adr/0003-song-id-storage.md)。
+Flutter 工程在 `flutter_app/`。`lib/` 下:`audio/`(音频引擎 / Karplus-Strong 扫弦合成 / 麦克风采集 / YIN 测音高 / 跟唱录音器)、`prefs/`(SharedPreferences 封装)、`screens/`(各 tab 页 + 自加歌表单)、`widgets/`(和弦图 / 歌词 / 练习栏)、`song_store.dart`(歌库:内置歌 + 用户自加歌,ChangeNotifier)、`song_backup.dart`(歌曲备份/导入纯函数)、`theme_controller.dart`(主题模式控制器:系统 / 浅色 / 深色)、`models.dart`(歌曲数据 + 纯函数)。安卓端是空 `FlutterActivity`——纯 Flutter、无自写平台通道。歌曲按稳定 id 存偏好(不按下标,加 / 删用户歌不会串数据),详见 [docs/adr/0003-song-id-storage.md](docs/adr/0003-song-id-storage.md)。
