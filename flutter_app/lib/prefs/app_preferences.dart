@@ -154,6 +154,9 @@ class AppPreferences {
     await _prefs.remove('$_kLoopsPrefix$id');
     await _prefs.remove('$_kSecPrefix$id');
     await _prefs.remove('$_kLastPracticedPrefix$id');
+    await _prefs.remove('$_kPlayStylePrefix$id');
+    await _prefs.remove('$_kFingerpickPatternPrefix$id');
+    await _prefs.remove('$_kLastScorePrefix$id');
   }
 
   // —— 上次练习日期(按歌存,第55步)——
@@ -248,6 +251,12 @@ class AppPreferences {
   Future<void> setFingerpickPattern(String songId, int v) =>
       _prefs.setInt('$_kFingerpickPatternPrefix$songId', v);
 
+  // —— 评分(第63步·按歌存)——
+  // 存 JSON: {"grade":"A","timingPct":85,"pitchPct":92,"date":"2026-08-10"}
+  String? getLastScore(String songId) => _prefs.getString('$_kLastScorePrefix$songId');
+  Future<void> setLastScore(String songId, String v) =>
+      _prefs.setString('$_kLastScorePrefix$songId', v);
+
   // key 常量:集中放一处,免得读写各处拼字符串拼错。
   static const _kSongIndex = 'pref_song_index'; // 旧版:上次选歌下标(第45步前)。留作一次性迁移读。
   static const _kSelectedSongId = 'pref_selected_song_id'; // 第45步起:上次选歌按 id 存(替 _kSongIndex)
@@ -284,4 +293,5 @@ class AppPreferences {
   static const _kTrainerBestPrefix = 'pref_trainer_best_'; // 第58步-7:后接难度名,如 pref_trainer_best_beginner
   static const _kPlayStylePrefix = 'pref_play_style_'; // 第59步:后接歌曲 id;奏法 strum/fingerpick
   static const _kFingerpickPatternPrefix = 'pref_fingerpick_pattern_'; // 第59步:后接歌曲 id;指弹节奏型下标
+  static const _kLastScorePrefix = 'pref_last_score_'; // 第63步:后接歌曲 id;最近评分 JSON
 }

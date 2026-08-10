@@ -438,6 +438,7 @@ class StatsScreenState extends State<StatsScreen> {
               sec: p.getSec(songs[i].id),
               lastTempo: p.getTempo(songs[i].id),
               lastPracticed: p.getLastPracticed(songs[i].id),
+              lastScore: p.getLastScore(songs[i].id),
             ),
         ],
       ),
@@ -452,6 +453,7 @@ class _SongStatsCard extends StatelessWidget {
   final int sec;
   final int? lastTempo;
   final String? lastPracticed; // ISO 日期字符串 'yyyy-MM-dd'(第55步)
+  final String? lastScore; // 上次评分,如 "A · 85%/92%"(第63步)
 
   const _SongStatsCard({
     required this.song,
@@ -459,6 +461,7 @@ class _SongStatsCard extends StatelessWidget {
     required this.sec,
     required this.lastTempo,
     required this.lastPracticed,
+    this.lastScore,
   });
 
   /// 把 ISO 日期字符串折成中文"上次:今天/昨天/N天前/还没练过"。
@@ -506,6 +509,7 @@ class _SongStatsCard extends StatelessWidget {
                         ? '${_lastPracticeLabel(lastPracticed)} · '
                             '原速 ${song.tempo} BPM'
                             '${lastTempo != null && lastTempo != song.tempo ? ' · 最近 $lastTempo' : ''}'
+                            '${lastScore != null ? ' · 评分 $lastScore' : ''}'
                         : '还没练过',
                     style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
