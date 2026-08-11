@@ -13,6 +13,7 @@
 - 📜 歌词自动滚动、字号可调、练琴时屏幕常亮
 - 🎚 **移调(虚拟变调夹)**:照旧按原和弦指法,扫弦声整体升/降 ±6 半音贴合嗓音(双向,按歌记)
 - 🎙 **跟唱录音**:练琴时录人声,顶栏「听刚才」回放最后一段
+- 🎯 **跟弹评分**:开麦听你扫弦、逐下比对节拍,给准确率 % + 每下 ✓/早/晚/漏;评分时静音扫弦声、滤掉嗒声,让新手第一次看到练习的真正效果(可调延迟校准)
 - 📊 本次 / 累计遍数 + 时长、整首进度条
 - 🔍 **歌曲搜索**:顶栏搜索框按歌名实时筛选
 - ⭐ **收藏歌曲**:点心形收藏常用歌,FilterChip 可筛「收藏」
@@ -43,4 +44,4 @@ flutter build apk --release      # → build/app/outputs/flutter-apk/app-release
 
 ## 项目结构
 
-Flutter 工程在 `flutter_app/`。`lib/` 下:`audio/`(音频引擎 / Karplus-Strong 扫弦合成 / 麦克风采集 / YIN 测音高 / 跟唱录音器)、`prefs/`(SharedPreferences 封装)、`screens/`(各 tab 页 + 自加歌表单)、`widgets/`(和弦图 / 歌词 / 练习栏)、`song_store.dart`(歌库:内置歌 + 用户自加歌,ChangeNotifier)、`song_backup.dart`(歌曲备份/导入纯函数)、`theme_controller.dart`(主题模式控制器:系统 / 浅色 / 深色)、`models.dart`(歌曲数据 + 纯函数)。安卓端是空 `FlutterActivity`——纯 Flutter、无自写平台通道。歌曲按稳定 id 存偏好(不按下标,加 / 删用户歌不会串数据),详见 [docs/adr/0003-song-id-storage.md](docs/adr/0003-song-id-storage.md)。
+Flutter 工程在 `flutter_app/`。`lib/` 下:`audio/`(音频引擎 / Karplus-Strong 扫弦合成 / 麦克风采集 / YIN 测音高 / 跟唱录音器 / 跟弹起始检测 OnsetDetector)、`prefs/`(SharedPreferences 封装)、`screens/`(各 tab 页 + 自加歌表单)、`widgets/`(和弦图 / 歌词 / 练习栏)、`scoring/`(跟弹评分:期望扫弦 × 检出 onset → 命中/早/晚/准)、`song_store.dart`(歌库:内置歌 + 用户自加歌,ChangeNotifier)、`song_backup.dart`(歌曲备份/导入纯函数)、`theme_controller.dart`(主题模式控制器:系统 / 浅色 / 深色)、`models.dart`(歌曲数据 + 纯函数)。安卓端是空 `FlutterActivity`——纯 Flutter、无自写平台通道。歌曲按稳定 id 存偏好(不按下标,加 / 删用户歌不会串数据),详见 [docs/adr/0003-song-id-storage.md](docs/adr/0003-song-id-storage.md)。

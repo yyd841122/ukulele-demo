@@ -15,10 +15,12 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../audio/audio_constants.dart'; // kAudioSampleRate:音准监测喂 PitchDetector 的采样率
 import '../audio/audio_engine.dart';
 import '../audio/mic_capture.dart'; // 跟唱音准监测(完善Step7):开麦采人声
+import '../audio/onset_detector.dart'; // 跟弹评分(完善Step8):麦扫弦起始检测
 import '../audio/pitch_detector.dart'; // PitchDetector + frequencyToNote + NoteResult + centsStatusLabel
 import '../audio/voice_recorder.dart'; // 跟唱录音(第49步)
 import '../models.dart';
 import '../prefs/app_preferences.dart';
+import '../scoring/strum_scorer.dart'; // 跟弹评分(完善Step8):期望×onset → 命中/早/晚/准
 import '../song_store.dart';
 import '../widgets/lyric_view.dart';
 import '../widgets/practice_bar.dart';
@@ -175,6 +177,22 @@ class SongScreenState extends State<SongScreen> {
   final PitchDetector _vocalDetector =
       const PitchDetector(minFrequency: 80, maxFrequency: 1000);
 
+  // —— 跟弹评分(完善Step8):开麦听扫弦、逐下比对节拍打分,让新手看到练习的真正效果 ——
+  // 评分中:静音扫弦声(Karplus-Strong 是宽带,会污染麦),只保留嗒声(切到带淡入、可滤的嘀声),
+  // 麦那头 OnsetDetector 把嗒声滤掉、抓出扫弦;strum_scorer 把抓到的扫弦跟节拍比对。
+  bool _scoring = false; // 评分开关(只在未播放时可切 —— 播放中置灰,免得麦中途起漏开头)
+  bool _scoringSessionActive = false; // 当前是否在一次评分播放中(▶ 起、⏸ 止)
+  MicCapture? _scoreMic; // 评分用麦(跟 _monitorMic / _recorder 互斥共享一个设备麦)
+  StreamSubscription<Float64List>? _scoreSub;
+  OnsetDetector? _scoreOnset; // 懒建;reset 后复用
+  final Stopwatch _scoreStopwatch = Stopwatch(); // 评分统一时钟(▶ 起,跨调速 / 循环不重置)
+  final List<double> _expectedTimes = []; // 每下「该扫」的时刻(秒,stopwatch 时钟)
+  final List<double> _onsetTimes = []; // 检出的扫弦时刻(秒,stopwatch 时钟,未减延迟)
+  bool _scoreMicReady = false; // 第一个 chunk 到了没(没到不记 expected —— 防漏开头那几下)
+  ScoreResult? _liveResult; // 实时累计分(给 live 条;只含窗口已关闭的 expected)
+  ScoreResult? _lastSummary; // 停播时弹的总结
+  double _scoreLatency = 0.10; // 延迟校准(秒,从 prefs 读;总结里可调)
+
   // —— 分段 AB 循环 ——
   // _markerA / _markerB:用户在歌词上点的两个"循环点"(行下标)。两个都标好 → 引擎到 B 行末尾跳回 A 行开头反复。
   // 只标了 A(_markerB 仍 null)= 还没成区间,只在那一行显示 A 徽标。换歌清空(行下标是按某首歌的行算的,不能跨歌保留)。
@@ -310,6 +328,8 @@ class SongScreenState extends State<SongScreen> {
           .clamp(0, patternsFor(songs[_selected].beatsPerChord).length - 1);
       _strumSoundOn = p.getStrumSound(true);
       _rampOn = p.getRamp();
+      _scoring = p.getScoring(); // 完善Step8:上次评分开关状态
+      _scoreLatency = p.getScoreLatency(); // 完善Step8:上次调的延迟校准
       _lyricScale = p.getLyricScale(1.0).clamp(0.8, 1.8); // Slider 区间,防存了个越界值
       _favorites = p.getFavorites(); // 收藏列表(第58步-2),跨重启保留
       _rebuildFlat(); // 按载入的歌重新拍扁(歌曲可能从 0 变成上次的下标)
@@ -388,6 +408,8 @@ class SongScreenState extends State<SongScreen> {
     _recorder?.dispose(); // 跟唱录音器:停录 + 释放麦(SongScreen 销毁 = app 退出,IndexedStack 保活)
     _monitorSub?.cancel(); // 跟唱音准监测:停订阅(dispose 时 element 已 defunct,不能 setState,直接清)
     _monitorMic?.dispose(); // 释放麦
+    _scoreSub?.cancel(); // 跟弹评分(完善Step8):停订阅 + 释放评分麦
+    _scoreMic?.dispose();
     super.dispose();
   }
 
@@ -462,12 +484,18 @@ class SongScreenState extends State<SongScreen> {
 
   /// 按一下 ▶/⏸:正在响就停,没响就接着弹。
   /// 对齐 Web:不归零、resume——暂停后再按 ▶ 接着上次停的地方继续;只有换歌才从头(见 _onSongChanged)。
-  void _togglePlay() {
+  ///
+  /// 完善Step8:评分开着的话,起播时先开麦(预备拍期间热起来,补偿输入延迟);停播时算总结、弹卡。
+  /// 麦开不了(权限拒 / start 失败)→ 关掉评分、退回普通练习(嗒声+扫弦声),不静默 0%。
+  Future<void> _togglePlay() async {
     if (_playing) {
       _timer?.cancel();
       _timer = null;
       _accumulateSec(); // 暂停:把这段播放时间结进 _totalSec
       _saveStats(); // 暂停时存一次累计(遍数 + 秒数),免得退出丢失
+      if (_scoringSessionActive) {
+        await _stopScoringSession(); // 停麦 + 算总结 + 弹卡
+      }
     } else {
       // 正式播放开始:打断可能正在放的节奏型试听,免得两串扫弦叠着响。
       _previewTimer?.cancel();
@@ -485,13 +513,22 @@ class SongScreenState extends State<SongScreen> {
               : _lastLine;
         }
       }
+      // 评分:起播时开麦(预备拍期间热起来)。开不了 → 关评分,下面照常按普通模式起拍。
+      if (_scoring) {
+        final ok = await _startScoringSession();
+        if (!mounted) return;
+        if (!ok) {
+          setState(() => _scoring = false);
+          _prefs?.setScoring(false);
+        }
+      }
       _playStart = DateTime.now(); // 记下开始播放的时刻(计时用)
       // 立刻响当下这一下(预备拍第1下 或 恢复处的槽),不用干等半拍。
       _tick();
       _startTimer();
     }
     _setWakelock(!_playing); // 要播就屏幕常亮、要停就恢复正常(_playing 还没翻,!它 = 新状态)
-    setState(() => _playing = !_playing);
+    if (mounted) setState(() => _playing = !_playing);
   }
 
   /// 换歌:速度可能变了,先停掉节拍器、把位置归零,再按新歌拍扁数据,免得还按上一首的旧结构走。
@@ -500,6 +537,7 @@ class SongScreenState extends State<SongScreen> {
     _timer = null;
     _previewTimer?.cancel(); // 换歌打断试听(和弦上下文变了)
     _previewTimer = null;
+    _abortScoringSession(); // 换歌 = 停这次评分 take(静默,不弹总结)
     _setWakelock(false); // 换歌 = 停下,屏幕恢复正常(新歌默认不播,要按 ▶ 才再亮)
     _accumulateSec(); // 把正在播放的这段时间结进【旧歌】的 _totalSec
     final p = _prefs;
@@ -560,6 +598,7 @@ class SongScreenState extends State<SongScreen> {
     }
     _previewTimer?.cancel();
     _previewTimer = null;
+    _abortScoringSession(); // 编辑 = 停这次评分 take(静默)
     final edited = await Navigator.of(context).push<Song>(
       MaterialPageRoute(builder: (_) => AddSongScreen(initial: current)),
     );
@@ -611,6 +650,7 @@ class SongScreenState extends State<SongScreen> {
     _previewTimer?.cancel();
     _previewTimer = null;
     _playStart = null;
+    _abortScoringSession(); // 删除 = 停这次评分 take(静默)
     if (_playing) _setWakelock(false);
     widget.store.remove(current.id); // notify → _onStoreChanged 把 _selected 夹回合法范围
     if (!mounted || songs.isEmpty) return;
@@ -725,14 +765,24 @@ class SongScreenState extends State<SongScreen> {
   /// 走一下:该响就响 + 刷新界面。这里【不】改 _slot/_idx/_inCountIn —— 推进放 _onTimerTick 里、在"下一槽"之前做。
   /// 因为 setState 延迟到下一帧才重画:若这边 setState 完就改值,重画读到的会是改后的值,扫弦会比声音快半拍(踩过的坑)。
   ///
-  /// 响声策略(三态):
-  /// - 预备拍(_inCountIn):只敲嗒声倒计时(要清晰,不掺扫弦声)。
-  /// - 正式播放 + 扫弦声开:按这一槽的扫弦方向(下/上)播【当前和弦】的扫弦声,代替嗒声
-  ///   (下扫那下本身就是每个正拍的标记,再叠嗒声会糊成一片;休止槽静音)。
+  /// 响声策略(完善Step8 增「评分」态):
+  /// - 预备拍(_inCountIn):只敲嗒声倒计时(评分开着也用嘀声 + 淡入,免得正拍时音色突变)。
+  /// - 评分中(_scoring 且正式播放):静音扫弦(Karplus-Strong 宽带、会污染麦),只敲可滤的嘀声节拍;
+  ///   每下「该扫」(dir != rest)记一个期望时刻(给 scorer 比对),并刷新实时分。
+  /// - 正式播放 + 扫弦声开:按这一槽的扫弦方向播当前和弦的扫弦声,代替嗒声(休止静音)。
   /// - 正式播放 + 扫弦声关:退回节拍器(正拍嗒、槽0 重音)——老行为。
   void _tick() {
     if (_inCountIn) {
-      if (_slot.isEven) widget.audio.playClick(accent: _slot == 0);
+      if (_slot.isEven) widget.audio.playClick(accent: _slot == 0, scoring: _scoring);
+    } else if (_scoring) {
+      // 评分:静音扫弦、敲嘀声(带淡入,麦那头陷波能剔掉),记期望 + 刷新实时分。
+      if (_slot.isEven) widget.audio.playClick(accent: _slot == 0, scoring: true);
+      if (_scoreMicReady && _flat.isNotEmpty && _idx < _flat.length) {
+        if (_strumDirForCurrentSlot() != StrumDir.rest) {
+          _expectedTimes.add(_scoreStopwatch.elapsedMilliseconds / 1000.0);
+        }
+      }
+      _refreshLiveScore();
     } else if (_strumSoundOn && _flat.isNotEmpty && _idx < _flat.length) {
       final dir = _strumDirForCurrentSlot();
       if (dir == StrumDir.down) {
@@ -1156,6 +1206,266 @@ class SongScreenState extends State<SongScreen> {
     if (mounted) setState(() {}); // 刷新图标 / 音高条;dispose 时 mounted=false 不刷
   }
 
+  // —— 跟弹评分(完善Step8)——
+  // 模型:每次 ▶(评分开)…⏸ = 一次评分 take,独立计时 + 独立 expected/onset 列表 + 独立总结。
+  // 麦跟 _monitorMic / _recorder 共用一个设备麦 → 互斥:评分开着时,record / monitor 按钮已置灰,
+  // 这里 _startScoringSession 再保险停一下它们。
+
+  /// 切评分开关。只在未播放时可切(播放中按钮已置灰,这里再兜一道)。
+  void _toggleScoring() {
+    if (_playing) return;
+    setState(() => _scoring = !_scoring);
+    _prefs?.setScoring(_scoring);
+  }
+
+  /// 起一次评分 take:开麦 + 复位检测器/列表/时钟。返 false = 麦开不了(权限拒 / start 失败)。
+  Future<bool> _startScoringSession() async {
+    _stopMonitor(); // 互斥兜底(按钮本已禁用)
+    if (_recording) await _stopRecord();
+    final mic = _scoreMic ??= MicCapture();
+    final granted = await mic.requestPermission();
+    if (!granted) {
+      if (!mounted) return false;
+      final denied = await mic.isPermanentlyDenied();
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('需要麦克风权限才能跟弹评分'),
+        action: denied ? SnackBarAction(label: '去设置', onPressed: openAppSettings) : null,
+      ));
+      return false;
+    }
+    _scoreOnset ??= OnsetDetector(sampleRate: kAudioSampleRate);
+    _scoreOnset!.reset();
+    _expectedTimes.clear();
+    _onsetTimes.clear();
+    _liveResult = null;
+    _scoreMicReady = false;
+    final started = await mic.start();
+    if (!started) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('开麦失败,已关掉评分。检查权限后重试')),
+      );
+      return false;
+    }
+    _scoreSub?.cancel();
+    _scoreSub = mic.samples.listen(_onScoreSample);
+    _scoreStopwatch.reset();
+    _scoreStopwatch.start();
+    _scoringSessionActive = true;
+    return true;
+  }
+
+  /// 停一次评分 take:停麦 + 算最终总结 + 弹总结卡(每 ▶…⏸ 一次总结)。
+  Future<void> _stopScoringSession() async {
+    _scoreSub?.cancel();
+    _scoreSub = null;
+    await _scoreMic?.stop();
+    _scoreStopwatch.stop();
+    _scoringSessionActive = false;
+    _scoreMicReady = false;
+    if (_expectedTimes.isEmpty) return; // 没正式记到期望(可能一开播就停)→ 不弹总结
+    _lastSummary = score(
+      expectedTimes: List.of(_expectedTimes),
+      onsetTimes: List.of(_onsetTimes),
+      tolerance: 0.18,
+      latencyOffset: _scoreLatency,
+    );
+    if (mounted) _showScoreSummary(_lastSummary!);
+  }
+
+  /// 静默拆掉评分 take(换歌 / 编辑 / 删除 / 销毁路径用):停麦、清状态,【不】弹总结。
+  void _abortScoringSession() {
+    _scoreSub?.cancel();
+    _scoreSub = null;
+    _scoreMic?.stop(); // fire-and-forget
+    _scoreStopwatch.stop();
+    _scoringSessionActive = false;
+    _scoreMicReady = false;
+  }
+
+  /// 麦来了一段样本 → 喂 OnsetDetector → 检出的 onset 累计进列表(同一 stopwatch 时钟,未减延迟)。
+  /// 不每 chunk setState(节流到 _tick,免得麦回调太勤卡 UI)。
+  void _onScoreSample(Float64List chunk) {
+    final det = _scoreOnset;
+    if (det == null || !_scoringSessionActive) return;
+    if (!_scoreMicReady) _scoreMicReady = true; // 第一个 chunk 到了 → 之后 _tick 才开始记 expected
+    final arrival = _scoreStopwatch.elapsedMilliseconds / 1000.0;
+    final onsets = det.process(chunk, arrival);
+    if (onsets.isNotEmpty) _onsetTimes.addAll(onsets);
+  }
+
+  /// 重算实时累计分:只纳入【窗口已关闭】的期望(now ≥ e + tolerance),免得最新的那下 onset 还没到
+  /// 就先判漏、圆点闪一下。最新的等它的 onset 到了再转正。_tick 每槽调一次。
+  static const double _scoreTolerance = 0.18; // 秒,跟 strum_scorer 默认一致
+  void _refreshLiveScore() {
+    if (!_scoringSessionActive || _expectedTimes.isEmpty) return;
+    final now = _scoreStopwatch.elapsedMilliseconds / 1000.0;
+    final closed = [for (final e in _expectedTimes) if (e <= now - _scoreTolerance) e];
+    if (closed.isEmpty) {
+      _liveResult = null;
+      return;
+    }
+    _liveResult = score(
+      expectedTimes: closed,
+      onsetTimes: List.of(_onsetTimes),
+      tolerance: _scoreTolerance,
+      latencyOffset: _scoreLatency,
+    );
+  }
+
+  /// 跟弹评分实时条:大字准确率 % + 最近若干下 ✓/←/→/✗ 圆点。评分播放中显在歌词上方。
+  Widget _buildScoreStrip(ColorScheme cs) {
+    final r = _liveResult;
+    final pct = (r == null || r.total == 0) ? null : (r.accuracy * 100).round();
+    final verdicts = r?.verdicts ?? const <StrumVerdict>[];
+    // 最近 14 下(圆点滚动窗)
+    final recent = verdicts.length > 14 ? verdicts.sublist(verdicts.length - 14) : verdicts;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: cs.surfaceContainerHighest),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 68,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  pct == null ? '—' : '$pct%',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: cs.primary),
+                ),
+                Text('准确率', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final v in recent) _verdictDot(v, cs),
+                if (recent.isEmpty)
+                  Text('跟着 ↓↑ 扫弦,我在听…', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 一个判定圆点:✓ 准(绿)/ ← 早(橙)/ → 晚(橙)/ ✗ 漏(红)。
+  Widget _verdictDot(StrumVerdict v, ColorScheme cs) {
+    final (color, glyph) = switch (v.judgment) {
+      StrumJudgment.onTime => (Colors.green, '✓'),
+      StrumJudgment.early => (Colors.orange, '←'),
+      StrumJudgment.late => (Colors.orange, '→'),
+      StrumJudgment.missed => (cs.error, '✗'),
+    };
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+        border: Border.all(color: color),
+      ),
+      child: Text(glyph, style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  /// 停播总结卡:大字准确率 + 命中明细 + 早晚倾向提示 + 延迟校准滑块(拖动实时重算)。
+  /// 「全早 / 全晚」就是延迟没校准好的信号 —— 拖滑块到早晚均衡再存。
+  void _showScoreSummary(ScoreResult result) {
+    var latency = _scoreLatency;
+    var r = result;
+    void recompute() {
+      r = score(
+        expectedTimes: List.of(_expectedTimes),
+        onsetTimes: List.of(_onsetTimes),
+        tolerance: _scoreTolerance,
+        latencyOffset: latency,
+      );
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSt) {
+            final pct = (r.accuracy * 100).round();
+            final ms = r.meanSignedErrorSec * 1000;
+            final String hint;
+            if (r.total == 0) {
+              hint = '没记到该扫的拍子(可能一开播就停了)。';
+            } else if (ms < -30) {
+              hint = '整体偏早 ${ms.abs().round()}ms → 把延迟调小一点(或你有点抢拍)。';
+            } else if (ms > 30) {
+              hint = '整体偏晚 ${ms.round()}ms → 把延迟调大一点(或你有点拖拍)。';
+            } else {
+              hint = '早晚挺均衡 👍';
+            }
+            return AlertDialog(
+              title: const Text('本次跟弹评分'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    r.total == 0 ? '—' : '$pct%',
+                    style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Theme.of(ctx).colorScheme.primary),
+                  ),
+                  Text(
+                    '准确率 · 共 ${r.total} 下(准 ${r.onTime} · 早 ${r.early} · 晚 ${r.late} · 漏 ${r.missed})',
+                    style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 6),
+                  if (r.hits > 0)
+                    Text(
+                      '命中的平均误差 ${(r.meanAbsErrorSec * 1000).round()}ms',
+                      style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                    ),
+                  const SizedBox(height: 10),
+                  Text(hint, style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 12),
+                  Text('延迟校准 ${(latency * 1000).round()}ms', style: const TextStyle(fontSize: 12)),
+                  Slider(
+                    min: -0.2,
+                    max: 0.2,
+                    divisions: 40, // 10ms 一档
+                    value: latency,
+                    label: '${(latency * 1000).round()}ms',
+                    onChanged: (v) => setSt(() {
+                      latency = v;
+                      recompute();
+                    }),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _scoreLatency = latency;
+                    _prefs?.setScoreLatency(latency);
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('保存延迟'),
+                ),
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final song = songs[_selected];
@@ -1375,6 +1685,7 @@ class SongScreenState extends State<SongScreen> {
       body: Column(
         children: [
           if (_monitorOn) _buildPitchMonitor(cs), // 跟唱音准条(完善Step7):monitor 开时显在歌词上方
+          if (_scoringSessionActive) _buildScoreStrip(cs), // 跟弹评分实时条(完善Step8)
           // 顶部练习栏(吸顶):一排和弦卡 =【当前这一行】的和弦(弹到哪个、那张变大图高亮,其余小参考)+
           // 这一组扫到第几下(一排 ↓)+ 下一个和弦 + 调速滑块。卡跟当前行一一对应,不掺别行的和弦。
           PracticeBar(
@@ -1419,6 +1730,7 @@ class SongScreenState extends State<SongScreen> {
             onChordTap: (c) => widget.audio.playChord(c, semis: _transpose),
             fullscreen: _fullscreen,
             onToggleFullscreen: _toggleFullscreen,
+            scoring: _scoring,
           ),
           // 整首进度条:细一条,贴在歌词区顶上。走完一遍循环时回 0。一眼知道还剩多少。
           LinearProgressIndicator(
@@ -1546,8 +1858,10 @@ class SongScreenState extends State<SongScreen> {
             ),
           _actionIcon(
             icon: Icon(_recording ? Icons.stop_circle_outlined : Icons.mic_none_outlined),
-            tooltip: _recording ? '停止录音' : '录人声(跟唱录音)',
-            onPressed: _toggleRecord,
+            tooltip: _scoring
+                ? '评分开着,录音暂不可用(先关评分)'
+                : (_recording ? '停止录音' : '录人声(跟唱录音)'),
+            onPressed: _scoring ? null : _toggleRecord,
             color: _recording ? cs.error : null,
           ),
           if (_takeWav != null && !_recording)
@@ -1558,9 +1872,19 @@ class SongScreenState extends State<SongScreen> {
             ),
           _actionIcon(
             icon: const Icon(Icons.graphic_eq),
-            tooltip: _monitorOn ? '关音准监测' : '开音准监测(实时看唱的音准)',
-            onPressed: _toggleMonitor,
+            tooltip: _scoring
+                ? '评分开着,音准监测暂不可用(先关评分)'
+                : (_monitorOn ? '关音准监测' : '开音准监测(实时看唱的音准)'),
+            onPressed: _scoring ? null : _toggleMonitor,
             color: _monitorOn ? cs.primary : null,
+          ),
+          _actionIcon(
+            icon: Icon(_scoring ? Icons.fact_check_rounded : Icons.track_changes_rounded),
+            tooltip: _playing
+                ? '先暂停再开 / 关 跟弹评分'
+                : (_scoring ? '跟弹评分:开 · 听你弹的扫弦逐下打分(点关)' : '跟弹评分:关 · 开麦听扫弦、逐下打分(点开)'),
+            onPressed: _playing ? null : _toggleScoring,
+            color: _scoring ? cs.primary : null,
           ),
           _actionIcon(
             icon: const Icon(Icons.tune_rounded),
@@ -1582,10 +1906,11 @@ class SongScreenState extends State<SongScreen> {
 
   /// 图标行里一个紧凑图标(36 触控、shrinkWrap,跟练习栏调速行一个样式)。
   /// color 给了就用它当前景色(收藏/录音红、移调主色);不给走主题默认色。
+  /// onPressed 给 null = 置灰禁用(评分开着时给 record/monitor 传 null,它们跟评分共用麦)。
   Widget _actionIcon({
     required Icon icon,
     required String tooltip,
-    required VoidCallback onPressed,
+    VoidCallback? onPressed,
     Color? color,
   }) {
     return IconButton(

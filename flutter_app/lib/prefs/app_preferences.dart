@@ -43,6 +43,17 @@ class AppPreferences {
       _prefs.getBool(_kRamp) ?? fallback;
   Future<void> setRamp(bool v) => _prefs.setBool(_kRamp, v);
 
+  // 跟弹评分开关(完善Step8):开了之后练琴时开麦听扫弦、逐下打分。跨歌保留的练习偏好。
+  bool getScoring([bool fallback = false]) =>
+      _prefs.getBool(_kScoring) ?? fallback;
+  Future<void> setScoring(bool v) => _prefs.setBool(_kScoring, v);
+
+  // 跟弹评分延迟校准(秒):补偿麦输入 + 扬声器输出的系统延迟,onset 实际发生 = 检出时刻 − 它。
+  // 默认 0.10(安卓典型);界面 Slider 限定 -0.2~+0.2;"评分全早 / 全晚就调它"。存 double(跟 getA4 一个套路)。
+  double getScoreLatency([double fallback = 0.10]) =>
+      _prefs.getDouble(_kScoreLatency) ?? fallback;
+  Future<void> setScoreLatency(double v) => _prefs.setDouble(_kScoreLatency, v);
+
   // 歌词字号缩放(1.0 = 默认大小;>1 放大、<1 缩小)。全局偏好——一个人看歌词的习惯跟哪首歌无关。
   // 调用方负责 clamp 到合理区间(界面 Slider 限定 0.8~1.8);这里只管原样存/读,跟 tempo 一个套路。
   double getLyricScale([double fallback = 1.0]) =>
@@ -343,4 +354,6 @@ class AppPreferences {
   static const _kArpPattern = 'pref_arp_pattern'; // 完善:琶音页上次选的拨弦型下标
   static const _kArpSound = 'pref_arp_sound'; // 完善:琶音页示范音开关
   static const _kArpTempo = 'pref_arp_tempo'; // 完善:琶音页速度
+  static const _kScoring = 'pref_scoring'; // 完善Step8:跟弹评分开关
+  static const _kScoreLatency = 'pref_score_latency'; // 完善Step8:评分延迟校准(秒)
 }

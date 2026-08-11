@@ -40,6 +40,9 @@ class PracticeBar extends StatelessWidget {
   final ValueChanged<String> onMetronomeSoundChanged;
   final bool fullscreen;
   final VoidCallback onToggleFullscreen;
+  // 跟弹评分(完善Step8):评分开关状态。开关本身在 song_screen 顶栏图标行;这里只用它来在
+  // 评分 + 播放中把当前 ↓/↑ 放大当视觉节拍参考(评分时扫弦声静了,视觉要顶上)。
+  final bool scoring;
 
   const PracticeBar({
     super.key,
@@ -72,6 +75,7 @@ class PracticeBar extends StatelessWidget {
     this.onMetronomeSoundChanged = _noopStr,
     this.fullscreen = false,
     this.onToggleFullscreen = _noopVoid,
+    this.scoring = false,
   });
 
   static void _noopStr(String _) {}
@@ -172,7 +176,12 @@ class PracticeBar extends StatelessWidget {
                     else
                       Text(
                         strumGrid[i] == StrumDir.down ? '↓' : '↑',
-                        style: TextStyle(fontSize: 20, color: i == slot ? cs.primary : cs.outline),
+                        // 评分+播放:把当前那下放大当【视觉节拍参考】——评分时扫弦声静了,
+                        // 只剩嗒声 + 这串高亮的 ↓↑,得让当前那下更显眼才好跟。
+                        style: TextStyle(
+                          fontSize: (i == slot && scoring) ? 30 : 20,
+                          color: i == slot ? cs.primary : cs.outline,
+                        ),
                       ),
                   ],
                 ],

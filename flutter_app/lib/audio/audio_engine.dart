@@ -109,6 +109,17 @@ class AudioEngine {
         debugPrint('节拍器音色 $style 合成失败: $e');
       }
     }
+    // 第8步·评分嗒声:beep + 4ms 淡入,单独放 'scoring' 桶。评分时 playClick(scoring: true) 取它。
+    // 淡入软化硬起攻击的宽带溅射,让 OnsetDetector 的陷波器(880/1320Hz)能把嗒声从麦信号里剔干净。
+    // 合成 / 加载失败只打日志:评分会退回当前音色(顶多滤不太干净,不崩)。
+    try {
+      final pair = StrumSynth.synthesizeClickPair(style: 'beep', fadeIn: true);
+      final nSrc = await SoLoud.instance.loadMem('click_scoring_normal', pair.normal);
+      final aSrc = await SoLoud.instance.loadMem('click_scoring_accent', pair.accent);
+      _metronomeSounds['scoring'] = (normal: nSrc, accent: aSrc);
+    } catch (e) {
+      debugPrint('评分嗒声合成失败(会退回普通嘀声): $e');
+    }
   }
 
   /// 选节拍器音色(第58步-5)。[name] = 'click'/'beep'/'wood'/'rim'。不在 map 里就退回 click。
@@ -260,8 +271,12 @@ class AudioEngine {
 
   /// 播一声嗒(第58步-5:按当前选中的音色播)。play(src) 每次起全新实例从头播。
   /// accent=true 播高音重音(第 1 拍),否则普通嗒。引擎没好时 src 为 null,跳过。
-  void playClick({bool accent = false}) {
-    final pair = _metronomeSounds[_currentMetronomeSound];
+  /// scoring=true(第8步·跟弹评分):取带淡入的 'scoring' 嘀声桶(便于麦那头陷波识别后剔掉);
+  /// 该桶没建好就退回当前音色兜底(顶多滤不干净,不静音)。
+  void playClick({bool accent = false, bool scoring = false}) {
+    final pair = scoring
+        ? (_metronomeSounds['scoring'] ?? _metronomeSounds[_currentMetronomeSound])
+        : _metronomeSounds[_currentMetronomeSound];
     if (pair == null) return;
     final src = accent ? pair.accent : pair.normal;
     SoLoud.instance.play(src);

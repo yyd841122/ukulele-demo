@@ -104,15 +104,24 @@ class StrumSynth {
   /// 合成一个短促节拍器声音(第58步-5)。[hz] = 基频, [accent] = true 为重音高音版。
   /// 短脉冲(≈30ms):简单的 sine 波 + 指数衰减包络。
   /// [woodHack]:木鱼声=高频短脉冲; [rimHack]:鼓边=噪声短脉冲。
-  static Float64List _synthesizeClick(double hz, bool accent, {String style = 'beep'}) {
+  /// [fadeIn] = true 时开头加 ~4ms 升余弦淡入(第8步·跟弹评分用):现有包络 exp(-t/0.006) 是硬起攻击
+  /// (1ms 内就冲到 ~0.6),这种瞬态会产生宽带溅射,后面(OnsetDetector)的陷波器再深也压不掉它
+  /// ——评分时嗒声就会漏进麦、被当成你弹的扫弦。加段淡入把起攻击软化成「近乎窄带」,陷波器才能把它
+  /// 干净剔掉(>40dB)。软嘀声对人耳仍是清晰的一拍,不影响听节拍。默认关:老音色不变。
+  static Float64List _synthesizeClick(double hz, bool accent, {String style = 'beep', bool fadeIn = false}) {
     final dur = 0.030; // 30ms
     final total = (dur * sampleRate).round();
     final out = Float64List(total);
     final hz2 = accent ? hz * 1.5 : hz; // 重音=更高频率
     final omega = 2 * pi * hz2 / sampleRate;
+    final attackSamples = fadeIn ? (0.004 * sampleRate).round() : 0; // 4ms 升余弦淡入(评分嗒声用)
     for (var i = 0; i < total; i++) {
       final t = i / sampleRate;
       final env = exp(-t / 0.006); // 很快的衰减(≈6ms 包络)
+      // 淡入系数:0→1 的升余弦(hann 前半),只在头 attackSamples 内生效,其余 = 1.0(不动包络)。
+      final atk = (fadeIn && i < attackSamples)
+          ? 0.5 * (1 - cos(pi * i / attackSamples))
+          : 1.0;
       double sample;
       switch (style) {
         case 'wood':
@@ -128,7 +137,7 @@ class StrumSynth {
           sample = sin(omega * i);
           break;
       }
-      out[i] = sample * env;
+      out[i] = sample * env * atk;
     }
     // 末尾 3ms 快速淡出防咔
     final fade = (0.003 * sampleRate).round();
@@ -142,12 +151,14 @@ class StrumSynth {
   /// 不,返回两个单声道 WAV。给 AudioEngine loadMem 用。
   /// [style] = 'beep'(电子)/'wood'(木鱼)/'rim'(鼓边)。
   /// [baseHz] = 普通嗒声基频(默认 880Hz),重音自动升到 1.5×。
+  /// [fadeIn] = true 给两段都加 ~4ms 淡入(评分嗒声用,见 _synthesizeClick 详注)。
   static ({Uint8List normal, Uint8List accent}) synthesizeClickPair({
     String style = 'beep',
     double baseHz = 880,
+    bool fadeIn = false,
   }) {
-    final normalSamples = _synthesizeClick(baseHz, false, style: style);
-    final accentSamples = _synthesizeClick(baseHz, true, style: style);
+    final normalSamples = _synthesizeClick(baseHz, false, style: style, fadeIn: fadeIn);
+    final accentSamples = _synthesizeClick(baseHz, true, style: style, fadeIn: fadeIn);
     return (
       normal: buildWav(normalSamples, sampleRate: sampleRate),
       accent: buildWav(accentSamples, sampleRate: sampleRate),
