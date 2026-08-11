@@ -188,4 +188,40 @@ void main() {
     expect(p2.getTrainerChallenge(), true);
     expect(p2.getTrainerChallenge(false), true); // 存过就忽略 fallback
   });
+
+  test('指弹练习偏好:曲谱/示范音/速度 存读往返 + 默认值', () async {
+    final p = await AppPreferences.load();
+    expect(p.getFingerpickScore(), 0); // 默认第 0 首
+    expect(p.getFingerpickSound(), true); // 默认开
+    expect(p.getFingerpickTempo(), isNull); // 没存过 → null(用曲谱默认速度)
+
+    await p.setFingerpickScore(3);
+    await p.setFingerpickSound(false);
+    await p.setFingerpickTempo(120);
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getFingerpickScore(), 3);
+    expect(p2.getFingerpickSound(), false);
+    expect(p2.getFingerpickTempo(), 120);
+    expect(p2.getFingerpickScore(9), 3); // 存过就忽略 fallback
+  });
+
+  test('琶音练习偏好:进行/拨弦型/示范音/速度 存读往返 + 默认值', () async {
+    final p = await AppPreferences.load();
+    expect(p.getArpStudy(), 0);
+    expect(p.getArpPattern(), 0);
+    expect(p.getArpSound(), true);
+    expect(p.getArpTempo(), isNull);
+
+    await p.setArpStudy(2);
+    await p.setArpPattern(1);
+    await p.setArpSound(false);
+    await p.setArpTempo(90);
+
+    final p2 = await AppPreferences.load();
+    expect(p2.getArpStudy(), 2);
+    expect(p2.getArpPattern(), 1);
+    expect(p2.getArpSound(), false);
+    expect(p2.getArpTempo(), 90);
+  });
 }

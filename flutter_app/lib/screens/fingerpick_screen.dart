@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 
 import '../audio/audio_engine.dart';
 import '../models.dart';
+import '../prefs/app_preferences.dart';
 import '../widgets/fretboard_view.dart';
 
 class FingerpickScreen extends StatefulWidget {
@@ -26,6 +27,8 @@ class FingerpickScreen extends StatefulWidget {
 }
 
 class FingerpickScreenState extends State<FingerpickScreen> {
+  // 持久化:记住上次的曲谱 / 示范音 / 速度(跨重启)。initState 异步加载,读好再 reconcile。
+  AppPreferences? _prefs;
   int _selectedScore = 0;
 
   // 播放状态
@@ -53,6 +56,20 @@ class FingerpickScreenState extends State<FingerpickScreen> {
   void initState() {
     super.initState();
     _rebuildScoreSlots();
+    _loadPrefs(); // 异步读上次的曲谱/示范音/速度,读好再 reconcile(不卡首帧:先用默认值画)
+  }
+
+  Future<void> _loadPrefs() async {
+    final p = await AppPreferences.load();
+    if (!mounted || builtinFingerpickSongs.isEmpty) return;
+    setState(() {
+      _prefs = p;
+      _selectedScore =
+          p.getFingerpickScore(0).clamp(0, builtinFingerpickSongs.length - 1);
+      _soundOn = p.getFingerpickSound(true);
+      _rebuildScoreSlots(); // 按载入的曲谱重建槽位(_tempo 重设成该曲谱自带速度)
+      _tempo = (p.getFingerpickTempo() ?? _tempo).clamp(40, 180); // 存过 → 覆盖
+    });
   }
 
   // —— 曲谱:拍扁 + 建小节映射 ——
@@ -200,7 +217,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
               ]),
             ),
         ],
-        onChanged: (i) { if (i != null) { _stop(); setState(() => _selectedScore = i); _rebuildScoreSlots(); } },
+        onChanged: (i) { if (i != null) { _stop(); setState(() { _selectedScore = i; _rebuildScoreSlots(); }); _prefs?.setFingerpickScore(i); _prefs?.setFingerpickTempo(_tempo); } },
         dropdownColor: cs.surface,
         style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurface),
       ),
@@ -280,7 +297,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
         ),
         const SizedBox(width: 4),
         IconButton(
-          onPressed: () => setState(() => _soundOn = !_soundOn),
+          onPressed: () { setState(() => _soundOn = !_soundOn); _prefs?.setFingerpickSound(_soundOn); },
           tooltip: _soundOn ? '示范音:开(听曲谱)' : '示范音:关(跟练 · 节拍器打拍,自己弹)',
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -291,7 +308,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
         Text('$_tempo BPM', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
         Expanded(child: Slider(
           value: _tempo.toDouble(), min: 40, max: 180,
-          onChanged: (v) { setState(() => _tempo = v.round()); _restartTimerIfPlaying(); },
+          onChanged: (v) { setState(() => _tempo = v.round()); _restartTimerIfPlaying(); _prefs?.setFingerpickTempo(_tempo); },
         )),
       ]),
     );

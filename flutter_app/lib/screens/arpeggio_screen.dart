@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import '../audio/audio_engine.dart';
 import '../models.dart';
+import '../prefs/app_preferences.dart';
 import '../widgets/chord_diagram.dart';
 
 class ArpeggioScreen extends StatefulWidget {
@@ -27,6 +28,8 @@ class ArpeggioScreen extends StatefulWidget {
 }
 
 class ArpeggioScreenState extends State<ArpeggioScreen> {
+  // 持久化:记住上次的进行 / 拨弦型 / 示范音 / 速度(跨重启)。initState 异步加载。
+  AppPreferences? _prefs;
   int _selectedStudy = 0;
   int _selectedPattern = 0;
 
@@ -55,6 +58,20 @@ class ArpeggioScreenState extends State<ArpeggioScreen> {
   void initState() {
     super.initState();
     _tempo = _study.tempo;
+    _loadPrefs(); // 异步读上次的进行/拨弦型/示范音/速度,读好再 reconcile
+  }
+
+  Future<void> _loadPrefs() async {
+    final p = await AppPreferences.load();
+    if (!mounted) return;
+    setState(() {
+      _prefs = p;
+      _selectedStudy = p.getArpStudy(0).clamp(0, builtinArpStudies.length - 1);
+      _selectedPattern =
+          p.getArpPattern(0).clamp(0, builtinArpPatterns.length - 1);
+      _soundOn = p.getArpSound(true);
+      _tempo = (p.getArpTempo() ?? _study.tempo).clamp(40, 180); // _study 已随 _selectedStudy 更新
+    });
   }
 
   void _resetPos() {
@@ -73,11 +90,14 @@ class ArpeggioScreenState extends State<ArpeggioScreen> {
       _tempo = _study.tempo;
       _resetPos();
     });
+    _prefs?.setArpStudy(i);
+    _prefs?.setArpTempo(_tempo);
   }
 
   void _onPatternChanged(int i) {
     // 不停、不重置位置:拨弦型每槽现算,换了一下一槽就生效。
     setState(() => _selectedPattern = i);
+    _prefs?.setArpPattern(i);
   }
 
   // —— 播放控制 ——
@@ -339,7 +359,7 @@ class ArpeggioScreenState extends State<ArpeggioScreen> {
         ),
         const SizedBox(width: 4),
         IconButton(
-          onPressed: () => setState(() => _soundOn = !_soundOn),
+          onPressed: () { setState(() => _soundOn = !_soundOn); _prefs?.setArpSound(_soundOn); },
           tooltip: _soundOn ? '示范音:开(听拨弦)' : '示范音:关(跟练 · 节拍器打拍,自己拨)',
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -351,7 +371,7 @@ class ArpeggioScreenState extends State<ArpeggioScreen> {
         Expanded(child: Slider(
           value: _tempo.clamp(40, 180).toDouble(), min: 40, max: 180, divisions: 140,
           label: '$_tempo BPM',
-          onChanged: (v) { setState(() => _tempo = v.round()); _restartTimerIfPlaying(); },
+          onChanged: (v) { setState(() => _tempo = v.round()); _restartTimerIfPlaying(); _prefs?.setArpTempo(_tempo); },
         )),
       ]),
     );

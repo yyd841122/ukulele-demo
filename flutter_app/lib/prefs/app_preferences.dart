@@ -235,6 +235,39 @@ class AppPreferences {
   Future<void> setTrainerBest(String difficulty, int v) =>
       _prefs.setInt('$_kTrainerBestPrefix$difficulty', v);
 
+  // —— 指弹练习(全局;上次选的曲谱 / 示范音 / 速度)——
+  // 不按歌存——指弹页是单页练习,记"上次到哪"即可,跨重启还在。没存过调用方给默认(第 0 首、示范音开)。
+  int getFingerpickScore([int fallback = 0]) =>
+      _prefs.getInt(_kFingerpickScore) ?? fallback;
+  Future<void> setFingerpickScore(int v) =>
+      _prefs.setInt(_kFingerpickScore, v);
+
+  bool getFingerpickSound([bool fallback = true]) =>
+      _prefs.getBool(_kFingerpickSound) ?? fallback;
+  Future<void> setFingerpickSound(bool v) =>
+      _prefs.setBool(_kFingerpickSound, v);
+
+  // 速度默认跟选中曲谱走(每首自带),所以 null = 用曲谱默认;存过就覆盖。
+  int? getFingerpickTempo() => _prefs.getInt(_kFingerpickTempo);
+  Future<void> setFingerpickTempo(int v) =>
+      _prefs.setInt(_kFingerpickTempo, v);
+
+  // —— 琶音练习(全局;上次选的进行 / 拨弦型 / 示范音 / 速度)—— 同指弹套路。
+  int getArpStudy([int fallback = 0]) =>
+      _prefs.getInt(_kArpStudy) ?? fallback;
+  Future<void> setArpStudy(int v) => _prefs.setInt(_kArpStudy, v);
+
+  int getArpPattern([int fallback = 0]) =>
+      _prefs.getInt(_kArpPattern) ?? fallback;
+  Future<void> setArpPattern(int v) => _prefs.setInt(_kArpPattern, v);
+
+  bool getArpSound([bool fallback = true]) =>
+      _prefs.getBool(_kArpSound) ?? fallback;
+  Future<void> setArpSound(bool v) => _prefs.setBool(_kArpSound, v);
+
+  int? getArpTempo() => _prefs.getInt(_kArpTempo);
+  Future<void> setArpTempo(int v) => _prefs.setInt(_kArpTempo, v);
+
   // key 常量:集中放一处,免得读写各处拼字符串拼错。
   static const _kSongIndex = 'pref_song_index'; // 旧版:上次选歌下标(第45步前)。留作一次性迁移读。
   static const _kSelectedSongId = 'pref_selected_song_id'; // 第45步起:上次选歌按 id 存(替 _kSongIndex)
@@ -269,4 +302,11 @@ class AppPreferences {
   static const _kMetronomeSound = 'pref_metronome_sound'; // 第58步-5:节拍器音色名
   static const _kTrainerDifficulty = 'pref_trainer_difficulty'; // 第58步-7:换和弦难度名
   static const _kTrainerBestPrefix = 'pref_trainer_best_'; // 第58步-7:后接难度名,如 pref_trainer_best_beginner
+  static const _kFingerpickScore = 'pref_fingerpick_score'; // 完善:指弹页上次选的曲谱下标
+  static const _kFingerpickSound = 'pref_fingerpick_sound'; // 完善:指弹页示范音开关
+  static const _kFingerpickTempo = 'pref_fingerpick_tempo'; // 完善:指弹页速度(覆盖曲谱默认)
+  static const _kArpStudy = 'pref_arp_study'; // 完善:琶音页上次选的进行下标
+  static const _kArpPattern = 'pref_arp_pattern'; // 完善:琶音页上次选的拨弦型下标
+  static const _kArpSound = 'pref_arp_sound'; // 完善:琶音页示范音开关
+  static const _kArpTempo = 'pref_arp_tempo'; // 完善:琶音页速度
 }
