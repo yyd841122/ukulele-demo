@@ -1,4 +1,4 @@
-package com.example.ukulele_demo
+package app.youyd.ukulele
 
 import io.flutter.embedding.android.FlutterActivity
 

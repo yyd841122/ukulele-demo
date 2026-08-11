@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.ukulele_demo"
+    namespace = "app.youyd.ukulele"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -17,8 +17,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.ukulele_demo"
+        // 应用包名(applicationId):Play Store 终身唯一标识,发布后不可改。
+        // (从模板默认值 com.example.ukulele_demo 改成自己的,Google Play 禁止 com.example 前缀。)
+        applicationId = "app.youyd.ukulele"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // soundpool 依赖的 AndroidX 库要求 minSdk ≥ 21,这里显式设到 24 满足它们。
