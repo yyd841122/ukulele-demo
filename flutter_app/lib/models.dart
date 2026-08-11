@@ -1258,6 +1258,103 @@ const List<Song> builtinSongs = [
       ),
     ],
   ),
+
+  // ═══ 第15步:公有领域(PD)扫弦歌 4 首 ═══
+  // 这些歌的词、曲作者均已去世逾版权保护期(作者去世+50年,中国/多数国家),进入公有领域,
+  // 可自由使用。和弦套路由本 app 配(非原曲精确和声),新手友好、贴合歌曲情绪即可。
+  // 扫弦歌只给"词+和弦",app 播和弦、用户自己唱旋律——不存在"写错旋律"风险。
+
+  // 送别 —— 李叔同 1915 年填词(曲借用美国 Ordway《Dreaming of Home and Mother》,均 PD)。
+  // 华语圈最熟的一首,C 调,4/4,抒情慢歌。和弦走华语抒情套路(C-G-Am-Em 主流动,F-Dm-G 推动收束)。
+  // 原作就是四句一段反复吟唱,只录最经典、人人会背的这一段,不臆造段落。
+  Song(
+    title: "🌅 送别",
+    tempo: 72,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: "[C]长亭外 [G]古道边 [Am]芳草碧连[Em]天"),
+          Line(lyric: "[F]晚风拂 [C]柳笛声残 [Dm]夕阳山外[G]山"),
+          Line(lyric: "[C]天之涯 [G]地之角 [Am]知交半零[Em]落"),
+          Line(lyric: "[F]一瓢浊 [C]酒尽余欢 [Dm]今宵别梦[G]寒"),
+        ],
+      ),
+    ],
+  ),
+
+  // Amazing Grace(奇异恩典)—— 18 世纪英国 Newton 作词(PD),全球最熟赞美诗。
+  // G 调,3/4 拍(华尔兹),舒缓庄严。和弦用赞美诗最经典的 I-IV-V(G-C-D7)。
+  Song(
+    title: "✨ 奇异恩典 (Amazing Grace)",
+    tempo: 80,
+    beatsPerChord: 3,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: "[G]Amazing grace how [G7]sweet the sound"),
+          Line(lyric: "[C]That saved a wretch like [G]me"),
+          Line(lyric: "[Em]I once was lost but [C]now am found"),
+          Line(lyric: "[D7]Was blind but now I [G]see"),
+        ],
+      ),
+    ],
+  ),
+
+  // Auld Lang Syne(友谊地久天长)—— 18 世纪苏格兰 Burns 整理(PD),跨年必唱。
+  // G 调,4/4。和弦走经典 1-5-6-4(G-D-Em-C),副歌 D 推回 G。
+  Song(
+    title: "🥂 友谊地久天长 (Auld Lang Syne)",
+    tempo: 90,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[G]Should auld acquaintance [D]be forgot"),
+          Line(lyric: "[Em]and never brought to [C]mind"),
+          Line(lyric: "[G]Should auld acquaintance [D]be forgot"),
+          Line(lyric: "[G]and days of auld lang [D]syne"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[G]For auld lang syne my [D]dear"),
+          Line(lyric: "[Em]for auld lang [C]syne"),
+          Line(lyric: "[G]We'll take a cup o' [D]kindness yet"),
+          Line(lyric: "[G]for auld lang [D]syne"),
+        ],
+      ),
+    ],
+  ),
+
+  // 茉莉花 —— 中国传统民歌(anonymous,PD),江南小调,五声调式,海外最熟的中国旋律之一。
+  // C 调,4/4。和弦走 C-Am-Dm-G 民歌色彩套(C 主、Am 小调色彩、Dm-G 推动循环)。
+  Song(
+    title: "🌼 茉莉花",
+    tempo: 76,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]好一朵美丽的 [Am]茉莉花"),
+          Line(lyric: "[C]好一朵美丽的 [Am]茉莉花"),
+          Line(lyric: "[Dm]芬芳美丽满 [G]枝桠"),
+          Line(lyric: "[C]又香又白 [Am]人人夸"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[Dm]让我来将你 [G]摘下"),
+          Line(lyric: "[C]送给别人 [Am]家"),
+          Line(lyric: "[Dm]茉莉花呀 [G]茉莉花"),
+        ],
+      ),
+    ],
+  ),
 ];
 
 /// 【第43a步】内置歌补上稳定 id(= 各自下标)后的歌曲库。界面读这份。
