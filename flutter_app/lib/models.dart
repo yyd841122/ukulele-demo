@@ -282,6 +282,12 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
 int nextRampTempo(int current, int cap, {int step = 3}) =>
     current < cap ? min(current + step, cap) : current;
 
+/// i 是长度 length(>1)序列的最后一个下标吗——即"再走一步就绕回开头"。
+/// 给【循环过渡拍】用:琶音(_chordIdx)/指弹(_globalSlot)回跳时,只在整轮走完
+/// (最后一个 → 回第1个)才插过渡拍,不是每个元素都插;length<=1 不绕环,不插。
+/// 抽成纯函数:两屏共用同一判断 + 无头测试锁住边界(末位/非末位/单元素/空),跟 nextRampTempo 一个套路。
+bool isLastIndex(int i, int length) => length > 1 && i == length - 1;
+
 /// 移调(虚拟变调夹)在练习页信息行里的显示片段:
 /// 0 → 空串(不移调就不显示);否则形如「移调 +2半音 · 」,直接拼在信息行最前面。
 /// 抽成纯函数:跟 formatPracticeSec 一个套路,锁住正 / 负 / 零三种显示,无头可测。

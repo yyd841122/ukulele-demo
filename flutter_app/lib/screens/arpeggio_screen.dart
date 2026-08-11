@@ -142,6 +142,15 @@ class ArpeggioScreenState extends State<ArpeggioScreen> {
       _slot++;
       if (_slot >= _slotsPerBar) {
         _slot = 0;
+        // 整轮走完(最后一个和弦 → 回第1个)才插【过渡拍】,不是每小节都插。
+        // 复用上面的预备拍机制:嗒满1小节再开下一轮,给新手换手时间(完善Step9 加)。
+        if (isLastIndex(_chordIdx, _study.chords.length)) {
+          _chordIdx = 0;
+          _inCountIn = true;
+          _countInSlot = 0;
+          setState(() {});
+          return; // 本 tick 不播和弦;下一 tick 起由上面 if(_inCountIn) 分支嗒满1小节
+        }
         _chordIdx = (_chordIdx + 1) % _study.chords.length; // 末尾循环回 0
       }
       _playCurrent();

@@ -170,6 +170,14 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     final dur = cur.duration <= 0 ? 1 : cur.duration;
     if (_ticksHeld >= dur) {
       _ticksHeld = 0;
+      // 整曲末尾(最后一个音 → 回第1个)插【过渡拍】:嗒满1小节(4拍)再开下一遍。
+      // 复用上面的预备拍机制(含 _pendingStart 首拍对齐),给新手换手时间(完善Step9 加)。
+      if (isLastIndex(_globalSlot, _flatSlots.length)) {
+        _globalSlot = 0;
+        _inCountIn = true;
+        _countInSlot = 0;
+        return; // 本 tick 不播 slot0;下一 tick 起由上面 if(_inCountIn) 分支嗒4拍
+      }
       _globalSlot = (_globalSlot + 1) % _flatSlots.length;
       _playSlot(_globalSlot);
     }

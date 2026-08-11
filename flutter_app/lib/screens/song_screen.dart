@@ -93,9 +93,10 @@ class SongScreenState extends State<SongScreen> {
   DateTime? _playStart;
 
   // —— 预备拍(倒计时)——
-  // _inCountIn:正在数预备拍吗。从头第一次按 ▶ 时置 true,数完一小节(beatsPerChord×2 个槽)置 false。
-  // _everPlayed:这首歌这一轮"正式开始播"过了吗。只在"从头第一次按 ▶"给一轮预备拍;
-  // 暂停后恢复、以及自动循环回开头都不重复数——预备拍是给"人"准备手用的,机器自己循环不需要。
+  // _inCountIn:正在数预备拍吗。两种情况置 true:① 从头第一次按 ▶ 数一小节(beatsPerChord×2 个槽);
+  //   ② 自动循环回跳后数一小节【过渡拍】,给新手把手指换回第1和弦的时间(完善Step9 加)。
+  // _everPlayed:这首歌这一轮"正式开始播"过了吗。只在"从头第一次按 ▶"给【开头那轮】预备拍;
+  //   暂停后恢复不重复数。循环回跳的过渡拍由 _onTimerTick 直接 arm,不走这道闸。
   bool _inCountIn = false;
   bool _everPlayed = false;
 
@@ -745,11 +746,13 @@ class SongScreenState extends State<SongScreen> {
           _loops++;
           _totalLoops++; // 累计打卡也 +1(跨会话)
           if (_rampOn) _applyRamp(); // 自动提速:每过一遍 +3、到原速停
+          _inCountIn = true; // 循环过渡:回跳后嗒满1小节再开下一遍(_slot 已是0;_tick 会播预备拍第1拍)
         } else if (_idx + 1 >= _flat.length) {
           _idx = 0;
           _loops++;
           _totalLoops++; // 累计打卡也 +1(跨会话)
           if (_rampOn) _applyRamp(); // 自动提速:每过一遍 +3、到原速停
+          _inCountIn = true; // 循环过渡:同上
         } else {
           _idx++;
         }
