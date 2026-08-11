@@ -1634,4 +1634,12 @@ const builtinArpStudies = <ArpStudy>[
   ArpStudy(title: '流行进行', subtitle: '1-5-6-4 · C G Am F · 最常用', chords: ['C', 'G', 'Am', 'F'], tempo: 72),
   ArpStudy(title: '经典进行', subtitle: '1-6-4-5 · C Am F G', chords: ['C', 'Am', 'F', 'G'], tempo: 72),
   ArpStudy(title: '小调色彩', subtitle: '6-4-1-5 · Am F C G', chords: ['Am', 'F', 'C', 'G'], tempo: 72),
+  // —— 真歌进行(拿流行/经典歌的真实和弦进行练琶音伴奏,比抽象进行好玩、有辨识度)——
+  // 和弦都取自 chordShapes,arpeggio_test 会卡住写错和弦名的。
+  ArpStudy(title: '🌙 月亮代表我的心', subtitle: '邓丽君 · C Em Am F', chords: ['C', 'Em', 'Am', 'F'], tempo: 72),
+  ArpStudy(title: '🤝 朋友', subtitle: '周华健 · G 调 · G Em C D', chords: ['G', 'Em', 'C', 'D'], tempo: 88),
+  ArpStudy(title: '🍃 遇见', subtitle: '孙燕姿 · C G Am Em F G(6 和弦)', chords: ['C', 'G', 'Am', 'Em', 'F', 'G'], tempo: 76),
+  ArpStudy(title: '☀️ You Are My Sunshine', subtitle: '乡村经典 · C G7(2 和弦)', chords: ['C', 'G7', 'C', 'G7'], tempo: 90),
+  ArpStudy(title: '🌅 Counting Stars', subtitle: 'OneRepublic · Am C G F', chords: ['Am', 'C', 'G', 'F'], tempo: 100),
+  ArpStudy(title: "💕 Can't Help Falling in Love", subtitle: 'Elvis · C Em Am F G', chords: ['C', 'Em', 'Am', 'F', 'G'], tempo: 66),
 ];
