@@ -1197,16 +1197,24 @@ class SongScreenState extends State<SongScreen> {
           ),
           icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurface),
         ),
-        // 第二行:语言筛选芯片 + 搜索框 + 速度信息(第57步加 FilterChip,第58步加搜索+收藏)。
+        // 第2行起:图标行 + 筛选芯片 + (搜索框) + 速度信息。
+        // (原来这些图标挂在 actions 里和歌名抢宽度,歌名被 FittedBox 缩到看不清;
+        //  下移到这第二行后,歌名独占第一行、清晰可读。)
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(_showSearch ? 88 : 48),
+          preferredSize: Size.fromHeight(_showSearch ? 124 : 88),
           child: Container(
             alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                // 图标行(原 actions 下移)。横向滚动兜底:窄屏 + 用户歌时图标多也能点到。
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: _buildActionsRow(cs),
+                ),
+                const SizedBox(height: 2),
                 // 筛选芯片:全部 / 英文 / 中文 / 收藏
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1287,64 +1295,6 @@ class SongScreenState extends State<SongScreen> {
             ),
           ),
         ),
-        // 顶栏右侧图标:搜索 + 收藏 + 用户歌编辑/删除 + 跟唱录音 + 移调 + 字号。
-        actions: [
-          // 搜索按钮(第58步-1)
-          IconButton(
-            icon: Icon(_showSearch ? Icons.search_off : Icons.search),
-            tooltip: _showSearch ? '关闭搜索' : '搜索歌曲',
-            onPressed: _toggleSearch,
-          ),
-          // 收藏按钮(第58步-2):实心 = 已收藏,空心 = 未收藏
-          IconButton(
-            icon: Icon(
-              _favorites.contains(song.id) ? Icons.favorite : Icons.favorite_border,
-            ),
-            tooltip: _favorites.contains(song.id) ? '取消收藏' : '收藏这首歌',
-            onPressed: _toggleFavorite,
-            color: _favorites.contains(song.id) ? theme.colorScheme.error : null,
-          ),
-          if (widget.store.isUserSong(song))
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: '编辑这首歌',
-              onPressed: _openEditSong,
-            ),
-          if (widget.store.isUserSong(song))
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: '删除这首歌',
-              onPressed: _deleteCurrentSong,
-            ),
-          // 跟唱录音(第49步):按一下开录 / 再按停。录音中图标变红 stop,一眼看出在录。
-          IconButton(
-            icon: Icon(_recording ? Icons.stop_circle_outlined : Icons.mic_none_outlined),
-            tooltip: _recording ? '停止录音' : '录人声(跟唱录音)',
-            onPressed: _toggleRecord,
-            color: _recording ? theme.colorScheme.error : null,
-          ),
-          // 「听刚才」:录过才出。回放最近一次录音(只留最后一段,重录覆盖)。
-          if (_takeWav != null && !_recording)
-            IconButton(
-              icon: const Icon(Icons.replay_rounded),
-              tooltip: '听刚才的录音',
-              onPressed: _playTake,
-            ),
-          IconButton(
-            // 移调 ≠ 0 时图标用主色点亮,一眼看出当前在移调练习。
-            icon: const Icon(Icons.tune_rounded),
-            tooltip: _transpose == 0
-                ? '移调(虚拟变调夹)'
-                : '移调(虚拟变调夹)· 当前 ${_transpose > 0 ? '+' : ''}$_transpose 半音',
-            onPressed: _showTransposeDialog,
-            color: _transpose != 0 ? theme.colorScheme.primary : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.format_size_rounded),
-            tooltip: '歌词字号',
-            onPressed: _showFontScaleDialog,
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -1410,6 +1360,89 @@ class SongScreenState extends State<SongScreen> {
         ],
       ),
       // ▶/⏸ 已挪进练习栏的调速行(最左小图标),不再用右下大圆按钮——它会在歌长时挡住歌词。
+    );
+  }
+
+  /// 顶栏第二行的图标行(原 AppBar actions 下移过来,免得挤歌名)。
+  /// 横向滚动兜底:窄屏 + 用户歌(多出编辑/删除)时图标多,滚一下也能点到。
+  Widget _buildActionsRow(ColorScheme cs) {
+    final song = songs[_selected];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _actionIcon(
+            icon: Icon(_showSearch ? Icons.search_off : Icons.search),
+            tooltip: _showSearch ? '关闭搜索' : '搜索歌曲',
+            onPressed: _toggleSearch,
+          ),
+          _actionIcon(
+            icon: Icon(_favorites.contains(song.id) ? Icons.favorite : Icons.favorite_border),
+            tooltip: _favorites.contains(song.id) ? '取消收藏' : '收藏这首歌',
+            onPressed: _toggleFavorite,
+            color: _favorites.contains(song.id) ? cs.error : null,
+          ),
+          if (widget.store.isUserSong(song))
+            _actionIcon(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: '编辑这首歌',
+              onPressed: _openEditSong,
+            ),
+          if (widget.store.isUserSong(song))
+            _actionIcon(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: '删除这首歌',
+              onPressed: _deleteCurrentSong,
+            ),
+          _actionIcon(
+            icon: Icon(_recording ? Icons.stop_circle_outlined : Icons.mic_none_outlined),
+            tooltip: _recording ? '停止录音' : '录人声(跟唱录音)',
+            onPressed: _toggleRecord,
+            color: _recording ? cs.error : null,
+          ),
+          if (_takeWav != null && !_recording)
+            _actionIcon(
+              icon: const Icon(Icons.replay_rounded),
+              tooltip: '听刚才的录音',
+              onPressed: _playTake,
+            ),
+          _actionIcon(
+            icon: const Icon(Icons.tune_rounded),
+            tooltip: _transpose == 0
+                ? '移调(虚拟变调夹)'
+                : '移调(虚拟变调夹)· 当前 ${_transpose > 0 ? '+' : ''}$_transpose 半音',
+            onPressed: _showTransposeDialog,
+            color: _transpose != 0 ? cs.primary : null,
+          ),
+          _actionIcon(
+            icon: const Icon(Icons.format_size_rounded),
+            tooltip: '歌词字号',
+            onPressed: _showFontScaleDialog,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 图标行里一个紧凑图标(36 触控、shrinkWrap,跟练习栏调速行一个样式)。
+  /// color 给了就用它当前景色(收藏/录音红、移调主色);不给走主题默认色。
+  Widget _actionIcon({
+    required Icon icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    Color? color,
+  }) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      icon: icon,
+      style: color == null
+          ? IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap)
+          : IconButton.styleFrom(
+              foregroundColor: color, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
     );
   }
 

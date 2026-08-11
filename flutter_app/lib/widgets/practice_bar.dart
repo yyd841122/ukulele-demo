@@ -107,17 +107,14 @@ class PracticeBar extends StatelessWidget {
             child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: refCards),
           ),
           const SizedBox(height: 6),
-          // 节奏型选择
-          Wrap(
-            spacing: 6,
+          // 节奏型选择(紧凑自定义芯片:5 个节奏型保证一行放得下,不换行省空间)。
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              for (var i = 0; i < patternNames.length; i++)
-                ChoiceChip(
-                  label: Text(patternNames[i], style: const TextStyle(fontSize: 12)),
-                  selected: i == patternIndex,
-                  onSelected: (_) => onPatternChanged(i),
-                  visualDensity: VisualDensity.compact,
-                ),
+              for (var i = 0; i < patternNames.length; i++) ...[
+                if (i > 0) const SizedBox(width: 4),
+                _patternChip(context, patternNames[i], i == patternIndex, () => onPatternChanged(i)),
+              ],
             ],
           ),
           // AB 循环状态行
@@ -263,6 +260,31 @@ class PracticeBar extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// 紧凑节奏型芯片:GestureDetector + 圆角 Container,比 ChoiceChip 省一半宽度,
+  /// 5 个节奏型(全下/下上/海岛/民谣/摇滚)窄屏也能一行。选中填主色,未选中轮廓。
+  Widget _patternChip(BuildContext context, String label, bool selected, VoidCallback onTap) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: selected ? cs.primary : null,
+          borderRadius: BorderRadius.circular(10),
+          border: selected ? null : Border.all(color: cs.outlineVariant),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }
