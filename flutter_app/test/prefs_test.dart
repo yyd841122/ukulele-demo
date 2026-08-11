@@ -256,4 +256,13 @@ void main() {
     final p2 = await AppPreferences.load();
     expect(p2.getPracticeDays(), ['2026-01-01', '2026-01-02']); // 仍 2 天,没翻倍
   });
+
+  test('录音戴耳机提示(完善Step9):没看过→false默认,标记后→true,重启仍记得', () async {
+    final p = await AppPreferences.load();
+    expect(p.getRecordTipSeen(), isFalse); // 没存过 → false(首次开录要弹)
+
+    await p.setRecordTipSeen(true);
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getRecordTipSeen(), isTrue); // 标记过、重启仍记得 → 不再弹
+  });
 }

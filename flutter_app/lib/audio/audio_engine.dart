@@ -166,7 +166,7 @@ class AudioEngine {
   /// 预生成某个移调偏移的声源桶(给练习页设了移调后调,提前建好、播放时不卡顿)。
   /// 0 桶启动时就有;已建过 / 正在建的偏移直接返回;引擎没好(如测试环境)也直接返回。
   /// fire-and-forget:调用方不必 await——没建好期间 playChord 会回退到 0 桶(原音高)兜底,不静音。
-  Future<void> prepareTranspose(int semitoneOffset) async {
+  Future<void> prepareTranspose(int semitoneOffset, {bool includeStrings = false}) async {
     if (semitoneOffset == 0) return; // 0 桶启动时就建好了
     if (_chordsByOffset.containsKey(semitoneOffset)) return; // 已建过
     if (_preparing.contains(semitoneOffset)) return; // 正在建
@@ -174,8 +174,11 @@ class AudioEngine {
     _preparing.add(semitoneOffset);
     try {
       _chordsByOffset[semitoneOffset] = await _buildStrumSources(semitoneOffset);
-      // 第59步:同一个偏移的单弦音源也一并建好(指弹也受益于移调)。
-      _stringSourcesByOffset[semitoneOffset] = await _buildStringSources(semitoneOffset);
+      // 单弦桶(指弹移调用)只在需要时建。song_screen 只扫弦、从不 playString,
+      // 默认不建 → 每个偏移砍掉 172 次合成(43 和弦×4 弦),移调生成快约 3 倍、头一下音高错位窗口随之缩短。
+      if (includeStrings) {
+        _stringSourcesByOffset[semitoneOffset] = await _buildStringSources(semitoneOffset);
+      }
     } catch (e) {
       debugPrint('移调声源预生成失败(偏移 $semitoneOffset): $e');
     } finally {

@@ -1103,6 +1103,27 @@ class SongScreenState extends State<SongScreen> {
 
   /// 开录:先要麦克风权限(没有就提示;永久拒绝给「去设置」入口)。权限 ok → 清缓冲开麦。
   Future<void> _startRecord() async {
+    // 首次开录:一次性提示戴耳机(完善Step9)。录音混入扫弦声是手机平台限制(扫弦走媒体音轨、
+    // AEC 够不着、去不掉),戴耳机能把伴奏隔离出麦、录到更干净的人声——是最务实的缓解。
+    if (_prefs != null && !_prefs!.getRecordTipSeen()) {
+      await _prefs!.setRecordTipSeen(true); // 先标记,免得用户重开又弹
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('录音小贴士'),
+          content: const Text(
+              '手机录音会把伴奏扫弦声也录进去(平台限制,去不掉)。\n'
+              '戴耳机练习,伴奏从耳朵进、不进麦克风,录到的人声干净得多。'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('知道啦')),
+          ],
+        ),
+      );
+      if (!mounted) return;
+    }
     if (_monitorOn) _stopMonitor(); // 互斥:录音要占麦,先停音准监测
     final rec = _ensureRecorder();
     final granted = await rec.requestPermission();

@@ -54,6 +54,12 @@ class AppPreferences {
       _prefs.getDouble(_kScoreLatency) ?? fallback;
   Future<void> setScoreLatency(double v) => _prefs.setDouble(_kScoreLatency, v);
 
+  // 跟唱录音·戴耳机提示(完善Step9):首次开录弹一次,看过就不再弹。
+  // 录音混入扫弦声是手机平台限制(扫弦走媒体音轨、AEC 够不着),提示戴耳机是最务实的缓解。
+  bool getRecordTipSeen([bool fallback = false]) =>
+      _prefs.getBool(_kRecordTipSeen) ?? fallback;
+  Future<void> setRecordTipSeen(bool v) => _prefs.setBool(_kRecordTipSeen, v);
+
   // 歌词字号缩放(1.0 = 默认大小;>1 放大、<1 缩小)。全局偏好——一个人看歌词的习惯跟哪首歌无关。
   // 调用方负责 clamp 到合理区间(界面 Slider 限定 0.8~1.8);这里只管原样存/读,跟 tempo 一个套路。
   double getLyricScale([double fallback = 1.0]) =>
@@ -356,4 +362,5 @@ class AppPreferences {
   static const _kArpTempo = 'pref_arp_tempo'; // 完善:琶音页速度
   static const _kScoring = 'pref_scoring'; // 完善Step8:跟弹评分开关
   static const _kScoreLatency = 'pref_score_latency'; // 完善Step8:评分延迟校准(秒)
+  static const _kRecordTipSeen = 'pref_record_tip_seen'; // 完善Step9:录音戴耳机提示看过没
 }
