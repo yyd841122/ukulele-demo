@@ -12,7 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart'; // openAppSettings:录音权限被永久拒绝时引去系统设置
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../audio/audio_constants.dart'; // kAudioSampleRate:音准监测喂 PitchDetector 的采样率
 import '../audio/audio_engine.dart';
+import '../audio/mic_capture.dart'; // 跟唱音准监测(完善Step7):开麦采人声
+import '../audio/pitch_detector.dart'; // PitchDetector + frequencyToNote + NoteResult + centsStatusLabel
 import '../audio/voice_recorder.dart'; // 跟唱录音(第49步)
 import '../models.dart';
 import '../prefs/app_preferences.dart';
@@ -162,6 +165,15 @@ class SongScreenState extends State<SongScreen> {
   VoiceRecorder? _recorder; // 懒建(第一次录音时才 new);SongScreen 销毁时释放
   bool _recording = false; // 现在在录吗(切 mic/stop 图标 + 防重入)
   Uint8List? _takeWav; // 最近一次录音的完整 WAV(停录时套头生成);null = 还没录过 / 没录到
+
+  // —— 跟唱音准监测(完善Step7):弹唱时实时显示唱到的音名 + 偏高/偏低,像人声版调音器 ——
+  MicCapture? _monitorMic; // 懒建;SongScreen 销毁时释放
+  StreamSubscription<Float64List>? _monitorSub;
+  bool _monitorOn = false; // 现在在监测吗(切图标 + 显音高条)
+  NoteResult? _sungNote; // 最近测到的音(null = 没在唱 / 太轻测不到)
+  // 人声音域:男低 ~80Hz 到女高 ~1000Hz,覆盖常见演唱范围(跟调音器的 150-500 弦域区分开)。
+  final PitchDetector _vocalDetector =
+      const PitchDetector(minFrequency: 80, maxFrequency: 1000);
 
   // —— 分段 AB 循环 ——
   // _markerA / _markerB:用户在歌词上点的两个"循环点"(行下标)。两个都标好 → 引擎到 B 行末尾跳回 A 行开头反复。
@@ -374,6 +386,8 @@ class SongScreenState extends State<SongScreen> {
     _timer?.cancel();
     _previewTimer?.cancel();
     _recorder?.dispose(); // 跟唱录音器:停录 + 释放麦(SongScreen 销毁 = app 退出,IndexedStack 保活)
+    _monitorSub?.cancel(); // 跟唱音准监测:停订阅(dispose 时 element 已 defunct,不能 setState,直接清)
+    _monitorMic?.dispose(); // 释放麦
     super.dispose();
   }
 
@@ -1036,6 +1050,7 @@ class SongScreenState extends State<SongScreen> {
 
   /// 开录:先要麦克风权限(没有就提示;永久拒绝给「去设置」入口)。权限 ok → 清缓冲开麦。
   Future<void> _startRecord() async {
+    if (_monitorOn) _stopMonitor(); // 互斥:录音要占麦,先停音准监测
     final rec = _ensureRecorder();
     final granted = await rec.requestPermission();
     if (!granted) {
@@ -1089,6 +1104,56 @@ class SongScreenState extends State<SongScreen> {
     final wav = _takeWav;
     if (wav == null) return;
     widget.audio.playWavBytes(wav);
+  }
+
+  // —— 跟唱音准监测(完善Step7)——
+  // 开麦采人声 → PitchDetector 测基频 → frequencyToNote 得音名 + cents → 实时显示偏高/偏低。
+  // 跟录音互斥(都占麦):开监测先停录音。麦也会收到扫弦声(无回声消除,跟录音同问题),
+  // 这是个"参考"不是"评分"——人声明亮时较准。装机才能真测(权限 / 真麦)。
+  Future<void> _toggleMonitor() async {
+    if (_monitorOn) {
+      _stopMonitor();
+      return;
+    }
+    if (_recording) await _stopRecord(); // 互斥:先停录音(同时占麦会失败)
+    final mic = _monitorMic ??= MicCapture();
+    final granted = await mic.requestPermission();
+    if (!granted) {
+      if (!mounted) return;
+      final denied = await mic.isPermanentlyDenied();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('需要麦克风权限才能监测音准'),
+          action: denied ? SnackBarAction(label: '去设置', onPressed: openAppSettings) : null,
+        ),
+      );
+      return;
+    }
+    final started = await mic.start();
+    if (!started) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('开麦失败,再试一次')));
+      return;
+    }
+    _monitorSub = mic.samples.listen(_onMonitorSample);
+    setState(() => _monitorOn = true);
+  }
+
+  /// 来了一段人声样本 → 测基频 → 更新音高条。测不到(太轻 / 没在唱)→ _sungNote 置 null。
+  void _onMonitorSample(Float64List s) {
+    final f = _vocalDetector.detect(s, kAudioSampleRate);
+    if (!mounted) return;
+    setState(() => _sungNote = f == null ? null : frequencyToNote(f));
+  }
+
+  void _stopMonitor() {
+    _monitorSub?.cancel();
+    _monitorSub = null;
+    _monitorMic?.stop(); // fire-and-forget(跟 _recorder 一个套路)
+    _monitorOn = false;
+    _sungNote = null;
+    if (mounted) setState(() {}); // 刷新图标 / 音高条;dispose 时 mounted=false 不刷
   }
 
   @override
@@ -1309,6 +1374,7 @@ class SongScreenState extends State<SongScreen> {
       ),
       body: Column(
         children: [
+          if (_monitorOn) _buildPitchMonitor(cs), // 跟唱音准条(完善Step7):monitor 开时显在歌词上方
           // 顶部练习栏(吸顶):一排和弦卡 =【当前这一行】的和弦(弹到哪个、那张变大图高亮,其余小参考)+
           // 这一组扫到第几下(一排 ↓)+ 下一个和弦 + 调速滑块。卡跟当前行一一对应,不掺别行的和弦。
           PracticeBar(
@@ -1376,6 +1442,78 @@ class SongScreenState extends State<SongScreen> {
 
   /// 顶栏第二行的图标行(原 AppBar actions 下移过来,免得挤歌名)。
   /// 横向滚动兜底:窄屏 + 用户歌(多出编辑/删除)时图标多,滚一下也能点到。
+  /// 跟唱音高条(完善Step7):大字音名 + cents 指针条(偏低←绿准区→偏高)。monitor 开时显。
+  Widget _buildPitchMonitor(ColorScheme cs) {
+    final note = _sungNote;
+    final cents = note?.cents ?? 0.0;
+    final status = centsStatusLabel(cents); // 准 / 偏低 / 偏高
+    final statusColor = status == '准' ? Colors.green : cs.error;
+    final label = note == null ? '—' : '${note.name}${note.octave}';
+    // cents -50..+50 映射到条上 0..1,再转 Alignment -1..+1(左偏低于中、右偏高于中)。
+    final pos = ((cents + 50) / 100).clamp(0.0, 1.0);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: cs.surfaceContainerHighest),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 56,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                color: note == null ? cs.onSurfaceVariant : cs.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  note == null
+                      ? '唱一句试试…(没测到音)'
+                      : '$status ${cents > 0 ? '+' : ''}${cents.toStringAsFixed(0)}音分',
+                  style: TextStyle(fontSize: 12, color: statusColor, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                LayoutBuilder(
+                  builder: (ctx, c) => SizedBox(
+                    height: 10,
+                    child: Stack(
+                      children: [
+                        // 底条
+                        Container(decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(5))),
+                        // 中间绿准区(±5 音分)
+                        Align(
+                          alignment: const Alignment(0, 0),
+                          child: Container(
+                            width: c.maxWidth * 0.10,
+                            decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(5)),
+                          ),
+                        ),
+                        // 指针(随 cents 左右)
+                        Align(
+                          alignment: Alignment(pos * 2 - 1, 0),
+                          child: Container(width: 3, decoration: BoxDecoration(color: statusColor, borderRadius: BorderRadius.circular(2))),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionsRow(ColorScheme cs) {
     final song = songs[_selected];
     return SingleChildScrollView(
@@ -1418,6 +1556,12 @@ class SongScreenState extends State<SongScreen> {
               tooltip: '听刚才的录音',
               onPressed: _playTake,
             ),
+          _actionIcon(
+            icon: const Icon(Icons.graphic_eq),
+            tooltip: _monitorOn ? '关音准监测' : '开音准监测(实时看唱的音准)',
+            onPressed: _toggleMonitor,
+            color: _monitorOn ? cs.primary : null,
+          ),
           _actionIcon(
             icon: const Icon(Icons.tune_rounded),
             tooltip: _transpose == 0

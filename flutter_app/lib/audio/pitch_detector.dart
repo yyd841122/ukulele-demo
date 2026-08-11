@@ -142,3 +142,9 @@ NoteResult frequencyToNote(double freq, {double a4 = 440}) {
 /// 给调音器的【弦距过滤】用——选了目标弦后,检测音离目标超过阈值(如 600 音分)就当没听到,
 /// 挡 YIN 偶发的八度误报(如 A4=440 被听成低八度 A3=220,差 1200 音分)。纯函数、无头可测。
 double centsBetween(double f1, double f2) => 1200 * log(f1 / f2) / log(2);
+
+/// 音分 → 文案(给跟唱音准表用):|cents| ≤ 5「准」、< 0「偏低」、> 0「偏高」。纯函数、无头可测。
+String centsStatusLabel(double cents, {double inTune = 5}) {
+  if (cents.abs() <= inTune) return '准';
+  return cents < 0 ? '偏低' : '偏高';
+}

@@ -230,4 +230,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(OnboardingScreen), findsOneWidget);
   });
+
+  testWidgets('音准监测开关:渲染且无头点不崩(装机才真测麦)(完善Step7)', (tester) async {
+    await openSongScreen(tester);
+    // 监测图标在(actions 横向滚动行里,可能要滚一下才可见)
+    final icon = find.byTooltip('开音准监测(实时看唱的音准)');
+    expect(icon, findsOneWidget);
+    await tester.ensureVisible(icon);
+    await tester.pumpAndSettle();
+    await tester.tap(icon);
+    // 用定时 pump 而非 pumpAndSettle:权限 / 开麦的 Future 在无头环境走兜底,
+    // pumpAndSettle 可能等不到 settle;定时 pump 让异步跑一会儿即可。
+    await tester.pump(const Duration(milliseconds: 500));
+    // MicCapture 全 try/catch → 点完不崩,练习页还在(真麦得装机验)
+    expect(find.byType(SongScreen), findsOneWidget);
+  });
 }

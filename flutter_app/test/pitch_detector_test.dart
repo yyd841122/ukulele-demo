@@ -134,4 +134,14 @@ void main() {
       expect(centsBetween(329.63, 261.63), closeTo(400, 5)); // E4 vs C4:大三度
     });
   });
+
+  test('centsStatusLabel:|cents|≤5=准、<0=偏低、>0=偏高(完善Step7)', () {
+    expect(centsStatusLabel(0), '准');
+    expect(centsStatusLabel(5), '准');
+    expect(centsStatusLabel(-5), '准');
+    expect(centsStatusLabel(-6), '偏低');
+    expect(centsStatusLabel(-50), '偏低');
+    expect(centsStatusLabel(6), '偏高');
+    expect(centsStatusLabel(50), '偏高');
+  });
 }
