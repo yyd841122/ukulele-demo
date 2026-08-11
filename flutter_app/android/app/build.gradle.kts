@@ -1,7 +1,18 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// 发布签名:读 android/key.properties(该文件已被 .gitignore 排除,不会进 git)。
+// 没有这个文件时(比如只是本地 debug 调试)就退回 debug 签名,不报错。
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -37,11 +48,27 @@ android {
         coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     }
 
+    signingConfigs {
+        create("release") {
+            // 只有 key.properties 存在且填了 storeFile 时才配正式签名。
+            // 本地没配就什么都不做,release 会退回 debug 签名(不影响 flutter run --release)。
+            if (keystoreProperties.containsKey("storeFile")) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                // storeFile 路径相对 android/(根项目目录)解析,不是 android/app/。
+                // key.properties 在 android/ 下,密钥库也在 android/ 下,两者对齐。
+                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // 发布签名:配了 key.properties 就用正式密钥,否则退回 debug。
+            signingConfig =
+                if (keystoreProperties.containsKey("storeFile")) signingConfigs.getByName("release")
+                else signingConfigs.getByName("debug")
         }
     }
 }
