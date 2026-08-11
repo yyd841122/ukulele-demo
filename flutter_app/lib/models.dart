@@ -1187,6 +1187,42 @@ const List<Song> builtinSongs = [
       ),
     ],
   ),
+  Song(
+    title: "🎸 真的爱你",
+    tempo: 75,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]无法可修饰的一对手 [G]带出温暖永远在背后 [Am]总是罗嗦始终关注 [F]不懂珍惜太内疚"),
+          Line(lyric: "[C]沉醉于音阶她不赞赏 [G]母亲的爱却永远未退 [Am]让决心冲开心中挣扎 [F]亲恩终可报答"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[F]春风化雨暖透我的心 [G]一生眷顾无言地送赠"),
+          Line(lyric: "[F]是你多么温馨的目光 [G]教我坚毅望着前路 [Em]叮嘱我跌倒[Am]不应放弃"),
+          Line(lyric: "[Dm]没法解释怎可报尽亲恩 [G]爱意宽大是无限 [C]请准我说声真的爱你"),
+        ],
+      ),
+      Section(
+        name: '主歌',
+        lines: [
+          Line(lyric: "[C]无法可修饰的一对手 [G]带出温暖永远在背后 [Am]总是罗嗦始终关注 [F]不懂珍惜太内疚"),
+          Line(lyric: "[C]仍记起温馨的一对手 [G]始终给我照顾未变样 [Am]理想今天终于等到 [F]分享光辉盼做到"),
+        ],
+      ),
+      Section(
+        name: '🎶 副歌',
+        lines: [
+          Line(lyric: "[F]是你多么温馨的目光 [G]教我坚毅望着前路 [Em]叮嘱我跌倒[Am]不应放弃"),
+          Line(lyric: "[Dm]没法解释怎可报尽亲恩 [G]爱意宽大是无限 [C]请准我说声真的爱你"),
+        ],
+      ),
+    ],
+  ),
 ];
 
 /// 【第43a步】内置歌补上稳定 id(= 各自下标)后的歌曲库。界面读这份。
