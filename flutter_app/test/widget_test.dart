@@ -111,23 +111,23 @@ void main() {
 
     // SongScreen 被 push 上来了,默认显示第一首歌
     expect(find.byType(SongScreen), findsOneWidget);
-    expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
+    expect(find.textContaining('送别'), findsOneWidget);
   });
 
   testWidgets('练习页下拉框能切换到第二首歌', (tester) async {
     await openSongScreen(tester);
-    expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
+    expect(find.textContaining('送别'), findsOneWidget);
 
     // 点顶栏歌名下拉框,打开列表
     await tester.tap(find.byType(DropdownButton<int>));
     await tester.pumpAndSettle();
 
     // 在展开的列表里点第二首(.last 取列表里那一项,避开可能的重复)
-    await tester.tap(find.textContaining('What a Wonderful World').last);
+    await tester.tap(find.textContaining('奇异恩典').last);
     await tester.pumpAndSettle();
 
     // 切完后顶栏变成第二首的歌名
-    expect(find.textContaining('What a Wonderful World'), findsOneWidget);
+    expect(find.textContaining('奇异恩典'), findsOneWidget);
   });
 
   testWidgets('首页点调音卡片进入调音页', (tester) async {
@@ -185,19 +185,19 @@ void main() {
     expect(find.text('C'), findsNothing);
   });
 
-  testWidgets('扫弦页难度筛选:点入门→只显入门歌并跳到第一首(完善Step4)', (tester) async {
+  testWidgets('扫弦页难度筛选:点初级→只显初级歌并跳到第一首(完善Step4)', (tester) async {
     await openSongScreen(tester);
-    // 默认显示第一首 Rainbow(初级),下拉框里也能看到它的难度标签「初级」
-    expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
+    // 默认显示第一首送别(进阶:6 和弦)
+    expect(find.textContaining('送别'), findsOneWidget);
 
-    // 点「入门(N)」难度筛选芯片
-    await tester.tap(find.textContaining('入门('));
+    // 点「初级(N)」难度筛选芯片
+    await tester.tap(find.textContaining('初级('));
     await tester.pumpAndSettle();
 
-    // 筛后自动跳到第一首入门歌 = You Are My Sunshine(C G)
-    expect(find.textContaining('You Are My Sunshine'), findsOneWidget);
-    // Rainbow 是初级、被筛掉了,折叠的下拉框里不再出现
-    expect(find.textContaining('Somewhere Over the Rainbow'), findsNothing);
+    // 筛后自动跳到第一首初级歌 = 友谊地久天长(G D Em C,4 和弦无 F/7)
+    expect(find.textContaining('友谊地久天长'), findsOneWidget);
+    // 送别是进阶、被筛掉了,折叠的下拉框里不再出现
+    expect(find.textContaining('送别'), findsNothing);
   });
 
   testWidgets('新手引导:首启没完成过→自动弹,跳过后关掉(完善Step6)', (tester) async {

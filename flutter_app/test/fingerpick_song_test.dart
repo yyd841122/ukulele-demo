@@ -66,11 +66,11 @@ void main() {
     final mac = builtinFingerpickSongs.firstWhere((s) => s.title.contains('老麦克唐纳'));
 
     // (弦,品) 对的简写,期望序列更好读。stringIndex 可空(休止符 fpr 没弦),故用 int?。
-    List<(int?, int)> _melody(FingerpickSong s) =>
+    List<(int?, int)> melodyOf(FingerpickSong s) =>
         s.flatSlots.map((slot) => (slot.stringIndex, slot.fret)).toList();
 
     test('划小船:do re mi do 开头(1,0)(1,2)(2,0)(1,0)', () {
-      expect(_melody(row).sublist(0, 4), [(1, 0), (1, 2), (2, 0), (1, 0)]);
+      expect(melodyOf(row).sublist(0, 4), [(1, 0), (1, 2), (2, 0), (1, 0)]);
     });
 
     test('划小船:第3小节切分 sol la sol fa(0,0)(3,0)(0,0)(2,1)', () {

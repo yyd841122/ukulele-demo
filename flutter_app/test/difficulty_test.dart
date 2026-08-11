@@ -61,11 +61,14 @@ void main() {
       expect(difficultyOf(song('[C]a [G]b [F]c [D]d [Am]e')), 3);
     });
 
-    test('内置歌三档都对(Rainbow=初级 / You Are My Sunshine=入门 / 童话=进阶)', () {
+    test('内置 PD 歌难度都对(友谊地久天长=初级 / 送别=进阶)', () {
       Song byTitle(String t) => builtinSongs.firstWhere((s) => s.title.contains(t));
-      expect(difficultyOf(byTitle('Over the Rainbow')), 2); // Am C F G(含 F、4 和弦)
-      expect(difficultyOf(byTitle('You Are My Sunshine')), 1); // C G(2 和弦、无 F/7)
-      expect(difficultyOf(byTitle('童话')), 3); // 7 和弦(5+)
+      expect(difficultyOf(byTitle('友谊地久天长')), 2); // G D Em C(4 和弦、无 F/7)
+      expect(difficultyOf(byTitle('送别')), 3); // C G Am Em F Dm(6 和弦)
+    });
+    // 入门档(1)用合成数据验证:PD 内置歌都 ≥4 和弦,没有入门档的,故补一条合成。
+    test('合成 2 和弦无 F/7 → 入门(1)', () {
+      expect(difficultyOf(song('[C]a [G]b')), 1);
     });
   });
 
