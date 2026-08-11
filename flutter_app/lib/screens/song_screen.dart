@@ -35,8 +35,8 @@ class SongScreen extends StatefulWidget {
   State<SongScreen> createState() => SongScreenState();
 }
 
-/// public:MainScaffold 持 `GlobalKey<SongScreenState>`,切走练习 tab 时调 flushStats()
-/// 把当前会话打卡刷盘,这样平级的统计 tab 才读得到含本次练习的最新值。
+/// 本页现在是练琴 Hub 里 push 上来的全屏页:pop 回 Hub 时 dispose() 自动
+/// _saveStats 落盘,统计页下次 reload() 读得到——不再需要外部 GlobalKey 戳。
 class SongScreenState extends State<SongScreen> {
   /// 歌单(内置 + 用户自加)。从歌库读,不直接读顶层 songs——加 / 删用户歌能跟上(歌库会 notify)。
   /// 全文原来直接用 songs,这里加同名 getter 接管,旧代码 songs[...] 一行不用改。
@@ -162,11 +162,9 @@ class SongScreenState extends State<SongScreen> {
   int? _markerA;
   int? _markerB;
 
-  // —— 全屏练习模式(第58步-6)——
+  // —— 全屏练习模式:隐藏自己的 AppBar,沉浸看歌词。
+  // (本页现在是练琴 Hub 里 push 上来的全屏页,底导航本就被路由盖住,所以全屏只管自己的 AppBar。)
   bool _fullscreen = false;
-
-  /// 给 MainScaffold 读:决定是否隐藏底部导航栏。
-  bool get isFullscreen => _fullscreen;
 
   void _toggleFullscreen() {
     setState(() => _fullscreen = !_fullscreen);

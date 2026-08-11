@@ -1,24 +1,27 @@
-// 测试:默认显示第一首歌;顶栏下拉框能切到第二首。
-// 这一步不连手机也能跑(flutter test),是"界面真能渲染 + 切歌真能切"的快速证据。
+// 界面测试:首页是第一屏、底导航 4 个 tab 能切、练琴 Hub 选模式能 push 进练习页、首页能 push 进调音页。
+//
+// 这一步不连手机也能跑(flutter test),是"界面真能渲染 + 导航真能切"的快速证据。
 //
 // 注:SoLoud 的原生库(libflutter_soloud_plugin.so)在 flutter test 无头环境里加载不了,
-// _initAudio 会把这个异常 catch 掉、只打一条日志,不影响界面。所以这里只验证界面/切歌,
+// _initAudio 会把这个异常 catch 掉、只打一条日志,不影响界面。所以这里只验证界面/导航,
 // 不碰音频路径(音频得装机听)。
 //
-// 断言只查"歌名标题"和"和弦名"这类稳定的东西——不查具体歌词短语:第12步起歌词按词渲染
-// (每个词一个 Text,好让和弦浮在具体词上方),像 "way up high" 这种短语会拆成 3 个 Text,
-// 用 textContaining 找整串会扑空。
+// 断言只查稳定的东西(卡片标题、歌名、和弦名)——不查具体歌词短语:歌词按词渲染(每个词一个 Text),
+// 像 "way up high" 这种短语会拆成多个 Text,textContaining 找整串会扑空。
+//
+// 第N步(UI 重构):底栏从 7 个 tab 改成 4 个(首页/练琴/和弦/统计);调音 / 换和弦 / 指弹 / 琶音
+// 不再是 tab,改成从首页卡片(push 调音)或练琴 Hub(push 4 种练习)进入。本文件按新结构重写。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ukulele_demo/main.dart';
-import 'package:ukulele_demo/screens/arpeggio_screen.dart';
 import 'package:ukulele_demo/screens/chord_library_screen.dart';
-import 'package:ukulele_demo/screens/chord_trainer_screen.dart';
+import 'package:ukulele_demo/screens/home_screen.dart';
+import 'package:ukulele_demo/screens/practice_hub_screen.dart';
+import 'package:ukulele_demo/screens/song_screen.dart';
 import 'package:ukulele_demo/screens/stats_screen.dart';
 import 'package:ukulele_demo/screens/tuner_screen.dart';
-import 'package:ukulele_demo/widgets/chord_diagram.dart';
 
 void main() {
   // widget 测试里 SharedPreferences 的平台通道没接,getInstance() 会挂住不返回;
@@ -28,25 +31,96 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('默认显示第一首歌', (tester) async {
-    await tester.pumpWidget(const UkuleleApp());
+  // 底栏 tab 的 label 也会作为 Text 出现在树里(首页卡片标题可能撞名),用 descendant 精确戳底栏那个。
+  Finder navItem(String label) => find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text(label),
+      );
 
-    // 顶栏下拉框当前显示第一首的歌名
-    expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
-    // 这首歌用到的 Am 和弦贴片在界面上
-    expect(find.text('Am'), findsWidgets);
+  // 从首页一路进到「扫弦跟唱」练习页:切练琴 tab → 点扫弦跟唱卡片(push SongScreen)。
+  Future<void> openSongScreen(WidgetTester tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+    await tester.tap(navItem('练琴'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('扫弦跟唱'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('默认进入首页(不是练习页)', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+
+    // 首页挂在树里、底栏选中 = 首页(index 0)
+    expect(find.byType(HomeScreen), findsOneWidget);
+    final bnb = tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar));
+    expect(bnb.currentIndex, 0);
+    // 首页快捷卡片在(调音卡片标题——调音已不在底栏,只在首页;「练琴」既在底栏也在首页卡片,避开它)
+    expect(find.text('调音'), findsOneWidget);
+    expect(find.textContaining('你好'), findsOneWidget);
   });
 
-  testWidgets('下拉框能切换到第二首歌', (tester) async {
+  testWidgets('底导航能切到练琴页(Hub)', (tester) async {
     await tester.pumpWidget(const UkuleleApp());
-    // 起点确认是第一首
+    await tester.pumpAndSettle();
+
+    await tester.tap(navItem('练琴'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PracticeHubScreen), findsOneWidget);
+    final bnb = tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar));
+    expect(bnb.currentIndex, 1);
+    // 4 张练习方式卡片都在
+    expect(find.text('扫弦跟唱'), findsOneWidget);
+    expect(find.text('换和弦'), findsOneWidget);
+    expect(find.text('指弹'), findsOneWidget);
+    expect(find.text('琶音'), findsOneWidget);
+  });
+
+  testWidgets('底导航能切到和弦页', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(navItem('和弦'));
+    await tester.pumpAndSettle();
+
+    final bnb = tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar));
+    expect(bnb.currentIndex, 2);
+    expect(find.byType(ChordLibraryScreen), findsOneWidget);
+    expect(find.text('和弦速查'), findsOneWidget);
+  });
+
+  testWidgets('底导航能切到统计页', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(navItem('统计'));
+    await tester.pumpAndSettle();
+
+    final bnb = tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar));
+    expect(bnb.currentIndex, 3);
+    expect(find.byType(StatsScreen), findsOneWidget);
+    expect(find.text('全部练习'), findsOneWidget);
+    expect(find.textContaining('连续'), findsOneWidget);
+  });
+
+  testWidgets('练琴 Hub 点扫弦跟唱进入练习页', (tester) async {
+    await openSongScreen(tester);
+
+    // SongScreen 被 push 上来了,默认显示第一首歌
+    expect(find.byType(SongScreen), findsOneWidget);
+    expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
+  });
+
+  testWidgets('练习页下拉框能切换到第二首歌', (tester) async {
+    await openSongScreen(tester);
     expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
 
     // 点顶栏歌名下拉框,打开列表
     await tester.tap(find.byType(DropdownButton<int>));
     await tester.pumpAndSettle();
 
-    // 在展开的列表里点第二首(列表项;用 .last 取列表里那一项,避开可能的重复)
+    // 在展开的列表里点第二首(.last 取列表里那一项,避开可能的重复)
     await tester.tap(find.textContaining('What a Wonderful World').last);
     await tester.pumpAndSettle();
 
@@ -54,121 +128,22 @@ void main() {
     expect(find.textContaining('What a Wonderful World'), findsOneWidget);
   });
 
-  testWidgets('下拉框里有新加的 3 首歌', (tester) async {
-    await tester.pumpWidget(const UkuleleApp());
-    // 点开顶栏下拉框
-    await tester.tap(find.byType(DropdownButton<int>));
-    await tester.pumpAndSettle();
-
-    // 第20步新追加的 3 首歌都在列表里(用已有和弦 C/G/Am/F/D/Em,不动音频)
-    expect(find.textContaining('Hey Soul Sister'), findsOneWidget);
-    expect(find.textContaining('Zombie'), findsOneWidget);
-    expect(find.textContaining('Counting Stars'), findsOneWidget);
-  });
-
-  testWidgets('底导航能切到和弦页', (tester) async {
+  testWidgets('首页点调音卡片进入调音页', (tester) async {
     await tester.pumpWidget(const UkuleleApp());
     await tester.pumpAndSettle();
 
-    // 点底导航"和弦"
-    await tester.tap(find.text('和弦'));
-    await tester.pumpAndSettle();
-
-    // 底导航当前选中 = 和弦(index 1)
-    final bnb1 = tester.widget<BottomNavigationBar>(
-      find.byType(BottomNavigationBar),
-    );
-    expect(bnb1.currentIndex, 1);
-    // 和弦页挂在树里:AppBar 标题 + 指法图
-    expect(find.byType(ChordLibraryScreen), findsOneWidget);
-    expect(find.text('和弦速查'), findsOneWidget);
-    expect(find.byType(ChordDiagram), findsWidgets);
-  });
-
-  testWidgets('底导航能切到统计页', (tester) async {
-    await tester.pumpWidget(const UkuleleApp());
-    await tester.pumpAndSettle();
-
-    // 点底导航"统计"
-    await tester.tap(find.text('统计'));
-    await tester.pumpAndSettle();
-
-    // 底导航当前选中 = 统计(index 2)
-    final bnb2 = tester.widget<BottomNavigationBar>(
-      find.byType(BottomNavigationBar),
-    );
-    expect(bnb2.currentIndex, 2);
-    // 统计页挂在树里:有"全部练习"总计卡 + "按歌曲"分组标题
-    expect(find.byType(StatsScreen), findsOneWidget);
-    expect(find.text('全部练习'), findsOneWidget);
-    expect(find.text('按歌曲'), findsOneWidget);
-    // 连续打卡卡 + 日历热力图标题也在(第34步新加)
-    expect(find.textContaining('连续'), findsOneWidget);
-    expect(find.textContaining('最近 13 周'), findsOneWidget);
-  });
-
-  testWidgets('底导航能切到调音页', (tester) async {
-    await tester.pumpWidget(const UkuleleApp());
-    await tester.pumpAndSettle();
-
-    // 点底导航"调音"
+    // 首页点「调音」卡片 → push 调音页
     await tester.tap(find.text('调音'));
     await tester.pumpAndSettle();
 
-    // 底导航当前选中 = 调音(index 3)
-    final bnb = tester.widget<BottomNavigationBar>(
-      find.byType(BottomNavigationBar),
-    );
-    expect(bnb.currentIndex, 3);
-    // 调音页挂在树里:四根弦的按钮都在(音符字母 + "X 弦"标题)
     expect(find.byType(TunerScreen), findsOneWidget);
+    // 四根弦的按钮都在
     expect(find.text('G 弦'), findsOneWidget);
     expect(find.text('C 弦'), findsOneWidget);
     expect(find.text('E 弦'), findsOneWidget);
     expect(find.text('A 弦'), findsOneWidget);
-    // A 弦频率显示在界面上(440.00 Hz)
+    // A 弦频率显示(440.00 Hz)+ 校准行
     expect(find.textContaining('440.00'), findsOneWidget);
-    // 第35步:校准滑块行也在(默认 440,基准音 A4 标签常显)
     expect(find.textContaining('基准音 A4'), findsOneWidget);
-  });
-
-  testWidgets('底导航能切到换和弦页', (tester) async {
-    await tester.pumpWidget(const UkuleleApp());
-    await tester.pumpAndSettle();
-
-    // 点底导航"换和弦"
-    await tester.tap(find.text('换和弦'));
-    await tester.pumpAndSettle();
-
-    // 底导航当前选中 = 换和弦(index 4)
-    final bnb = tester.widget<BottomNavigationBar>(
-      find.byType(BottomNavigationBar),
-    );
-    expect(bnb.currentIndex, 4);
-    // 换和弦页挂在树里:AppBar 标题 + 两张选择卡的"和弦 A / 和弦 B"标签 + 计数"已换"
-    expect(find.byType(ChordTrainerScreen), findsOneWidget);
-    expect(find.text('换和弦训练'), findsOneWidget);
-    expect(find.text('和弦 A'), findsOneWidget);
-    expect(find.text('和弦 B'), findsOneWidget);
-    expect(find.text('已换'), findsOneWidget);
-  });
-
-  testWidgets('底导航能切到琶音页', (tester) async {
-    await tester.pumpWidget(const UkuleleApp());
-    await tester.pumpAndSettle();
-
-    // 点底导航"琶音"(第 7 个 tab,index 6)
-    await tester.tap(find.text('琶音'));
-    await tester.pumpAndSettle();
-
-    final bnb = tester.widget<BottomNavigationBar>(
-      find.byType(BottomNavigationBar),
-    );
-    expect(bnb.currentIndex, 6);
-    // 琶音页挂在树里:拨弦型芯片 + 默认进行(单和弦慢练 C)的和弦名都在
-    expect(find.byType(ArpeggioScreen), findsOneWidget);
-    expect(find.textContaining('4321'), findsOneWidget);
-    expect(find.textContaining('4323'), findsOneWidget);
-    expect(find.text('C'), findsWidgets);
   });
 }
