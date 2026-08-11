@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ukulele_demo/main.dart';
+import 'package:ukulele_demo/screens/arpeggio_screen.dart';
 import 'package:ukulele_demo/screens/chord_library_screen.dart';
 import 'package:ukulele_demo/screens/chord_trainer_screen.dart';
 import 'package:ukulele_demo/screens/stats_screen.dart';
@@ -150,5 +151,24 @@ void main() {
     expect(find.text('和弦 A'), findsOneWidget);
     expect(find.text('和弦 B'), findsOneWidget);
     expect(find.text('已换'), findsOneWidget);
+  });
+
+  testWidgets('底导航能切到琶音页', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+
+    // 点底导航"琶音"(第 7 个 tab,index 6)
+    await tester.tap(find.text('琶音'));
+    await tester.pumpAndSettle();
+
+    final bnb = tester.widget<BottomNavigationBar>(
+      find.byType(BottomNavigationBar),
+    );
+    expect(bnb.currentIndex, 6);
+    // 琶音页挂在树里:拨弦型芯片 + 默认进行(单和弦慢练 C)的和弦名都在
+    expect(find.byType(ArpeggioScreen), findsOneWidget);
+    expect(find.textContaining('4321'), findsOneWidget);
+    expect(find.textContaining('4323'), findsOneWidget);
+    expect(find.text('C'), findsWidgets);
   });
 }

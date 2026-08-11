@@ -1472,3 +1472,69 @@ final builtinFingerpickSongs = <FingerpickSong>[
     ],
   ),
 ];
+
+// —— 琶音织体练习(独立 tab) ——
+// 跟 Song(扫弦弹唱)、FingerpickSong(旋律 TAB)都不同:琶音是在【一个和弦上按顺序拨弦】的伴奏织体,
+// 不是旋律。练的是右手拨弦顺序(4321 / 4323 这类)。一首"练习"= 一组和弦进行 + 反复套拨弦型。
+// 弦下标跟全仓统一:0=G,1=C,2=E,3=A。物理弦号显示 = 4 - stringIndex(0→"4"…3→"1")。
+
+/// 琶音拨弦型:在某个和弦上反复拨的弦序。
+@immutable
+class ArpPattern {
+  final String name;          // '4321 琶音'
+  final List<int> strings;    // stringIndex 序列(0=G 1=C 2=E 3=A),按此循环拨
+  final int notesPerBeat;     // 一拍几个音:1=四分(慢琶音,一拍一音) 2=八分(流动织体)
+
+  const ArpPattern({required this.name, required this.strings, required this.notesPerBeat});
+}
+
+/// 一条琶音练习:一组和弦进行,反复套拨弦型练。
+@immutable
+class ArpStudy {
+  final String title;         // '流行进行'
+  final String? subtitle;     // '1-5-6-4 · C G Am F · 最常用'
+  final List<String> chords;  // 和弦名序列(都需在 chordShapes 里,才能画图 + playString)
+  final int beatsPerChord;    // 一个和弦持续几拍
+  final int tempo;            // 建议 BPM
+
+  const ArpStudy({
+    required this.title,
+    this.subtitle,
+    required this.chords,
+    this.beatsPerChord = 4,
+    required this.tempo,
+  });
+}
+
+/// 半拍槽 slot(0..beatsPerChord*2-1,偶数=正拍前半,奇数=后半) → 该拨哪根弦(stringIndex);
+/// 返回 null 表示该槽不拨(一拍一音型的后半拍是空,留给上一音延续)。
+/// 每个和弦从 pattern[0] 起(和弦第一拍落在低音 G 上,符合伴奏习惯)。
+/// notesPerBeat==1:只在正拍(偶数槽)拨,arpIndex = slot~/2;
+/// notesPerBeat==2:每槽都拨,arpIndex = slot。
+int? arpStringAt(ArpPattern p, int beatsPerChord, int slot) {
+  if (slot < 0) return null;
+  if (p.notesPerBeat == 1) {
+    if (slot.isOdd) return null; // 后半拍不拨
+    final beatWithinChord = slot ~/ 2;
+    return p.strings[beatWithinChord % p.strings.length];
+  }
+  // notesPerBeat == 2(八分):每个半拍槽拨一下
+  return p.strings[slot % p.strings.length];
+}
+
+// —— 内置琶音拨弦型 ——
+// 4321:最经典琶音,一拍一音(四分),一小节正好从低到高滚一遍(G→C→E→A)。
+// 4323:伴奏最常用织体,八分音符流动(4-3-2-3 循环)。
+const builtinArpPatterns = <ArpPattern>[
+  ArpPattern(name: '4321 琶音', strings: [0, 1, 2, 3], notesPerBeat: 1),
+  ArpPattern(name: '4323 织体', strings: [0, 1, 2, 1], notesPerBeat: 2),
+];
+
+// —— 内置琶音练习(几条最常用和弦进行,都 C/Am 调) ——
+// 单和弦慢练放第一个:初学先在一个和弦上把拨弦型练熟,再加换和弦。
+const builtinArpStudies = <ArpStudy>[
+  ArpStudy(title: '单和弦慢练', subtitle: 'C · 先把右手拨弦练均匀', chords: ['C'], tempo: 70),
+  ArpStudy(title: '流行进行', subtitle: '1-5-6-4 · C G Am F · 最常用', chords: ['C', 'G', 'Am', 'F'], tempo: 72),
+  ArpStudy(title: '经典进行', subtitle: '1-6-4-5 · C Am F G', chords: ['C', 'Am', 'F', 'G'], tempo: 72),
+  ArpStudy(title: '小调色彩', subtitle: '6-4-1-5 · Am F C G', chords: ['Am', 'F', 'C', 'G'], tempo: 72),
+];
