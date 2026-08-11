@@ -2,7 +2,7 @@
 
 一个跟着**节拍器**练尤克里里弹唱的安卓 app(Flutter):告诉你现在该按哪个和弦、怎么按、什么时候换、扫几下;还能给琴调音、专项练和弦切换、看练习打卡。
 
-> 跟着 Claude Code 一步步从零做出来的第一个项目(第8步起从 PWA 迁到 Flutter 安卓,做到第70步)。领域词汇见 [CONTEXT.md](CONTEXT.md),架构决策见 [docs/adr/](docs/adr/)。
+> 跟着 Claude Code 一步步从零做出来的第一个项目(第8步起从 PWA 迁到 Flutter 安卓,持续迭代至今)。领域词汇见 [CONTEXT.md](CONTEXT.md),架构决策见 [docs/adr/](docs/adr/)。
 
 ## 能干啥
 
@@ -28,7 +28,7 @@
 
 **指弹** tab:独立指弹练习页——两个子模式:① **真实曲谱**(内置 3 首经典指弹曲:卡农/绿袖子/千与千寻),4 弦 TAB 谱横向滚动+小节号,弹到哪高亮到哪+自动滚,TAB 下面歌词联动;② **练习模式**:选歌+8 种指弹型自动生成曲谱+逐弦拨响。调速/指弹声开关。
 
-**26 首内置歌**(13 英文 + 13 中文) + 你自己加的歌。英文:Somewhere Over the Rainbow、What a Wonderful World、Let It Be、You Are My Sunshine、Riptide、I'm Yours、Stand By Me、Hey Soul Sister、Zombie、Counting Stars、Can't Help Falling in Love、Lean on Me、Blowin' in the Wind、Three Little Birds、Hallelujah、No Woman No Cry、Country Roads。中文:月亮代表我的心、童年、那些花儿、后来、朋友、童话、那些年、小幸运、遇见。支持 3/4 拍(如"遇见")。还能在 app 里**加自己的歌**(选歌下拉框 →「➕ 添加自己的歌」,填歌名 + 速度 + **每和弦几拍(2/3/4/6/8)** + 歌词带和弦;点和弦按钮在光标处插 `[C]`、行首写 `#副歌` 给段落命名),加完跟内置歌一样能跟练、能改、能删。练习页顶栏 **FilterChip** 可筛 全部/英文/中文/**收藏**;🔍 搜索框按歌名找歌;⭐ 点心形收藏常用歌。
+**26 首内置歌**(17 英文 + 9 中文) + 你自己加的歌。英文:Somewhere Over the Rainbow、What a Wonderful World、Let It Be、You Are My Sunshine、Riptide、I'm Yours、Stand By Me、Hey Soul Sister、Zombie、Counting Stars、Can't Help Falling in Love、Lean on Me、Blowin' in the Wind、Three Little Birds、Hallelujah、No Woman No Cry、Country Roads。中文:月亮代表我的心、童年、那些花儿、后来、朋友、童话、那些年、小幸运、遇见。支持 3/4 拍(如"遇见")。还能在 app 里**加自己的歌**(选歌下拉框 →「➕ 添加自己的歌」,填歌名 + 速度 + **每和弦几拍(2/3/4/6/8)** + 歌词带和弦;点和弦按钮在光标处插 `[C]`、行首写 `#副歌` 给段落命名),加完跟内置歌一样能跟练、能改、能删。练习页顶栏 **FilterChip** 可筛 全部/英文/中文/**收藏**;🔍 搜索框按歌名找歌;⭐ 点心形收藏常用歌。
 
 ## 在安卓手机上用
 
@@ -43,4 +43,4 @@ flutter build apk --release      # → build/app/outputs/flutter-apk/app-release
 
 ## 项目结构
 
-Flutter 工程在 `flutter_app/`。`lib/` 下:`audio/`(音频引擎 / Karplus-Strong 扫弦合成 / 麦克风采集 / YIN 测音高 / 跟唱录音器)、`prefs/`(SharedPreferences 封装)、`screens/`(各 tab 页 + 自加歌表单)、`widgets/`(和弦图 / 歌词 / 练习栏)、`scoring/`(打分引擎:起音检测 / 计时准度 / 音高评分)、`song_store.dart`(歌库:内置歌 + 用户自加歌,ChangeNotifier)、`song_backup.dart`(歌曲备份/导入纯函数)、`theme_controller.dart`(主题模式控制器:系统 / 浅色 / 深色)、`models.dart`(歌曲数据 + 纯函数)。安卓端是空 `FlutterActivity`——纯 Flutter、无自写平台通道。歌曲按稳定 id 存偏好(不按下标,加 / 删用户歌不会串数据),详见 [docs/adr/0003-song-id-storage.md](docs/adr/0003-song-id-storage.md)。
+Flutter 工程在 `flutter_app/`。`lib/` 下:`audio/`(音频引擎 / Karplus-Strong 扫弦合成 / 麦克风采集 / YIN 测音高 / 跟唱录音器)、`prefs/`(SharedPreferences 封装)、`screens/`(各 tab 页 + 自加歌表单)、`widgets/`(和弦图 / 歌词 / 练习栏)、`song_store.dart`(歌库:内置歌 + 用户自加歌,ChangeNotifier)、`song_backup.dart`(歌曲备份/导入纯函数)、`theme_controller.dart`(主题模式控制器:系统 / 浅色 / 深色)、`models.dart`(歌曲数据 + 纯函数)。安卓端是空 `FlutterActivity`——纯 Flutter、无自写平台通道。歌曲按稳定 id 存偏好(不按下标,加 / 删用户歌不会串数据),详见 [docs/adr/0003-song-id-storage.md](docs/adr/0003-song-id-storage.md)。

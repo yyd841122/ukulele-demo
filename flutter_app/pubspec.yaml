@@ -48,8 +48,6 @@ dependencies:
   share_plus: ^13.3.0
   flutter_local_notifications: ^22.3.0
   timezone: ^0.11.1
-  # 调音"准了"震动:不走第三方包,自己写平台通道(MainActivity)直接驱动 Vibrator。
-  # 不用 HapticFeedback——后者走系统"触感反馈"通道,被 ColorOS 等 OEM 的设置 / 省电压掉(实测调准不震)。
 dev_dependencies:
   flutter_test:
     sdk: flutter
