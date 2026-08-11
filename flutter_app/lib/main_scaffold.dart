@@ -14,6 +14,7 @@ import 'audio/audio_engine.dart';
 import 'prefs/app_preferences.dart';
 import 'screens/chord_library_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'screens/practice_hub_screen.dart';
 import 'screens/stats_screen.dart';
 import 'song_store.dart';
@@ -50,6 +51,19 @@ class _MainScaffoldState extends State<MainScaffold> {
     super.initState();
     _initAudio(); // 后台初始化引擎 + 加载音频(不 await,不卡界面)
     _initSongs(); // 后台加载用户自加的歌、追加到内置歌后面
+    _maybeShowOnboarding(); // 完善:首启没看过新手引导就弹一次
+  }
+
+  /// 首启弹新手引导(完善Step6):没完成过(pref 没标 done)→ push 引导页;完成/跳过后标记、不再弹。
+  /// 异步读 prefs,读好再 push(不卡首帧;push 发生在首帧之后,合法)。
+  Future<void> _maybeShowOnboarding() async {
+    final p = await AppPreferences.load();
+    if (!mounted) return;
+    if (!p.getOnboardingDone()) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => OnboardingScreen(audio: _audio)),
+      );
+    }
   }
 
   /// 后台加载用户自加的歌(读 prefs JSON),追加到内置歌后面。有用户歌才 notify,练琴 / 统计页跟着刷新。

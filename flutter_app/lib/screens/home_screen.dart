@@ -15,6 +15,7 @@ import '../models.dart';
 import '../prefs/app_preferences.dart';
 import '../theme_controller.dart';
 import '../widgets/app_spacing.dart';
+import 'onboarding_screen.dart';
 import 'tuner_screen.dart';
 
 /// 首页。[audio] 用来 push 调音页;[theme] 顶栏主题切换菜单;[onNavigate] 切到底栏其它 tab。
@@ -70,7 +71,7 @@ class HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('尤克里里'),
-        actions: [_themeButton],
+        actions: [_helpButton, _themeButton],
       ),
       body: ListView(
         padding: const EdgeInsets.all(Spacing.s16),
@@ -139,6 +140,15 @@ class HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  // 完善:重看新手引导(首启弹过一次后,这里随时再看)。
+  Widget get _helpButton => IconButton(
+        icon: const Icon(Icons.help_outline),
+        tooltip: '新手指南',
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => OnboardingScreen(audio: widget.audio)),
+        ),
+      );
 
   // 顶栏主题切换菜单:系统 / 浅色 / 深色(当前模式打勾)。图标随当前模式变。
   Widget get _themeButton => PopupMenuButton<ThemeMode>(

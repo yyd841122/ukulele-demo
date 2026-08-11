@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ukulele_demo/main.dart';
 import 'package:ukulele_demo/screens/chord_library_screen.dart';
 import 'package:ukulele_demo/screens/home_screen.dart';
+import 'package:ukulele_demo/screens/onboarding_screen.dart';
 import 'package:ukulele_demo/screens/practice_hub_screen.dart';
 import 'package:ukulele_demo/screens/song_screen.dart';
 import 'package:ukulele_demo/screens/stats_screen.dart';
@@ -28,7 +29,8 @@ void main() {
   // 给个空 mock 库,读出来都是默认值(跟单元测试 prefs_test 同一套路)。
   // 也让 SongScreen._loadPrefs / StatsScreen._load 能正常完成、不卡 pumpAndSettle。
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    // 默认标记新手引导已完成:别的测试不弹引导盖住首页。引导专属测试在自己开头覆盖。
+    SharedPreferences.setMockInitialValues({'pref_onboarding_done': true});
   });
 
   // 底栏 tab 的 label 也会作为 Text 出现在树里(首页卡片标题可能撞名),用 descendant 精确戳底栏那个。
@@ -196,5 +198,36 @@ void main() {
     expect(find.textContaining('You Are My Sunshine'), findsOneWidget);
     // Rainbow 是初级、被筛掉了,折叠的下拉框里不再出现
     expect(find.textContaining('Somewhere Over the Rainbow'), findsNothing);
+  });
+
+  testWidgets('新手引导:首启没完成过→自动弹,跳过后关掉(完善Step6)', (tester) async {
+    SharedPreferences.setMockInitialValues({}); // 没完成引导
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+
+    // 点「跳过」→ 标记完成 + 关页
+    await tester.tap(find.text('跳过'));
+    await tester.pumpAndSettle();
+    expect(find.byType(OnboardingScreen), findsNothing);
+  });
+
+  testWidgets('新手引导:完成过→不再自动弹,直接进首页(完善Step6)', (tester) async {
+    SharedPreferences.setMockInitialValues({'pref_onboarding_done': true});
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+    expect(find.byType(OnboardingScreen), findsNothing);
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('首页「?」入口能重看新手引导(完善Step6)', (tester) async {
+    SharedPreferences.setMockInitialValues({'pref_onboarding_done': true});
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+    final help = find.byTooltip('新手指南');
+    expect(help, findsOneWidget);
+    await tester.tap(help);
+    await tester.pumpAndSettle();
+    expect(find.byType(OnboardingScreen), findsOneWidget);
   });
 }

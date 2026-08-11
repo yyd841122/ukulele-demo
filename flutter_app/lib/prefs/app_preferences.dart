@@ -59,6 +59,12 @@ class AppPreferences {
       _prefs.getString(_kThemeMode) ?? fallback;
   Future<void> setThemeMode(String mode) => _prefs.setString(_kThemeMode, mode);
 
+  // —— 新手引导(完善Step6):首启弹一次,完成/跳过标记 done,不再自动弹 ——
+  bool getOnboardingDone([bool fallback = false]) =>
+      _prefs.getBool(_kOnboardingDone) ?? fallback;
+  Future<void> setOnboardingDone(bool v) =>
+      _prefs.setBool(_kOnboardingDone, v);
+
   // —— 换和弦训练(全局;上次选的两个和弦 / 速度 / 每几拍换 / 60 秒挑战开关)——
   // 不按歌存——它跟具体哪首歌无关,是独立的切换练习。存了就记住上次选的,跨 app 重启还在;
   // 没存过调用方给默认(C↔G / 60 BPM / 4 拍 / 挑战关)。和弦名存字符串,调用方负责校验还在 chordShapes 里。
@@ -304,6 +310,7 @@ class AppPreferences {
   static const _kLyricScale = 'pref_lyric_scale';
   static const _kA4 = 'pref_a4'; // 调音器 A4 校准基准(Hz)
   static const _kThemeMode = 'pref_theme_mode'; // 第47步:主题 system/light/dark
+  static const _kOnboardingDone = 'pref_onboarding_done'; // 完善:新手引导完成/跳过标记
   static const _kTrainerChordA = 'pref_trainer_chord_a'; // 换和弦训练:上次选的和弦 A
   static const _kTrainerChordB = 'pref_trainer_chord_b'; // 换和弦训练:上次选的和弦 B
   static const _kTrainerBpm = 'pref_trainer_bpm'; // 换和弦训练:速度
