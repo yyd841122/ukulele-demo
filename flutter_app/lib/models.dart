@@ -1793,6 +1793,58 @@ final builtinFingerpickSongs = <FingerpickSong>[
       ]),
     ],
   ),
+
+  // ═══ 第16步:PD 传统儿歌指弹 2 首(旋律全球熟知、音域窄、全在 0-5 品新手够得到) ═══
+  // C 调指法沿用:do=C弦空(1,0) re=C弦2品(1,2) mi=E弦空(2,0) fa=E弦1品(2,1)
+  //   sol=G弦空(0,0) la=A弦空(3,0) do'=A弦3品(3,3)。每小节 4 拍 = 16 个 16 分 tick(duration 和必须 = 16)。
+  // 旋律由本 app 扒谱(Claude 凭熟知旋律逐音落 fp),装机若个别音不准,用户反馈即改。
+
+  // Row Row Row Your Boat(划小船)—— 英国传统儿歌(PD),旋律极简、音域 do-sol。
+  // 旋律:do re mi do | mi fa sol | sol la sol fa mi do | do sol do
+  FingerpickSong(
+    title: '划小船 (Row Row Row Your Boat)',
+    subtitle: '传统儿歌 · C 调 · 指弹入门',
+    tempo: 100,
+    bars: [
+      FingerpickBar(lyric: 'Row row row your boat', slots: [ // do re mi do
+        fp(1,0,t:4), fp(1,2,t:4), fp(2,0,t:4), fp(1,0,t:4),
+      ]),
+      FingerpickBar(lyric: 'gently down the stream', slots: [ // mi fa sol(二分收)
+        fp(2,0,t:4), fp(2,1,t:4), fp(0,0,t:8),
+      ]),
+      FingerpickBar(lyric: 'merrily merrily...', slots: [ // sol la sol fa mi do(八分切分)
+        fp(0,0,t:2), fp(3,0,t:2), fp(0,0,t:2), fp(2,1,t:2), fp(2,0,t:4), fp(1,0,t:4),
+      ]),
+      FingerpickBar(lyric: 'life is but a dream', slots: [ // do sol do(二分收尾)
+        fp(1,0,t:4), fp(0,0,t:4), fp(1,0,t:8),
+      ]),
+    ],
+  ),
+
+  // Old MacDonald(老麦克唐纳)—— 美国传统儿歌(PD),含招牌 "E-I-E-I-O"。
+  // 旋律:Old MacDonald had a farm = sol sol sol mi mi do;E-I-E-I-O = mi do' mi do' sol。
+  FingerpickSong(
+    title: '老麦克唐纳 (Old MacDonald)',
+    subtitle: '传统儿歌 · C 调 · 指弹入门',
+    tempo: 100,
+    bars: [
+      FingerpickBar(lyric: 'Old MacDonald', slots: [ // sol sol sol mi mi do(八分+四分)
+        fp(0,0,t:2), fp(0,0,t:2), fp(0,0,t:4), fp(2,0,t:2), fp(2,0,t:2), fp(1,0,t:4),
+      ]),
+      FingerpickBar(lyric: 'had a farm', slots: [ // sol mi do(长收)
+        fp(0,0,t:4), fp(2,0,t:4), fp(1,0,t:8),
+      ]),
+      FingerpickBar(lyric: 'E I E I O', slots: [ // mi do' mi do' sol(八分跳进 + 长收)
+        fp(2,0,t:2), fp(3,3,t:2), fp(2,0,t:2), fp(3,3,t:2), fp(0,0,t:8),
+      ]),
+      FingerpickBar(lyric: 'Old MacDonald', slots: [ // sol sol sol mi mi do(再现)
+        fp(0,0,t:2), fp(0,0,t:2), fp(0,0,t:4), fp(2,0,t:2), fp(2,0,t:2), fp(1,0,t:4),
+      ]),
+      FingerpickBar(lyric: 'had a farm', slots: [ // fa fa mi re do(收尾)
+        fp(2,1,t:2), fp(2,1,t:2), fp(2,0,t:4), fp(1,2,t:4), fp(1,0,t:4),
+      ]),
+    ],
+  ),
 ];
 
 // —— 琶音织体练习(独立 tab) ——
