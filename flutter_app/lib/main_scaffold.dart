@@ -39,6 +39,8 @@ class _MainScaffoldState extends State<MainScaffold> {
   final SongStore _songs = SongStore();
 
   // 统计页 key:进统计 tab 时调 reload() 重读最新 prefs(打卡 / 今日进度)。
+  // 首页 key:切回首页 tab 时调 reload() 重读今日练习分钟(刚在练琴 tab 练的量才显示出来)。
+  final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
   final GlobalKey<StatsScreenState> _statsKey = GlobalKey<StatsScreenState>();
 
   int _index = 0; // 当前选中第几个 tab(0 首页 / 1 练琴 / 2 和弦 / 3 统计)
@@ -65,10 +67,12 @@ class _MainScaffoldState extends State<MainScaffold> {
     setState(() {});
   }
 
-  /// 切 tab(底栏点 / 首页快捷卡片都走这里)。进统计 tab 让它 reload 重读最新 prefs。
+  /// 切 tab(底栏点 / 首页快捷卡片都走这里)。进首页 / 统计 tab 都让它们 reload 重读最新 prefs。
   void _onTabTapped(int i) {
     setState(() => _index = i);
-    if (i == 3) {
+    if (i == 0) {
+      _homeKey.currentState?.reload(); // 首页:刷新今日仪表盘(刚练的分钟才显示)
+    } else if (i == 3) {
       // 统计 tab:IndexedStack 保活,initState 只跑一次,这里手动让它重读最新 prefs。
       _statsKey.currentState?.reload();
     }
@@ -87,7 +91,7 @@ class _MainScaffoldState extends State<MainScaffold> {
       body: IndexedStack(
         index: _index,
         children: [
-          HomeScreen(audio: _audio, onNavigate: _onTabTapped),
+          HomeScreen(key: _homeKey, audio: _audio, theme: widget.theme, onNavigate: _onTabTapped),
           PracticeHubScreen(audio: _audio, store: _songs),
           ChordLibraryScreen(audio: _audio),
           StatsScreen(key: _statsKey, store: _songs, theme: widget.theme),

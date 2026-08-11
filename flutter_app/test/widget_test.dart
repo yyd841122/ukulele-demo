@@ -57,7 +57,7 @@ void main() {
     expect(bnb.currentIndex, 0);
     // 首页快捷卡片在(调音卡片标题——调音已不在底栏,只在首页;「练琴」既在底栏也在首页卡片,避开它)
     expect(find.text('调音'), findsOneWidget);
-    expect(find.textContaining('你好'), findsOneWidget);
+    expect(find.text('今日练习'), findsOneWidget); // 今日仪表盘卡标题
   });
 
   testWidgets('底导航能切到练琴页(Hub)', (tester) async {
@@ -132,7 +132,9 @@ void main() {
     await tester.pumpWidget(const UkuleleApp());
     await tester.pumpAndSettle();
 
-    // 首页点「调音」卡片 → push 调音页
+    // 首页点「调音」卡片 → push 调音页(卡片可能在矮测试画布上要滚一下才可见)
+    await tester.ensureVisible(find.text('调音'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('调音'));
     await tester.pumpAndSettle();
 
