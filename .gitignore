@@ -11,6 +11,8 @@ docs/*
 # 隐私政策要发布到 GitHub Pages(Google Play 要求公开 URL),必须进 git。
 !docs/privacy-policy.md
 !docs/privacy-policy.html
+# .nojekyll 告诉 Pages 跳过 Jekyll 原样输出(否则隐私政策 .html 被过滤成 404)。
+!docs/.nojekyll
 
 # node 依赖(以后如果用得到)
 node_modules/
