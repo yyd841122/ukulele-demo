@@ -210,12 +210,15 @@ class StrumPattern {
 /// 给一个和弦持续拍数,返回几个常用节奏型供选。
 /// 「全下」:每个正拍一个下扫(最简单,跟节拍器一拍一下一样)——新手起步用它。
 /// 「下上」:每个 8 分音符都扫(偶数槽下、奇数槽上)——稳的密集伴奏。
+/// 「慢扫」:只第 1、3 拍下扫(槽 0、4),一拍一下很疏——抒情慢歌最有呼吸,比「全下」还空。
 /// 「海岛」(Island/Calypso):D - D U - U D U——尤克里里最招牌的节奏,练熟它能弹一大半流行歌。
 /// 「民谣」(Folk):D - D U U - D U——民谣弹唱常用,比海岛多一个正拍下扫、更稳。
+/// 「下下上」:D D U - D D U - 重复两组——民谣摇滚弹唱经典推进,开头双下很有冲劲(比「下上」多了 16 分感)。
 /// 「摇滚」:D - D U D U D U——密集连续扫,鼓点感强、推得动。
-///   全下 / 下上 按拍数【动态生成】,任何拍数都正常。
-///   海岛 / 民谣 / 摇滚 按 4 拍(8 槽)写死(第51步起):非 4 拍歌(如 3 拍华尔兹)不返回它们——
-///   否则 grid 会截断、形状怪;而且这仨本就是 4/4 招牌节奏,硬塞别的拍数也不合乐理。非 4 拍只给前两个。
+/// 「雷鬼切分」:D - - U D - - U——反拍(后半拍)上扫重,雷鬼 / 流行切分感,比海岛更跳、更"躺"。
+///   全下 / 下上 / 慢扫 按拍数【动态生成】,任何拍数都正常。
+///   其余按 4 拍(8 槽)写死(第51步起):非 4 拍歌(如 3 拍华尔兹)不返回它们——
+///   否则 grid 会截断、形状怪;而且这些本就是 4/4 招牌节奏,硬塞别的拍数也不合乐理。非 4 拍只给前三个。
 List<StrumPattern> patternsFor(int beatsPerChord) {
   final out = <StrumPattern>[
     StrumPattern(
@@ -232,8 +235,17 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
           Strum(s, s.isEven ? StrumDir.down : StrumDir.up),
       ],
     ),
+    StrumPattern(
+      // 慢扫:正拍里只第 1、3 拍(每两拍一下)。偶数槽里再隔一个取:slot 0,4,8…
+      // 即「步长 4」。beatsPerChord 不限 4——6/8 拍歌给 0/4(三下)、8 拍给 0/4/8(四下)都自然。
+      name: '慢扫',
+      strums: [
+        for (var s = 0; s < beatsPerChord * 2; s += 4)
+          Strum(s, StrumDir.down),
+      ],
+    ),
   ];
-  // 4 拍才给三个招牌节奏(它们按 8 槽写死,别的拍数会截断 / 不合乐理)。
+  // 4 拍才给招牌节奏(它们按 8 槽写死,别的拍数会截断 / 不合乐理)。
   if (beatsPerChord == 4) {
     out.addAll(const [
       StrumPattern(
@@ -259,6 +271,19 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
         ],
       ),
       StrumPattern(
+        // 下下上:开头双下(槽 0 正拍 + 槽 1 后半拍)是连续 16 分感的双下,民谣摇滚推进。
+        // 后半小节(槽 4-6)重复一遍对称。槽 2、6 后半及槽 3、7 空是它的切分味道来源。
+        name: '下下上',
+        strums: [
+          Strum(0, StrumDir.down),
+          Strum(1, StrumDir.down),
+          Strum(2, StrumDir.up),
+          Strum(4, StrumDir.down),
+          Strum(5, StrumDir.down),
+          Strum(6, StrumDir.up),
+        ],
+      ),
+      StrumPattern(
         name: '摇滚',
         strums: [
           Strum(0, StrumDir.down),
@@ -267,6 +292,16 @@ List<StrumPattern> patternsFor(int beatsPerChord) {
           Strum(4, StrumDir.down),
           Strum(5, StrumDir.up),
           Strum(6, StrumDir.down),
+          Strum(7, StrumDir.up),
+        ],
+      ),
+      StrumPattern(
+        // 雷鬼切分:正拍下扫 + 反拍(后半拍)上扫,中段全空。正拍稳、反拍跳,雷鬼/流行的"躺"感。
+        name: '雷鬼切分',
+        strums: [
+          Strum(0, StrumDir.down),
+          Strum(3, StrumDir.up),
+          Strum(4, StrumDir.down),
           Strum(7, StrumDir.up),
         ],
       ),
