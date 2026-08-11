@@ -1171,6 +1171,22 @@ const List<Song> builtinSongs = [
       ),
     ],
   ),
+  Song(
+    title: "🌊 沧海一声笑",
+    tempo: 85,
+    beatsPerChord: 4,
+    sections: [
+      Section(
+        lines: [
+          Line(lyric: "[G]沧海一声笑 [Em]滔滔两岸潮 [C]浮沉随浪[D]只记今朝"),
+          Line(lyric: "[G]苍天笑 [Em]纷纷世上潮 [C]谁负谁胜[D]出天知晓"),
+          Line(lyric: "[G]江山笑 [Em]烟雨遥 [C]涛浪淘尽[D]红尘俗世几多娇"),
+          Line(lyric: "[G]清风笑 [Em]竟惹寂寥 [C]豪情还胜[D]了一襟晚照"),
+          Line(lyric: "[G]苍生笑 [Em]不再寂寥 [C]豪情仍在[D]痴痴笑笑"),
+        ],
+      ),
+    ],
+  ),
 ];
 
 /// 【第43a步】内置歌补上稳定 id(= 各自下标)后的歌曲库。界面读这份。
