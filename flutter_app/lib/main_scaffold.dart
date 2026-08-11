@@ -122,7 +122,7 @@ class _MainScaffoldState extends State<MainScaffold> {
           StatsScreen(key: _statsKey, store: _songs, theme: widget.theme),
           TunerScreen(key: _tunerKey, audio: _audio),
           ChordTrainerScreen(key: _trainerKey, audio: _audio),
-          FingerpickScreen(key: _fingerpickKey, audio: _audio, store: _songs),
+          FingerpickScreen(key: _fingerpickKey, audio: _audio),
         ],
       ),
       bottomNavigationBar: fullscreen ? null : BottomNavigationBar(
