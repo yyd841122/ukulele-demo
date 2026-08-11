@@ -150,6 +150,29 @@ const Map<String, List<int>> chordShapes = {
   'Gaug': [0, 3, 3, 2],
 };
 
+/// 一个和弦分类(给和弦速查页数据驱动分组用,替掉原来按和弦名 contains/endsWith 的脆弱推断:
+/// 像 C#m / Bbmaj7 这种命名一变就会被错归类)。name 是中文显示标签,chords 是该类下的和弦名,
+/// 顺序就是浏览顺序。每个和弦名都必须在 chordShapes 里有指法(点卡要画图 + 试听)。
+class ChordCategory {
+  final String name;
+  final List<String> chords;
+  const ChordCategory(this.name, this.chords);
+}
+
+/// 和弦速查页的分类(顺序 = 三和弦 → 七和弦 → 挂留 → 减增),和 chordShapes 的注释分组一致。
+/// 改 / 加和弦时:chordShapes 加指法,这里把名字塞进对应分类。
+const List<ChordCategory> chordCategories = [
+  ChordCategory('大三', ['C', 'D', 'F', 'G', 'A', 'Bb', 'E']),
+  ChordCategory('小三', ['Am', 'Bm', 'Cm', 'Dm', 'Em', 'Fm', 'Gm']),
+  ChordCategory('属七', ['A7', 'B7', 'C7', 'D7', 'E7', 'G7']),
+  ChordCategory('大七', ['Cmaj7', 'Fmaj7', 'Gmaj7', 'Amaj7']),
+  ChordCategory('小七', ['Dm7', 'Am7', 'Em7', 'Bm7', 'Cm7', 'Fm7', 'Gm7']),
+  ChordCategory('sus4', ['Csus4', 'Dsus4', 'Fsus4', 'Gsus4', 'Asus4']),
+  ChordCategory('sus2', ['Csus2', 'Dsus2', 'Gsus2']),
+  ChordCategory('dim', ['Bdim', 'Ddim']),
+  ChordCategory('aug', ['Caug', 'Gaug']),
+];
+
 /// 一拍 = 两个 8 分音符槽位。节奏型就按这些槽位描述,这样"上扫"这种落在后半拍的扫弦才表达得出来。
 /// 约定:槽 0 = 第1拍正拍、槽 1 = 第1拍的"&"(后半拍)、槽 2 = 第2拍正拍 …… 一个和弦共 beatsPerChord×2 个槽。
 /// 用 beatsPerChord×2 而不是更细的 16 分音符:尤克里里常用节奏型最细到半拍,够用且界面不挤。

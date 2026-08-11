@@ -148,4 +148,38 @@ void main() {
     expect(find.textContaining('440.00'), findsOneWidget);
     expect(find.textContaining('基准音 A4'), findsOneWidget);
   });
+
+  testWidgets('和弦页搜索框过滤和弦', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+    await tester.tap(navItem('和弦'));
+    await tester.pumpAndSettle();
+
+    // 初始:大三类的 C 在(靠顶,可见)
+    expect(find.text('C'), findsWidgets);
+
+    // 搜 sus4 → 只剩挂四类(5 个都进视口);纯 C 被过滤
+    await tester.enterText(
+      find.descendant(of: find.byType(ChordLibraryScreen), matching: find.byType(TextField)),
+      'sus4',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Csus4'), findsOneWidget);
+    expect(find.text('C'), findsNothing);
+  });
+
+  testWidgets('和弦页类别筛选只显示该类', (tester) async {
+    await tester.pumpWidget(const UkuleleApp());
+    await tester.pumpAndSettle();
+    await tester.tap(navItem('和弦'));
+    await tester.pumpAndSettle();
+
+    // 点「小三」chip
+    await tester.tap(find.text('小三'));
+    await tester.pumpAndSettle();
+
+    // 小三和弦 Am 在,大三和弦 C 不在
+    expect(find.text('Am'), findsOneWidget);
+    expect(find.text('C'), findsNothing);
+  });
 }
