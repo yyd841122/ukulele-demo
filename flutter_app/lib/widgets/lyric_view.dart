@@ -67,7 +67,26 @@ class LineView extends StatefulWidget {
 }
 
 class _LineViewState extends State<LineView> {
-  late final List<WordUnit> _units = parseWords(widget.line.lyric);
+  // 第55步:parseWords 缓存到 State,播放时 _tick 每半拍 setState、整树重画,不再每帧重解析。
+  // 用 late(可变)+ initState 赋值,而【不】用 late final:LineView 本身没 key —— 它的 lineKey
+  // 只挂到内部那个 Container 上、不是 Widget.key。换歌时 Flutter 按位置 reconcile、复用同一行
+  // 的 State,late final 那份 _units 还是上一首的词 → 换歌后歌词不刷新(bug)。所以必须在
+  // didUpdateWidget 里按歌词变了重解析,既保住缓存优化、又让换歌跟着更新。
+  late List<WordUnit> _units;
+
+  @override
+  void initState() {
+    super.initState();
+    _units = parseWords(widget.line.lyric);
+  }
+
+  @override
+  void didUpdateWidget(covariant LineView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.line.lyric != widget.line.lyric) {
+      _units = parseWords(widget.line.lyric);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
