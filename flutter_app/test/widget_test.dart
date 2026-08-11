@@ -182,4 +182,19 @@ void main() {
     expect(find.text('Am'), findsOneWidget);
     expect(find.text('C'), findsNothing);
   });
+
+  testWidgets('扫弦页难度筛选:点入门→只显入门歌并跳到第一首(完善Step4)', (tester) async {
+    await openSongScreen(tester);
+    // 默认显示第一首 Rainbow(初级),下拉框里也能看到它的难度标签「初级」
+    expect(find.textContaining('Somewhere Over the Rainbow'), findsOneWidget);
+
+    // 点「入门(N)」难度筛选芯片
+    await tester.tap(find.textContaining('入门('));
+    await tester.pumpAndSettle();
+
+    // 筛后自动跳到第一首入门歌 = You Are My Sunshine(C G)
+    expect(find.textContaining('You Are My Sunshine'), findsOneWidget);
+    // Rainbow 是初级、被筛掉了,折叠的下拉框里不再出现
+    expect(find.textContaining('Somewhere Over the Rainbow'), findsNothing);
+  });
 }

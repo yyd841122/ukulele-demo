@@ -417,6 +417,41 @@ class Song {
       );
 }
 
+/// 这首歌用了哪些和弦(从歌词里 [C] 标记提取、去重,只认 chordShapes 里有的合法和弦)。
+/// 给难度标签用。纯函数、无头可测。
+Set<String> chordsOf(Song s) {
+  final chords = <String>{};
+  for (final sec in s.sections) {
+    for (final line in sec.lines) {
+      for (final m in RegExp(r'\[([^\]]+)\]').allMatches(line.lyric)) {
+        final name = m.group(1)!;
+        if (chordShapes.containsKey(name)) chords.add(name);
+      }
+    }
+  }
+  return chords;
+}
+
+/// 歌曲难度(给新手标"从哪首入手"):从用的和弦【算】出来、不写死,和弦改了难度自动跟上;
+/// 用户自加的歌也自动有难度标签。规则(按当前曲库全是开放把位入门和弦标定):
+///   1 入门:≤3 个和弦、且没碰 F / 7 和弦(C/G/Am/D/Em/A/Dm 这类最基础的)。F 是新手第一道坎。
+///   3 进阶:5 个以上和弦(切换多)。
+///   2 初级:其余(3-4 个和弦,常含 F 或 7 和弦)。
+/// 纯函数、无头可测。
+int difficultyOf(Song s) {
+  final c = chordsOf(s);
+  if (c.isEmpty) return 2; // 没和弦标记(理论不会)→ 中性
+  final hasF = c.contains('F'); // F:新手第一道坎
+  final hasSeventh = c.any((x) => x.contains('7')); // 7 和弦要加指
+  if (!hasF && !hasSeventh && c.length <= 3) return 1;
+  if (c.length >= 5) return 3;
+  return 2;
+}
+
+/// 难度 → 中文标签(界面显示用)。
+String difficultyLabel(int d) =>
+    const {1: '入门', 2: '初级', 3: '进阶'}[d] ?? '初级';
+
 /// 一段的反序列化(Song.fromJson 用,抽出来免得集合 for 里塞语句)。
 Section _sectionFromJson(Map<String, dynamic> j) => Section(
       name: j['name'] as String?,

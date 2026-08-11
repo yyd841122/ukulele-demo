@@ -117,6 +117,9 @@ class SongScreenState extends State<SongScreen> {
   // 收藏筛选(第58步-2):'全部' / '收藏'。默认全部。
   String _favoriteFilter = '全部';
 
+  // 难度筛选(完善Step4):null=全部、1=入门、2=初级、3=进阶。从 difficultyOf(song) 算。
+  int? _difficultyFilter;
+
   // 歌曲搜索(第58步-1)。
   String _searchQuery = '';
   bool _showSearch = false;
@@ -138,6 +141,10 @@ class SongScreenState extends State<SongScreen> {
     // 搜索词筛选
     if (_searchQuery.isNotEmpty) {
       result = result.where((s) => s.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    }
+    // 难度筛选
+    if (_difficultyFilter != null) {
+      result = result.where((s) => difficultyOf(s) == _difficultyFilter).toList();
     }
     return result;
   }
@@ -208,6 +215,16 @@ class SongScreenState extends State<SongScreen> {
     if (v == _favoriteFilter) return;
     setState(() {
       _favoriteFilter = v;
+      _cachedDropdownItems = null;
+      _reconcileFilteredSelection();
+    });
+  }
+
+  /// 切难度筛选(完善Step4):再点当前档 = 取消(回全部)。同 _setFavoriteFilter 套路。
+  void _setDifficultyFilter(int? v) {
+    if (v == _difficultyFilter) return;
+    setState(() {
+      _difficultyFilter = v;
       _cachedDropdownItems = null;
       _reconcileFilteredSelection();
     });
@@ -813,9 +830,17 @@ class SongScreenState extends State<SongScreen> {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(
-              s.title,
-              style: TextStyle(color: theme.colorScheme.onSurface),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(s.title, style: TextStyle(color: theme.colorScheme.onSurface)),
+                const SizedBox(width: 8),
+                // 难度标签(完善Step4):帮新手一眼看出从哪首入手。
+                Text(
+                  difficultyLabel(difficultyOf(s)),
+                  style: TextStyle(fontSize: 11, color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
+                ),
+              ],
             ),
           ),
         ),
@@ -1173,7 +1198,7 @@ class SongScreenState extends State<SongScreen> {
         // (原来这些图标挂在 actions 里和歌名抢宽度,歌名被 FittedBox 缩到看不清;
         //  下移到这第二行后,歌名独占第一行、清晰可读。)
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(_showSearch ? 124 : 88),
+          preferredSize: Size.fromHeight(_showSearch ? 156 : 120),
           child: Container(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1187,32 +1212,46 @@ class SongScreenState extends State<SongScreen> {
                   child: _buildActionsRow(cs),
                 ),
                 const SizedBox(height: 2),
-                // 筛选芯片:全部 / 英文 / 中文 / 收藏
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                // 筛选芯片:全部 / 英文 / 中文 / 收藏 / 入门 / 初级 / 进阶
+                // Wrap:窄屏 7 个芯片自动换行(否则挤一排会溢出)。
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 2,
                   children: [
                     _filterChip(
                       label: '全部',
-                      selected: _languageFilter == '全部' && _favoriteFilter == '全部',
-                      onTap: () { _setLanguageFilter('全部'); _setFavoriteFilter('全部'); },
+                      selected: _languageFilter == '全部' && _favoriteFilter == '全部' && _difficultyFilter == null,
+                      onTap: () { _setLanguageFilter('全部'); _setFavoriteFilter('全部'); _setDifficultyFilter(null); },
                     ),
-                    const SizedBox(width: 4),
                     _filterChip(
                       label: '英文(${songs.where((s) => !RegExp(r'[一-鿿]').hasMatch(s.title)).length})',
                       selected: _languageFilter == '英文',
                       onTap: () { _setFavoriteFilter('全部'); _setLanguageFilter('英文'); },
                     ),
-                    const SizedBox(width: 4),
                     _filterChip(
                       label: '中文(${songs.where((s) => RegExp(r'[一-鿿]').hasMatch(s.title)).length})',
                       selected: _languageFilter == '中文',
                       onTap: () { _setFavoriteFilter('全部'); _setLanguageFilter('中文'); },
                     ),
-                    const SizedBox(width: 4),
                     _filterChip(
                       label: '收藏(${_favorites.length})',
                       selected: _favoriteFilter == '收藏',
                       onTap: () { _setLanguageFilter('全部'); _setFavoriteFilter('收藏'); },
+                    ),
+                    _filterChip(
+                      label: '入门(${songs.where((s) => difficultyOf(s) == 1).length})',
+                      selected: _difficultyFilter == 1,
+                      onTap: () => _setDifficultyFilter(_difficultyFilter == 1 ? null : 1),
+                    ),
+                    _filterChip(
+                      label: '初级(${songs.where((s) => difficultyOf(s) == 2).length})',
+                      selected: _difficultyFilter == 2,
+                      onTap: () => _setDifficultyFilter(_difficultyFilter == 2 ? null : 2),
+                    ),
+                    _filterChip(
+                      label: '进阶(${songs.where((s) => difficultyOf(s) == 3).length})',
+                      selected: _difficultyFilter == 3,
+                      onTap: () => _setDifficultyFilter(_difficultyFilter == 3 ? null : 3),
                     ),
                   ],
                 ),
