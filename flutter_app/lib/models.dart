@@ -1343,6 +1343,80 @@ final builtinFingerpickSongs = <FingerpickSong>[
     ],
   ),
 
+  // ═══ 更多入门儿歌(旋律全球熟知,指弹入门) ═══
+  // 音高沿用上面儿歌的 C 调指法:do=C弦空(1,0) re=C弦2品(1,2) mi=E弦空(2,0)
+  //   fa=E弦1品(2,1) sol=G弦空(0,0) la=A弦空(3,0) do'=A弦3品(3,3)
+  //   re'=A弦5品(3,5) mi'=A弦7品(3,7)。每小节 4 拍 = 16 个 16 分 tick。
+
+  // ═══ 4. Mary Had a Little Lamb (玛丽有只小羊羔) ═══
+  // 全曲只用 mi re do sol 四个音,最简单的入门旋律之一。
+  // 旋律:mi re do re mi mi mi | re re re | mi sol sol | mi re do re mi mi mi | mi re do re mi re do
+  FingerpickSong(
+    title: '玛丽有只小羊羔 (Mary Had a Little Lamb)',
+    subtitle: 'C 调 · 指弹入门',
+    tempo: 95,
+    bars: [
+      FingerpickBar(lyric: 'Mary had a', slots: [ // mi re do re mi mi mi
+        fp(2,0,t:2), fp(1,2,t:2), fp(1,0,t:2), fp(1,2,t:2), fp(2,0,t:2), fp(2,0,t:2), fp(2,0,t:4),
+      ]),
+      FingerpickBar(lyric: 'little lamb', slots: [ // re re re(二分)
+        fp(1,2,t:4), fp(1,2,t:4), fp(1,2,t:8),
+      ]),
+      FingerpickBar(lyric: 'little lamb', slots: [ // mi sol sol(二分)
+        fp(2,0,t:4), fp(0,0,t:4), fp(0,0,t:8),
+      ]),
+      FingerpickBar(lyric: 'Mary had a', slots: [ // mi re do re mi mi mi
+        fp(2,0,t:2), fp(1,2,t:2), fp(1,0,t:2), fp(1,2,t:2), fp(2,0,t:2), fp(2,0,t:2), fp(2,0,t:4),
+      ]),
+      FingerpickBar(lyric: 'fleece white as snow', slots: [ // mi re do re mi re do(收尾)
+        fp(2,0,t:2), fp(1,2,t:2), fp(1,0,t:2), fp(1,2,t:2), fp(2,0,t:2), fp(1,2,t:2), fp(1,0,t:4),
+      ]),
+    ],
+  ),
+
+  // ═══ 5. London Bridge (伦敦桥) ═══
+  // 经典英国儿歌,旋律起伏明显、练换弦。
+  // 旋律:sol la sol fa mi fa sol | re mi fa mi fa sol | sol la sol fa mi fa sol | sol mi do
+  FingerpickSong(
+    title: '伦敦桥 (London Bridge)',
+    subtitle: 'C 调 · 指弹入门',
+    tempo: 100,
+    bars: [
+      FingerpickBar(lyric: 'London Bridge', slots: [ // sol la sol fa mi fa sol
+        fp(0,0,t:2), fp(3,0,t:2), fp(0,0,t:2), fp(2,1,t:2), fp(2,0,t:2), fp(2,1,t:2), fp(0,0,t:4),
+      ]),
+      FingerpickBar(lyric: 'falling down', slots: [ // re mi fa mi fa sol(附点收尾)
+        fp(1,2,t:2), fp(2,0,t:2), fp(2,1,t:2), fp(2,0,t:2), fp(2,1,t:2), fp(0,0,t:6),
+      ]),
+      FingerpickBar(lyric: 'London Bridge', slots: [ // sol la sol fa mi fa sol
+        fp(0,0,t:2), fp(3,0,t:2), fp(0,0,t:2), fp(2,1,t:2), fp(2,0,t:2), fp(2,1,t:2), fp(0,0,t:4),
+      ]),
+      FingerpickBar(lyric: 'my fair lady', slots: [ // sol mi do(二分收尾)
+        fp(0,0,t:4), fp(2,0,t:4), fp(1,0,t:8),
+      ]),
+    ],
+  ),
+
+  // ═══ 6. Jingle Bells (铃儿响叮当 · 副歌循环) ═══
+  // 只取最洗脑的副歌开头三小节,自然循环回开头,适合反复练。
+  // 旋律:mi mi mi | mi mi mi | mi sol do re mi(后三音爬到高音,用到第7品)
+  FingerpickSong(
+    title: '铃儿响叮当 (Jingle Bells · 副歌)',
+    subtitle: 'C 调 · 副歌循环 · 用到第7品',
+    tempo: 120,
+    bars: [
+      FingerpickBar(lyric: 'Jingle bells', slots: [ // mi mi mi(二分)
+        fp(2,0,t:4), fp(2,0,t:4), fp(2,0,t:8),
+      ]),
+      FingerpickBar(lyric: 'Jingle bells', slots: [ // mi mi mi(二分)
+        fp(2,0,t:4), fp(2,0,t:4), fp(2,0,t:8),
+      ]),
+      FingerpickBar(lyric: 'jingle all the way', slots: [ // mi sol do' re' mi'(爬到高音)
+        fp(2,0,t:2), fp(0,0,t:2), fp(3,3,t:2), fp(3,5,t:2), fp(3,7,t:8),
+      ]),
+    ],
+  ),
+
   // ═══ 经典指弹曲(原 3 首,稍难) ═══
   // ═══ Canon in C (卡农 C 调简化版) ═══
   // 基于经典和声进行:C—G—Am—Em—F—C—F—G,旋律在 A/E 弦上、低音在 G/C 弦伴奏。
