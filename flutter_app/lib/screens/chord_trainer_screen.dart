@@ -181,7 +181,6 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
   }
 
   /// 停止:取消定时器、翻 _playing。保留 _switches(让用户看到自己的成绩);不点亮 _finished。
-  /// MainScaffold 切走本 tab 时也调它(停掉后台嗒声,跟调音页切走停麦一个道理)。
   void stop() {
     _timer?.cancel();
     _timer = null;

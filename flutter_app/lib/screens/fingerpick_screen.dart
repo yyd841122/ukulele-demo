@@ -107,9 +107,6 @@ class FingerpickScreenState extends State<FingerpickScreen> {
     if (_playing) setState(() => _playing = false);
   }
 
-  /// MainScaffold 切走时调。
-  void stop() => _stop();
-
   void _onTick() {
     _tickScore();
     setState(() {});

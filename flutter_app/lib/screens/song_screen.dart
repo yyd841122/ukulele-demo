@@ -863,29 +863,6 @@ class SongScreenState extends State<SongScreen> {
     _prefs?.setSec(songs[_selected].id, _totalSec);
   }
 
-  /// 把当前会话还没落盘的打卡补存:把 _playStart 到现在的秒数结进 _totalSec(还在播就重置 _playStart
-  /// 让计时不停)、再 _saveStats 落盘。给 MainScaffold 在【切走练习 tab】时调——统计页现在是平级 tab,
-  /// 不再靠"进页前 push"触发刷盘;不刷的话切过去读到的是旧值,会漏算刚练的这段。
-  void flushStats() {
-    _accumulateSec();
-    if (_playing) _playStart = DateTime.now(); // 计时不停:补完这段后重新起算
-    _saveStats();
-  }
-
-  /// 离开练习 tab 时由 MainScaffold 调:停节拍器定时器 + 关屏幕常亮。
-  /// 保留 _idx/_slot/_tempo 等(回来按 ▶ 接着用,跟其他 tab 切走停音频一个套路)。
-  void stopMetronome() {
-    if (!_playing) return;
-    _timer?.cancel();
-    _timer = null;
-    _previewTimer?.cancel();
-    _previewTimer = null;
-    _accumulateSec();
-    _playStart = null;
-    _setWakelock(false);
-    setState(() => _playing = false);
-  }
-
   /// 字号对话框:Slider 实时拖、歌词背后跟着变,松手就存(跨重启保留)。复位一键回 1.0。
   /// 用 StatefulBuilder 让对话框自己的 Slider 文字/百分比跟着拖动刷新;
   /// 同时调本页 setState,歌词区实时缩放(所见即所得,不用关对话框才看到效果)。
@@ -1087,11 +1064,6 @@ class SongScreenState extends State<SongScreen> {
     final wav = _takeWav;
     if (wav == null) return;
     widget.audio.playWavBytes(wav);
-  }
-
-  /// 离开练习 tab 时由 MainScaffold 调:正在录就停掉(隐私 + 省电,跟调音器切走停麦一个套路)。
-  Future<void> stopRecordingIfActive() async {
-    if (_recording) await _stopRecord();
   }
 
   @override

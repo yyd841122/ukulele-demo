@@ -3,9 +3,9 @@
 // (第22步打卡在按歌存累计遍数 + 累计秒数),这里只读、不写——所以自己 load 一份 prefs:
 // SharedPreferences 是单例,读到的就是 SongScreen 写下去的最新值。
 //
-// 关键:练习页切走时 MainScaffold 会调它的 flushStats 把当前会话还没落盘的打卡补存
-// (_accumulateSec 把这段时间结进 _totalSec、还在播就重置 _playStart 让计时不停,_saveStats 落盘),
-// 再调本页 reload() 重读——这样读到的才是含「本次」的最新值,不会少算刚练的这段。
+// 关键:练习页是练琴 Hub 里 push 上来的全屏页,pop 回 Hub 时它的 dispose() 会把当前会话还没
+// 落盘的打卡补存(_accumulateSec 结进 _totalSec、_saveStats 落盘)。MainScaffold 切到统计 tab 时
+// 调本页 reload() 重读——这样读到的才是含「本次练习」的最新值,不会少算刚练的这段。
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Clipboard:备份一键复制 / 导入粘贴
 import 'package:permission_handler/permission_handler.dart'; // openAppSettings:通知权限被拒时引去系统设置
@@ -22,7 +22,7 @@ import '../theme_controller.dart';
 ///
 /// 第28步起和练习页是底导航的平级 tab(IndexedStack 保活):一次 initState 后 State 常驻,
 /// 切回统计 tab 不会重跑 initState。所以 MainScaffold 在切到统计 tab 时会调 reload() 重读 prefs,
-/// 读到的才是含「本次练习」的最新值(练习 tab 切走时已先 flushStats 把当前会话刷盘)。
+/// 读到的才是含「本次练习」的最新值(练习页 pop 时 dispose 已把当前会话刷盘)。
 class StatsScreen extends StatefulWidget {
   final SongStore store; // 歌单(内置 + 用户自加);加 / 删用户歌时刷新"按歌曲"列表
   final ThemeController theme; // 主题控制器(第47步):顶栏菜单切 系统/浅色/深色
@@ -678,10 +678,11 @@ class _ReminderCardState extends State<_ReminderCard> {
                 onChanged: (v) async {
                   if (v) {
                     // Android 13+ 先请求通知权限;被拒就不开(避免开关亮着但通知永远不响)。
+                    final messenger = ScaffoldMessenger.of(context);
                     final granted = await ReminderService().requestPermission();
                     if (!granted) {
                       if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      messenger.showSnackBar(
                         SnackBar(
                           content: const Text('需要通知权限才能提醒'),
                           action: SnackBarAction(label: '去设置', onPressed: openAppSettings),

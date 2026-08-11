@@ -1206,8 +1206,8 @@ class FingerpickSlot {
   bool get shouldPlay => stringIndex != null && duration > 0;
 
   /// 休止槽(占时值、不弹)。
-  const FingerpickSlot.rest({int duration = 1})
-      : stringIndex = null, fret = 0, duration = duration;
+  const FingerpickSlot.rest({this.duration = 1})
+      : stringIndex = null, fret = 0;
 }
 
 // 便捷:创建一个指弹槽。s=弦(0-3),f=品,t=时值(1=16分,2=8分,4=4分)。

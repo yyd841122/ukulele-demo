@@ -104,9 +104,6 @@ class ArpeggioScreenState extends State<ArpeggioScreen> {
     if (_playing) setState(() => _playing = false);
   }
 
-  /// MainScaffold 切走时调。
-  void stop() => _stop();
-
   /// 定时器每一下(一个半拍槽)。预备拍阶段嗒声倒计时一小节;正式阶段推进槽位 + 拨弦/嗒。
   void _onTick() {
     if (_inCountIn) {

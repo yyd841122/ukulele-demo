@@ -87,7 +87,7 @@ class _FretboardPainter extends CustomPainter {
 
     // --- 弦标签(左侧 G/C/E/A) ---
     final labelStyle = ui.TextStyle(
-      color: ui.Color.fromARGB(cs.onSurfaceVariant.alpha, cs.onSurfaceVariant.red, cs.onSurfaceVariant.green, cs.onSurfaceVariant.blue),
+      color: cs.onSurfaceVariant,
       fontSize: 12, fontWeight: ui.FontWeight.w600,
     );
     for (var s = 0; s < 4; s++) {
@@ -99,11 +99,11 @@ class _FretboardPainter extends CustomPainter {
 
     // --- 画品位数字(每个音居中在它占的宽度里) ---
     final normalStyle = ui.TextStyle(
-      color: ui.Color.fromARGB(cs.onSurfaceVariant.alpha, cs.onSurfaceVariant.red, cs.onSurfaceVariant.green, cs.onSurfaceVariant.blue),
+      color: cs.onSurfaceVariant,
       fontSize: fontSize, fontWeight: ui.FontWeight.w600,
     );
     final hiStyle = ui.TextStyle(
-      color: ui.Color.fromARGB(cs.primary.alpha, cs.primary.red, cs.primary.green, cs.primary.blue),
+      color: cs.primary,
       fontSize: fontSize, fontWeight: ui.FontWeight.bold,
     );
     for (var i = 0; i < notes.length; i++) {
@@ -135,7 +135,7 @@ class _FretboardPainter extends CustomPainter {
     // --- 小节线 + 小节号(按 barStarts) ---
     final barPaint = Paint()..color = cs.outlineVariant..strokeWidth = 1.5;
     final barNumStyle = ui.TextStyle(
-      color: ui.Color.fromARGB(cs.outline.alpha, cs.outline.red, cs.outline.green, cs.outline.blue),
+      color: cs.outline,
       fontSize: 10,
     );
     for (var b = 0; b <= barStarts.length; b++) {
