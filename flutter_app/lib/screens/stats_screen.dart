@@ -118,29 +118,27 @@ class StatsScreenState extends State<StatsScreen> {
           }
         },
         itemBuilder: (_) => const [
-          PopupMenuItem(value: 'backup', child: Text('备份 / 分享我的歌')),
-          PopupMenuItem(value: 'import', child: Text('从备份导入歌')),
+          PopupMenuItem(value: 'backup', child: Text('备份 / 分享(歌 + 打卡)')),
+          PopupMenuItem(value: 'import', child: Text('从备份导入(歌 + 打卡)')),
         ],
       );
 
-  /// 备份:把用户自加歌编码成 JSON 文本,弹框给用户【复制到剪贴板】或【分享…】出去。
-  /// 没有用户歌 → 直接提示,不开框。
+  /// 备份:把用户自加歌 + 练习统计编码成 JSON 文本,弹框给用户【复制到剪贴板】或【分享…】出去。
+  /// 统计(打卡日历 + 每日目标)一并备份——换机 / 重装不丢连续打卡。没用户歌也能只备份打卡。
   Future<void> _exportSongs() async {
     final userSongs = [
       for (final s in songs)
         if (widget.store.isUserSong(s)) s,
     ];
-    if (userSongs.isEmpty) {
-      _toast('还没有自己加的歌,不用备份');
-      return;
-    }
-    final backup = encodeBackup(userSongs);
+    final stats = _prefs?.getStatsPayload();
+    final backup = encodeBackup(userSongs, stats: stats);
+    final hasSongs = userSongs.isNotEmpty;
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: Text('备份 ${userSongs.length} 首歌'),
+          title: Text(hasSongs ? '备份 ${userSongs.length} 首歌 + 练习记录' : '备份练习记录'),
           content: SizedBox(
             width: double.maxFinite,
             child: Column(
@@ -148,7 +146,9 @@ class StatsScreenState extends State<StatsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '下面是 ${userSongs.length} 首自加歌的备份文本。复制或分享出去,换手机 / 重装时粘到「从备份导入」就能恢复。',
+                  hasSongs
+                      ? '下面是 ${userSongs.length} 首自加歌 + 练习打卡记录(连续练琴天数靠它)的备份文本。复制或分享出去,换手机 / 重装时粘到「从备份导入」就能恢复。'
+                      : '下面是练习打卡记录(连续练琴天数靠它)的备份文本。复制或分享出去,换手机 / 重装时粘到「从备份导入」就能恢复。',
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(ctx).colorScheme.onSurfaceVariant,
@@ -176,13 +176,13 @@ class StatsScreenState extends State<StatsScreen> {
                 await Clipboard.setData(ClipboardData(text: backup));
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
-                _toast('已复制 ${userSongs.length} 首歌到剪贴板');
+                _toast(hasSongs ? '已复制 ${userSongs.length} 首歌 + 打卡到剪贴板' : '已复制打卡记录到剪贴板');
               },
               child: const Text('复制到剪贴板'),
             ),
             FilledButton.icon(
               onPressed: () => SharePlus.instance.share(
-                ShareParams(text: backup, subject: '我的尤克里里练习歌'),
+                ShareParams(text: backup, subject: '我的尤克里里练习数据'),
               ),
               icon: const Icon(Icons.share_outlined),
               label: const Text('分享…'),
@@ -215,7 +215,7 @@ class StatsScreenState extends State<StatsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '把备份文本整段粘进来。会加到歌库末尾,不影响现有歌(重复导入会重复加,可之后删)。',
+                      '把备份文本整段粘进来。会加歌到歌库末尾 + 合并练习打卡记录(连续天数靠它)。不影响现有歌;打卡是并集去重、重复导入不会翻倍。',
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(ctx).colorScheme.onSurfaceVariant,
@@ -249,16 +249,25 @@ class StatsScreenState extends State<StatsScreen> {
                     }
                     try {
                       final parsed = decodeBackup(text);
-                      if (parsed.isEmpty) {
-                        setSt(() => err = '没解析到歌,文本对吗?');
+                      final stats = decodeStats(text); // 练习打卡(没有 = 旧 v1 备份,只导歌)
+                      if (parsed.isEmpty && stats == null) {
+                        setSt(() => err = '没解析到歌或打卡记录,文本对吗?');
                         return;
                       }
-                      final confirmed = await _confirmImport(parsed.length);
+                      final confirmed = await _confirmImport(parsed.length, stats != null);
                       if (confirmed != true) return;
                       widget.store.addAll(parsed);
+                      if (stats != null && _prefs != null) {
+                        await _prefs!.applyStatsPayload(stats); // 打卡日历并集去重 + 每日目标取备份值
+                      }
                       if (!ctx.mounted) return;
                       Navigator.pop(ctx);
-                      _toast('导入了 ${parsed.length} 首歌');
+                      // 结果文案:导入了 X 首歌 / 合并了打卡 / 两者都有
+                      final parts = <String>[
+                        if (parsed.isNotEmpty) '导入了 ${parsed.length} 首歌',
+                        if (stats != null) '合并了练习打卡',
+                      ];
+                      _toast(parts.join(' + '));
                     } on FormatException catch (e) {
                       setSt(() => err = e.message.isEmpty ? '解析失败,文本对吗?' : e.message);
                     }
@@ -273,13 +282,17 @@ class StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  /// 导入前的二次确认(告诉用户会加几首,免得误粘进东西)。
-  Future<bool?> _confirmImport(int n) {
+  /// 导入前的二次确认(告诉用户会加几首 / 是否合并打卡,免得误粘进东西)。
+  Future<bool?> _confirmImport(int n, bool hasStats) {
+    final parts = <String>[
+      if (n > 0) '把 $n 首歌加到歌库',
+      if (hasStats) '合并练习打卡记录',
+    ];
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('确认导入'),
-        content: Text('把 $n 首歌加到歌库末尾?'),
+        content: Text('${parts.join(' + ')}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),

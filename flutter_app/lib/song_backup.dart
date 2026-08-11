@@ -13,17 +13,21 @@ import 'dart:convert';
 import 'models.dart';
 
 /// 备份格式版本(解析时只读、不强制校验,留作以后跨版本兼容用)。
-const int kBackupVersion = 1;
+/// v2:加了可选 stats 段(练习打卡日历 + 每日目标),换机 / 重装不丢连续打卡。v1 备份照样能读(没 stats)。
+const int kBackupVersion = 2;
 
-/// 把一批歌(调用方传用户自加歌)序列化成备份 JSON 字符串。
-/// 纯函数、确定性:同样的歌 → 同样的字符串(无时间戳 / 随机),方便测试锁往返。
-String encodeBackup(List<Song> songs) {
-  return jsonEncode({
+/// 把一批歌(调用方传用户自加歌)+ 可选练习统计序列化成备份 JSON 字符串。
+/// [stats] 给了就带上(打卡日历 + 每日目标),换机 / 重装能恢复连续打卡;不给就只备份歌。
+/// 纯函数、确定性:同样的输入 → 同样的字符串(无时间戳 / 随机),方便测试锁往返。
+String encodeBackup(List<Song> songs, {Map<String, dynamic>? stats}) {
+  final map = <String, dynamic>{
     'app': 'ukulele-demo',
     'kind': 'song-backup',
     'version': kBackupVersion,
     'songs': [for (final s in songs) s.toJson()],
-  });
+  };
+  if (stats != null) map['stats'] = stats; // 给了才带(换机 / 重装恢复连续打卡);不给就只备份歌
+  return jsonEncode(map);
 }
 
 /// 把备份 JSON 文本解析回 Song 列表。
@@ -54,4 +58,18 @@ List<Song> decodeBackup(String text) {
     }
   }
   return songs;
+}
+
+/// 解出备份里的练习统计段(打卡日历 + 每日目标)。没有(旧 v1 备份、裸数组、或没传 stats)→ null。
+/// 解析失败也不抛(调用方按 null 处理 = 不动现有统计);只有合法的带壳 JSON 且带 stats 才返回。
+Map<String, dynamic>? decodeStats(String text) {
+  try {
+    final decoded = jsonDecode(text.trim());
+    if (decoded is Map && decoded['stats'] is Map) {
+      return (decoded['stats'] as Map).cast<String, dynamic>();
+    }
+  } catch (_) {
+    // 非法 JSON / 不是对象:按没 stats 处理(decodeBackup 那边会负责报错给用户)。
+  }
+  return null;
 }

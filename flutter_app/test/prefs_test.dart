@@ -224,4 +224,36 @@ void main() {
     expect(p2.getArpSound(), false);
     expect(p2.getArpTempo(), 90);
   });
+
+  test('统计备份合并:打卡日历并集去重 + 每日目标取备份值(完善Step5)', () async {
+    // 现有:练过 2026-01-01、目标 30 分
+    SharedPreferences.setMockInitialValues({
+      'pref_practice_days': ['2026-01-01'],
+      'pref_daily_goal_min': 30,
+    });
+    final p = await AppPreferences.load();
+    expect(p.getStatsPayload()['practiceDays'], ['2026-01-01']);
+    expect(p.getStatsPayload()['dailyGoalMin'], 30);
+
+    // 合入备份:打卡 2026-01-01(重复)+ 2026-02-03(新)、目标 45
+    final n = await p.applyStatsPayload({
+      'practiceDays': ['2026-01-01', '2026-02-03'],
+      'dailyGoalMin': 45,
+    });
+
+    expect(n, 2); // 并集去重后 2 天
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getPracticeDays(), ['2026-01-01', '2026-02-03']); // 排序后
+    expect(p2.getDailyGoalMin(), 45); // 取备份值
+  });
+
+  test('applyStatsPayload 幂等:同一份重复导入打卡不翻倍', () async {
+    SharedPreferences.setMockInitialValues({});
+    final p = await AppPreferences.load();
+    final stats = {'practiceDays': ['2026-01-01', '2026-01-02'], 'dailyGoalMin': 20};
+    await p.applyStatsPayload(stats);
+    await p.applyStatsPayload(stats); // 再来一次
+    final p2 = await AppPreferences.load();
+    expect(p2.getPracticeDays(), ['2026-01-01', '2026-01-02']); // 仍 2 天,没翻倍
+  });
 }

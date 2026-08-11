@@ -189,6 +189,33 @@ class AppPreferences {
   Future<void> setDailyGoalMin(int v) =>
       _prefs.setInt(_kDailyGoalMin, v);
 
+  // —— 练习统计备份(完善Step5):换机 / 重装不丢连续打卡 ——
+  // 只备份【id 无关】的全局数据:打卡日历 practiceDays(连续 streak 由它派生)+ 每日目标。
+  // 每歌累计遍数 / 秒数按歌 id 绑定、用户歌导入会重分 id、重映射脆弱,这轮不含(列为后续)。
+  /// 取要备份的统计(给 encodeBackup 的 stats 参数)。
+  Map<String, dynamic> getStatsPayload() => {
+        'practiceDays': getPracticeDays(),
+        'dailyGoalMin': getDailyGoalMin(),
+      };
+
+  /// 把备份里的统计合并进来:打卡日历取并集去重(幂等,重复导入不翻倍)、每日目标取备份值。
+  /// 没传的字段保持现状。返回合并后的打卡天数,方便界面提示。
+  Future<int> applyStatsPayload(Map<String, dynamic> stats) async {
+    final days = stats['practiceDays'];
+    if (days is List) {
+      final merged = <String>{
+        ...getPracticeDays(),
+        for (final d in days) if (d is String) d,
+      };
+      await _prefs.setStringList(_kPracticeDays, merged.toList()..sort());
+    }
+    final goal = stats['dailyGoalMin'];
+    if (goal is num) {
+      await setDailyGoalMin(goal.toInt());
+    }
+    return getPracticeDays().length;
+  }
+
   /// 今天的练琴秒数(第58步-3)。[todayDate] = 今天的日期键(yyyy-MM-dd);
   /// 如果存的日期跟 [todayDate] 不一致就说明跨天了,归零重计。
   int getTodaySec(String todayDate) {

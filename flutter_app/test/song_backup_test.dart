@@ -91,4 +91,43 @@ void main() {
       expect(() => decodeBackup('{"songs": "nope"}'), throwsFormatException);
     });
   });
+
+  group('stats 段(完善Step5:换机 / 重装不丢连续打卡)', () {
+    test('带 stats 导出 → decodeStats 读回;version 升到 2', () {
+      final withStats = encodeBackup(
+        [_sample('a')],
+        stats: {'practiceDays': ['2026-01-01', '2026-01-02'], 'dailyGoalMin': 45},
+      );
+      expect((jsonDecode(withStats) as Map<String, dynamic>)['version'], 2);
+      final st = decodeStats(withStats);
+      expect(st, isNotNull);
+      expect(st!['practiceDays'], ['2026-01-01', '2026-01-02']);
+      expect(st['dailyGoalMin'], 45);
+    });
+
+    test('不给 stats → 备份里没 stats 段、decodeStats 返回 null、歌照常读出', () {
+      final noStats = encodeBackup([_sample('b')]);
+      expect((jsonDecode(noStats) as Map).containsKey('stats'), isFalse);
+      expect(decodeStats(noStats), isNull);
+      expect(decodeBackup(noStats).length, 1);
+    });
+
+    test('v1 旧备份(无 stats)向后兼容:decodeBackup 仍解析、decodeStats 返回 null', () {
+      const v1Text = '{"app":"ukulele-demo","kind":"song-backup","version":1,"songs":[]}';
+      expect(decodeBackup(v1Text), isEmpty);
+      expect(decodeStats(v1Text), isNull);
+    });
+
+    test('decodeStats 容错:裸数组 / 无 stats 段 / 非法 JSON 都返回 null(不抛)', () {
+      expect(decodeStats(_bareArrayJson([_sample('a')])), isNull);
+      expect(decodeStats('{"songs":[]}'), isNull);
+      expect(decodeStats('根本不是 json'), isNull);
+    });
+
+    test('带 stats 仍确定性(同样输入同样输出)', () {
+      final s = [_sample('x')];
+      final stats = {'practiceDays': ['2026-01-01'], 'dailyGoalMin': 30};
+      expect(encodeBackup(s, stats: stats), encodeBackup(s, stats: stats));
+    });
+  });
 }
