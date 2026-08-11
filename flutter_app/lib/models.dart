@@ -1312,7 +1312,131 @@ FingerpickSlot fpr({int t = 1}) => FingerpickSlot.rest(duration: t);
 // 弦下标:0=G,1=C,2=E,3=A。时值:1=16分,2=8分,4=4分。空弦=0。
 
 final builtinFingerpickSongs = <FingerpickSong>[
-  // ═══ 1. Canon in C (卡农 C 调简化版) ═══
+  // ═══ 入门儿歌(第79步):从简到难,旋律简单、适合指弹跟练 ═══
+  // C 调唱名指法(全儿歌通用):do=C弦空(1,0) re=C弦2品(1,2) mi=E弦空(2,0)
+  //                        fa=E弦1品(2,1) sol=G弦空(0,0) la=A弦空(3,0)。
+  // 每小节 4 拍 = 16 个 16 分 tick;四分音符 duration=4,二分音符 duration=8。
+
+  // ═══ 1. 小星星 (Twinkle Twinkle Little Star) ═══
+  // 旋律:CC GG | AA G- | FF EE | DD C- | GG FF | EE D- | GG FF | EE D- | CC GG | AA G- | FF EE | DD C-
+  FingerpickSong(
+    title: '小星星 (Twinkle Twinkle Little Star)',
+    subtitle: 'C 调 · 指弹入门',
+    tempo: 85,
+    bars: [
+      FingerpickBar(lyric: '一闪一闪', slots: [ // C C G G
+        fp(1,0,t:4), fp(1,0,t:4), fp(0,0,t:4), fp(0,0,t:4),
+      ]),
+      FingerpickBar(lyric: '亮晶晶', slots: [ // A A G-(二分)
+        fp(3,0,t:4), fp(3,0,t:4), fp(0,0,t:8),
+      ]),
+      FingerpickBar(lyric: '满天都是', slots: [ // F F E E
+        fp(2,1,t:4), fp(2,1,t:4), fp(2,0,t:4), fp(2,0,t:4),
+      ]),
+      FingerpickBar(lyric: '小星星', slots: [ // D D C-(二分)
+        fp(1,2,t:4), fp(1,2,t:4), fp(1,0,t:8),
+      ]),
+      FingerpickBar(lyric: '挂在天上', slots: [ // G G F F
+        fp(0,0,t:4), fp(0,0,t:4), fp(2,1,t:4), fp(2,1,t:4),
+      ]),
+      FingerpickBar(lyric: '放光明', slots: [ // E E D-(二分)
+        fp(2,0,t:4), fp(2,0,t:4), fp(1,2,t:8),
+      ]),
+      FingerpickBar(lyric: '好像许多', slots: [ // G G F F
+        fp(0,0,t:4), fp(0,0,t:4), fp(2,1,t:4), fp(2,1,t:4),
+      ]),
+      FingerpickBar(lyric: '小眼睛', slots: [ // E E D-(二分)
+        fp(2,0,t:4), fp(2,0,t:4), fp(1,2,t:8),
+      ]),
+      FingerpickBar(lyric: '一闪一闪', slots: [ // C C G G
+        fp(1,0,t:4), fp(1,0,t:4), fp(0,0,t:4), fp(0,0,t:4),
+      ]),
+      FingerpickBar(lyric: '亮晶晶', slots: [ // A A G-(二分)
+        fp(3,0,t:4), fp(3,0,t:4), fp(0,0,t:8),
+      ]),
+      FingerpickBar(lyric: '满天都是', slots: [ // F F E E
+        fp(2,1,t:4), fp(2,1,t:4), fp(2,0,t:4), fp(2,0,t:4),
+      ]),
+      FingerpickBar(lyric: '小星星', slots: [ // D D C-(二分)
+        fp(1,2,t:4), fp(1,2,t:4), fp(1,0,t:8),
+      ]),
+    ],
+  ),
+
+  // ═══ 2. 两只老虎 (Frère Jacques) ═══
+  // 经典轮唱曲,旋律重复、级进,指弹入门。
+  // 旋律:mi re do mi | mi re do mi | mi fa sol— | mi fa sol— |
+  //      sol la sol fa mi re do | sol la sol fa mi re do | sol mi do— | sol mi do—
+  FingerpickSong(
+    title: '两只老虎 (Frère Jacques)',
+    subtitle: 'C 调 · 指弹入门',
+    tempo: 90,
+    bars: [
+      FingerpickBar(lyric: '两只老虎', slots: [ // mi re do mi
+        fp(2,0,t:4), fp(1,2,t:4), fp(1,0,t:4), fp(2,0,t:4),
+      ]),
+      FingerpickBar(lyric: '两只老虎', slots: [ // mi re do mi
+        fp(2,0,t:4), fp(1,2,t:4), fp(1,0,t:4), fp(2,0,t:4),
+      ]),
+      FingerpickBar(lyric: '跑得快', slots: [ // mi fa sol(二分)
+        fp(2,0,t:4), fp(2,1,t:4), fp(0,0,t:8),
+      ]),
+      FingerpickBar(lyric: '跑得快', slots: [ // mi fa sol(二分)
+        fp(2,0,t:4), fp(2,1,t:4), fp(0,0,t:8),
+      ]),
+      FingerpickBar(lyric: '一只没有耳朵', slots: [ // sol la sol fa mi re do(前6个8分 + do四分)
+        fp(0,0,t:2), fp(3,0,t:2), fp(0,0,t:2), fp(2,1,t:2), fp(2,0,t:2), fp(1,2,t:2), fp(1,0,t:4),
+      ]),
+      FingerpickBar(lyric: '一只没有尾巴', slots: [ // sol la sol fa mi re do
+        fp(0,0,t:2), fp(3,0,t:2), fp(0,0,t:2), fp(2,1,t:2), fp(2,0,t:2), fp(1,2,t:2), fp(1,0,t:4),
+      ]),
+      FingerpickBar(lyric: '真奇怪', slots: [ // sol mi do(二分)
+        fp(0,0,t:4), fp(2,0,t:4), fp(1,0,t:8),
+      ]),
+      FingerpickBar(lyric: '真奇怪', slots: [ // sol mi do(二分)
+        fp(0,0,t:4), fp(2,0,t:4), fp(1,0,t:8),
+      ]),
+    ],
+  ),
+
+  // ═══ 3. 欢乐颂 (Ode to Joy) ═══
+  // 贝多芬《第九交响曲》主题,旋律稳、全级进,指弹入门经典。
+  // 旋律:mi mi fa sol | sol fa mi re | do do re mi | mi re re— |
+  //      mi mi fa sol | sol fa mi re | do do re mi | re do do—
+  FingerpickSong(
+    title: '欢乐颂 (Ode to Joy)',
+    subtitle: '贝多芬 · C 调指弹',
+    tempo: 95,
+    bars: [
+      FingerpickBar(lyric: '欢乐女神', slots: [ // mi mi fa sol
+        fp(2,0,t:4), fp(2,0,t:4), fp(2,1,t:4), fp(0,0,t:4),
+      ]),
+      FingerpickBar(lyric: '圣洁美丽', slots: [ // sol fa mi re
+        fp(0,0,t:4), fp(2,1,t:4), fp(2,0,t:4), fp(1,2,t:4),
+      ]),
+      FingerpickBar(lyric: '灿烂光芒', slots: [ // do do re mi
+        fp(1,0,t:4), fp(1,0,t:4), fp(1,2,t:4), fp(2,0,t:4),
+      ]),
+      FingerpickBar(lyric: '照大地', slots: [ // mi re re(二分)
+        fp(2,0,t:4), fp(1,2,t:4), fp(1,2,t:8),
+      ]),
+      FingerpickBar(lyric: '我们心中', slots: [ // mi mi fa sol
+        fp(2,0,t:4), fp(2,0,t:4), fp(2,1,t:4), fp(0,0,t:4),
+      ]),
+      FingerpickBar(lyric: '充满热情', slots: [ // sol fa mi re
+        fp(0,0,t:4), fp(2,1,t:4), fp(2,0,t:4), fp(1,2,t:4),
+      ]),
+      FingerpickBar(lyric: '来到你的', slots: [ // do do re mi
+        fp(1,0,t:4), fp(1,0,t:4), fp(1,2,t:4), fp(2,0,t:4),
+      ]),
+      FingerpickBar(lyric: '圣殿里', slots: [ // re do do(二分)
+        fp(1,2,t:4), fp(1,0,t:4), fp(1,0,t:8),
+      ]),
+    ],
+  ),
+
+  // ═══ 经典指弹曲(原 3 首,稍难) ═══
+  // ═══ Canon in C (卡农 C 调简化版) ═══
   // 基于经典和声进行:C—G—Am—Em—F—C—F—G,旋律在 A/E 弦上、低音在 G/C 弦伴奏。
   // tempo 80, 4/4 拍,每小节 8 个 8 分音符槽(= 8×dur=2)。
   FingerpickSong(
@@ -1459,55 +1583,6 @@ final builtinFingerpickSongs = <FingerpickSong>[
       FingerpickBar(lyric: 'G · 数え切れない', slots: [
         fp(0,2,t:2), fp(3,2,t:2), fp(2,0,t:2), fp(1,0,t:2),
         fp(3,3,t:2), fp(2,0,t:2), fp(0,2,t:2), fpr(t:2),
-      ]),
-    ],
-  ),
-
-  // ═══ 4. 小星星 (Twinkle Twinkle Little Star) ═══
-  // C 调,4/4 拍。每小节 4 拍 = 16 个 16 分 tick。四分音符 duration=4,二分音符 duration=8。
-  // 指法:do=C弦空(1,0) re=C弦2品(1,2) mi=E弦空(2,0) fa=E弦1品(2,1)
-  //      sol=G弦空(0,0) la=A弦空(3,0)
-  // 旋律:CC GG | AA G- | FF EE | DD C- | GG FF | EE D- | GG FF | EE D- | CC GG | AA G- | FF EE | DD C-
-  FingerpickSong(
-    title: '小星星 (Twinkle Twinkle Little Star)',
-    subtitle: 'C 调 · 指弹入门',
-    tempo: 85,
-    bars: [
-      FingerpickBar(lyric: '一闪一闪', slots: [ // C C G G
-        fp(1,0,t:4), fp(1,0,t:4), fp(0,0,t:4), fp(0,0,t:4),
-      ]),
-      FingerpickBar(lyric: '亮晶晶', slots: [ // A A G-(二分)
-        fp(3,0,t:4), fp(3,0,t:4), fp(0,0,t:8),
-      ]),
-      FingerpickBar(lyric: '满天都是', slots: [ // F F E E
-        fp(2,1,t:4), fp(2,1,t:4), fp(2,0,t:4), fp(2,0,t:4),
-      ]),
-      FingerpickBar(lyric: '小星星', slots: [ // D D C-(二分)
-        fp(1,2,t:4), fp(1,2,t:4), fp(1,0,t:8),
-      ]),
-      FingerpickBar(lyric: '挂在天上', slots: [ // G G F F
-        fp(0,0,t:4), fp(0,0,t:4), fp(2,1,t:4), fp(2,1,t:4),
-      ]),
-      FingerpickBar(lyric: '放光明', slots: [ // E E D-(二分)
-        fp(2,0,t:4), fp(2,0,t:4), fp(1,2,t:8),
-      ]),
-      FingerpickBar(lyric: '好像许多', slots: [ // G G F F
-        fp(0,0,t:4), fp(0,0,t:4), fp(2,1,t:4), fp(2,1,t:4),
-      ]),
-      FingerpickBar(lyric: '小眼睛', slots: [ // E E D-(二分)
-        fp(2,0,t:4), fp(2,0,t:4), fp(1,2,t:8),
-      ]),
-      FingerpickBar(lyric: '一闪一闪', slots: [ // C C G G
-        fp(1,0,t:4), fp(1,0,t:4), fp(0,0,t:4), fp(0,0,t:4),
-      ]),
-      FingerpickBar(lyric: '亮晶晶', slots: [ // A A G-(二分)
-        fp(3,0,t:4), fp(3,0,t:4), fp(0,0,t:8),
-      ]),
-      FingerpickBar(lyric: '满天都是', slots: [ // F F E E
-        fp(2,1,t:4), fp(2,1,t:4), fp(2,0,t:4), fp(2,0,t:4),
-      ]),
-      FingerpickBar(lyric: '小星星', slots: [ // D D C-(二分)
-        fp(1,2,t:4), fp(1,2,t:4), fp(1,0,t:8),
       ]),
     ],
   ),

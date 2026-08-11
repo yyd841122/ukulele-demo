@@ -48,6 +48,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
   List<FingerpickSlot> _flatSlots = []; // 拍扁的所有音
   int _globalSlot = 0;           // 当前第几个音(在 _flatSlots 里)
   int _ticksHeld = 0;            // 当前音已持续多少个 16 分 tick
+  int _scorePlayTicks = 0;       // 曲谱模式正式播放起算的绝对 16 分 tick(给跟练节拍器每拍嗒一声用)
   List<int> _barStarts = [];     // 每小节起始 slot 下标(画小节线)
   List<int> _barOfSlot = [];     // 每个 slot 属于第几小节
 
@@ -133,6 +134,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
   void _resetPlayPos() {
     _globalSlot = 0;
     _ticksHeld = 0;
+    _scorePlayTicks = 0;
     _slot = 0;
     _idx = 0;
     _inCountIn = false;
@@ -202,17 +204,25 @@ class FingerpickScreenState extends State<FingerpickScreen> {
       return;
     }
 
-    // 预备拍刚结束:这一 tick 是整曲第 1 拍的强位,播 slot0。
+    // 预备拍刚结束:这一 tick 是整曲第 1 拍的强位,播 slot0 + 重音嗒(给跟练一个明确的"起")。
     if (_pendingStart) {
       _pendingStart = false;
       _globalSlot = 0;
       _ticksHeld = 0;
+      _scorePlayTicks = 0;
       _playSlot(0);
+      widget.audio.playClick(accent: true); // 整曲第 1 拍重音
       return;
     }
 
     // 正式:_ticksHeld 累积。达到当前音的 duration 才推进到下一个音。
     _ticksHeld++;
+    _scorePlayTicks++;
+    // 跟练节拍器(第79步):每 4 个 16 分 tick(=1 拍)嗒一声,每 16 个(=1 小节)打重音。
+    // 绑【绝对 tick】、不绑音符时值——节拍器始终稳,正好给"跟练"打拍(关掉示范音就只剩它 + 高亮)。
+    if (_scorePlayTicks % 4 == 0) {
+      widget.audio.playClick(accent: _scorePlayTicks % 16 == 0);
+    }
     final cur = _flatSlots[_globalSlot];
     final dur = cur.duration <= 0 ? 1 : cur.duration;
     if (_ticksHeld >= dur) {
@@ -398,6 +408,17 @@ class FingerpickScreenState extends State<FingerpickScreen> {
             : Text(currentLyric ?? '♪', textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 18, color: cs.primary, fontWeight: FontWeight.w600)),
       ),
+      // 跟练/听曲谱 提示(第79步):让"关掉示范音就能自己弹"一眼看到。
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Text(
+          _soundOn
+              ? '💡 听曲谱中 · 关掉「示范音」就能跟练(节拍器打拍,自己跟着高亮弹)'
+              : '✋ 跟练中 · 跟着高亮的音 + 嗒声,自己弹出来',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+        ),
+      ),
       _buildControlBar(cs),
     ]);
   }
@@ -456,7 +477,7 @@ class FingerpickScreenState extends State<FingerpickScreen> {
         const SizedBox(width: 4),
         IconButton(
           onPressed: () => setState(() => _soundOn = !_soundOn),
-          tooltip: _soundOn ? '指弹声:开' : '指弹声:关',
+          tooltip: _soundOn ? '示范音:开(听曲谱)' : '示范音:关(跟练 · 节拍器打拍,自己弹)',
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           icon: Icon(_soundOn ? Icons.graphic_eq : Icons.volume_off),

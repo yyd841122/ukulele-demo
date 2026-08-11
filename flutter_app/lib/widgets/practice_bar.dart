@@ -162,20 +162,24 @@ class PracticeBar extends StatelessWidget {
               ],
             )
           else
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (var i = 0; i < strumGrid.length; i++) ...[
-                  if (i > 0) SizedBox(width: i.isEven ? 14 : 6),
-                  if (strumGrid[i] == StrumDir.rest)
-                    Text('·', style: TextStyle(fontSize: 14, color: cs.outline.withValues(alpha: 0.4)))
-                  else
-                    Text(
-                      strumGrid[i] == StrumDir.down ? '↓' : '↑',
-                      style: TextStyle(fontSize: 20, color: i == slot ? cs.primary : cs.outline),
-                    ),
+            FittedBox(
+              // 第79步:窄屏/大字体下 8 个↓↑符号放不下会溢出(斑马纹)。scaleDown 只缩不放,正常屏不变。
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < strumGrid.length; i++) ...[
+                    if (i > 0) SizedBox(width: i.isEven ? 14 : 6),
+                    if (strumGrid[i] == StrumDir.rest)
+                      Text('·', style: TextStyle(fontSize: 14, color: cs.outline.withValues(alpha: 0.4)))
+                    else
+                      Text(
+                        strumGrid[i] == StrumDir.down ? '↓' : '↑',
+                        style: TextStyle(fontSize: 20, color: i == slot ? cs.primary : cs.outline),
+                      ),
+                  ],
                 ],
-              ],
+              ),
             ),
           const SizedBox(height: 4),
           Text(
@@ -197,6 +201,7 @@ class PracticeBar extends StatelessWidget {
                 style: IconButton.styleFrom(
                   foregroundColor: cs.primary,
                   disabledForegroundColor: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
               const SizedBox(width: 4),
@@ -206,7 +211,7 @@ class PracticeBar extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 icon: Icon(strumSoundOn ? Icons.graphic_eq : Icons.volume_off),
-                style: IconButton.styleFrom(foregroundColor: strumSoundOn ? cs.primary : cs.onSurfaceVariant),
+                style: IconButton.styleFrom(foregroundColor: strumSoundOn ? cs.primary : cs.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
               ),
               const SizedBox(width: 4),
               IconButton(
@@ -215,7 +220,7 @@ class PracticeBar extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 icon: const Icon(Icons.trending_up_rounded),
-                style: IconButton.styleFrom(foregroundColor: rampOn ? cs.primary : cs.onSurfaceVariant),
+                style: IconButton.styleFrom(foregroundColor: rampOn ? cs.primary : cs.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
               ),
               const SizedBox(width: 4),
               IconButton(
@@ -224,7 +229,7 @@ class PracticeBar extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 icon: const Icon(Icons.speaker, size: 20),
-                style: IconButton.styleFrom(foregroundColor: metronomeSound != 'click' ? cs.primary : cs.onSurfaceVariant),
+                style: IconButton.styleFrom(foregroundColor: metronomeSound != 'click' ? cs.primary : cs.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
               ),
               const SizedBox(width: 4),
               IconButton(
@@ -233,10 +238,9 @@ class PracticeBar extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen, size: 20),
-                style: IconButton.styleFrom(foregroundColor: fullscreen ? cs.primary : cs.onSurfaceVariant),
+                style: IconButton.styleFrom(foregroundColor: fullscreen ? cs.primary : cs.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
               ),
-              const SizedBox(width: 4),
-              Text('调速', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              const SizedBox(width: 8),
               Expanded(
                 child: Slider(
                   value: tempo.clamp(minTempo, maxTempo).toDouble(),
@@ -247,10 +251,14 @@ class PracticeBar extends StatelessWidget {
                   onChanged: (v) => onTempoChanged(v.round()),
                 ),
               ),
+              // 第79步:宽度收紧 + FittedBox 兜底,防大字体下「180 BPM」撑爆这格出斑马纹。
               SizedBox(
-                width: 60,
-                child: Text('$tempo BPM', textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+                width: 56,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('$tempo BPM', textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+                ),
               ),
             ],
           ),
