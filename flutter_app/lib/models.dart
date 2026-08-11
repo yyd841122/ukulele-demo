@@ -1748,11 +1748,19 @@ int? arpStringAt(ArpPattern p, int beatsPerChord, int slot) {
 }
 
 // —— 内置琶音拨弦型 ——
+// 弦号按物理弦序命名(4=G…1=A),跟和弦速查页 / 调音器一致,新手一看就懂拨哪根。
+// 所有型 strings[0] 都是 0(G 低音):每个和弦第一拍都落在低音上,符合伴奏习惯,也锁住不变量。
 // 4321:最经典琶音,一拍一音(四分),一小节正好从低到高滚一遍(G→C→E→A)。
 // 4323:伴奏最常用织体,八分音符流动(4-3-2-3 循环)。
+// 上下行:八分流动,一小节先上行 4321 再下行 1234(G C E A A E C G),抒情伴奏最常用,一满小节一个完整来回。
+// 4123:一拍一音,先拨低音 G、再从最高音 A 往下走(G A E C),"外向内"轮廓,跟 4321(纯上行)对比明显。
+// 4313:八分织体,4-3-1-3 循环(G C A C),高点落在 A 弦上、比 4323(高点 E)色彩更亮更跳。
 const builtinArpPatterns = <ArpPattern>[
   ArpPattern(name: '4321 琶音', strings: [0, 1, 2, 3], notesPerBeat: 1),
   ArpPattern(name: '4323 织体', strings: [0, 1, 2, 1], notesPerBeat: 2),
+  ArpPattern(name: '上下行 织体', strings: [0, 1, 2, 3, 3, 2, 1, 0], notesPerBeat: 2),
+  ArpPattern(name: '4123 琶音', strings: [0, 3, 2, 1], notesPerBeat: 1),
+  ArpPattern(name: '4313 织体', strings: [0, 1, 3, 1], notesPerBeat: 2),
 ];
 
 // —— 内置琶音练习(几条最常用和弦进行,都 C/Am 调) ——

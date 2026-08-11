@@ -44,6 +44,42 @@ void main() {
     test('负 slot 返回 null(防越界兜底)', () {
       expect(arpStringAt(p4321, 4, -1), isNull);
     });
+
+    // —— 新增的 3 个拨弦型(第14步):锁住各自的拨弦顺序 ——
+    final pUpDown = builtinArpPatterns.firstWhere((p) => p.name.contains('上下行'));
+    final p4123 = builtinArpPatterns.firstWhere((p) => p.name.contains('4123'));
+    final p4313 = builtinArpPatterns.firstWhere((p) => p.name.contains('4313'));
+
+    test('上下行 织体(八分):4 拍一小节 = G C E A A E C G,先上行再下行', () {
+      const expected = [0, 1, 2, 3, 3, 2, 1, 0];
+      for (var slot = 0; slot < 8; slot++) {
+        expect(arpStringAt(pUpDown, 4, slot), expected[slot],
+            reason: '上下行 slot $slot 期望 ${expected[slot]}');
+      }
+    });
+
+    test('4123 琶音(一拍一音):4 拍 = G·A·E·C,后半拍空(延续上一音)', () {
+      // strings=[0,3,2,1],偶数槽拨、奇数槽空。
+      const expected = [0, null, 3, null, 2, null, 1, null];
+      for (var slot = 0; slot < 8; slot++) {
+        expect(arpStringAt(p4123, 4, slot), expected[slot],
+            reason: '4123 slot $slot 期望 ${expected[slot]}');
+      }
+    });
+
+    test('4313 织体(八分):4 拍 = G C A C G C A C,两遍循环', () {
+      // strings=[0,1,3,1] 长度 4,8 槽走两遍。
+      const expected = [0, 1, 3, 1, 0, 1, 3, 1];
+      for (var slot = 0; slot < 8; slot++) {
+        expect(arpStringAt(p4313, 4, slot), expected[slot],
+            reason: '4313 slot $slot 期望 ${expected[slot]}');
+      }
+    });
+
+    test('上下行在 3 拍下:6 槽 = G C E A A E(截到一半,不越界)', () {
+      final r = [for (var s = 0; s < 6; s++) arpStringAt(pUpDown, 3, s)];
+      expect(r, [0, 1, 2, 3, 3, 2]);
+    });
   });
 
   group('内置琶音数据合法性', () {
