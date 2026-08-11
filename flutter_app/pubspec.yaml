@@ -52,6 +52,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # 生成安卓桌面图标 + 自适应图标(Android 13+ 主题图标支持)。
+  # 跑 flutter pub run flutter_launcher_icons 生成,产物直接覆盖 mipmap-* 目录。
+  flutter_launcher_icons: ^0.14.3
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -75,6 +79,19 @@ flutter:
   # 代码里用 AssetSource('click.wav') 就能播放它。
   assets:
     - assets/
+
+# 桌面图标生成配置(flutter_launcher_icons)。
+# 跑 `dart run flutter_launcher_icons` 后,自动生成 android/app/src/main/res/mipmap-*/ 全套图标 +
+# 自适应图标(Android 13+ 可跟随系统主题变色)。
+# 源图用项目根目录的 icon-512.png(尤克里里琴颈+音孔,橙色底)。
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "../icon-512.png"
+  # 自适应图标:前景=图标本体,背景=纯橙色(icon.svg 里用的 #f59e0b)。
+  adaptive_icon_background: "#f59e0b"
+  adaptive_icon_foreground: "../icon-512.png"
+  min_sdk_android: 24
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
