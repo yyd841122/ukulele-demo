@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>尤克里里练琴 · 隐私政策</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    line-height: 1.75;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+    color: #1f2937;
+    background: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e5e7eb; background: #0f172a; }
+    a { color: #60a5fa; }
+    table { background: #1e293b; }
+    th { background: #334155; }
+    td { border-color: #334155; }
+  }
+  h1 { font-size: 1.8em; border-bottom: 2px solid #f59e0b; padding-bottom: 10px; }
+  h2 { margin-top: 2em; color: #f59e0b; }
+  blockquote {
+    background: #fffbeb;
+    border-left: 4px solid #f59e0b;
+    margin: 1em 0;
+    padding: 12px 16px;
+    border-radius: 4px;
+  }
+  @media (prefers-color-scheme: dark) {
+    blockquote { background: #422006; }
+  }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.95em; }
+  th, td { border: 1px solid #e5e7eb; padding: 10px 12px; text-align: left; vertical-align: top; }
+  th { background: #f9fafb; }
+  code { background: rgba(245,158,11,0.12); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 2em 0; }
+  em { color: #6b7280; }
+</style>
+</head>
+<body>
+
+<h1>尤克里里练琴 · 隐私政策</h1>
+
+<blockquote>
+<p><strong>生效日期:</strong>2026 年 8 月 11 日<br>
+<strong>开发者:</strong>youyd<br>
+<strong>联系邮箱:</strong><code>[待补 — 注册 Google Play 后填入联系邮箱]</code></p>
+</blockquote>
+
+<p>「尤克里里练琴」(以下简称"本应用")是一款尤克里里弹唱练习工具。本政策说明本应用如何处理你的信息。</p>
+
+<h2>一句话总结</h2>
+<p><strong>本应用不联网,不采集、不上传、不分享你的任何个人数据。</strong> 所有练习数据都只保存在你的手机本地。</p>
+
+<hr>
+
+<h2>我们收集什么信息</h2>
+<p><strong>我们不收集任何个人数据。</strong> 具体来说:</p>
+<ul>
+  <li>本应用<strong>没有任何联网功能</strong>。它不会向任何服务器发送数据,也不会从任何服务器读取数据。</li>
+  <li>没有 analytics(统计分析)、没有崩溃上报、没有广告 SDK、没有第三方跟踪。</li>
+  <li>你的练习记录(练了多少遍、练了多久、收藏了哪些歌、调音设置、自加的歌等)<strong>全部保存在你的手机本地</strong>,卸载本应用后这些数据随之删除。</li>
+</ul>
+
+<h2>我们为什么需要这些权限</h2>
+<p>本应用申请了以下安卓权限。每一项都只用于应用内的功能,<strong>不用于采集或传输数据</strong>:</p>
+
+<table>
+<thead>
+<tr><th>权限</th><th>用途</th><th>是否读取/上传内容</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>RECORD_AUDIO</code>(麦克风)</td>
+  <td><strong>调音器</strong>需要听你拨弦的音高来测音准;<strong>跟唱录音</strong>需要录你的人声回放。录音只在应用运行时实时处理,<strong>不会保存录音文件、不会上传任何音频</strong>。</td>
+  <td>实时处理,不保存不上传</td>
+</tr>
+<tr>
+  <td><code>POST_NOTIFICATIONS</code>(通知)</td>
+  <td>你开启「每日练习提醒」时,按时弹通知。</td>
+  <td>仅显示本地通知,不含用户数据</td>
+</tr>
+<tr>
+  <td><code>SCHEDULE_EXACT_ALARM</code> + <code>RECEIVE_BOOT_COMPLETED</code>(精确闹钟 + 开机启动)</td>
+  <td>让「练习提醒」在设定时间准时触发,并在手机重启后仍能正常工作。</td>
+  <td>仅用于触发本地提醒</td>
+</tr>
+<tr>
+  <td>屏幕常亮(wakelock)</td>
+  <td>练琴播放时不让屏幕自动锁屏。<strong>该功能不需要任何权限。</strong></td>
+  <td>—</td>
+</tr>
+</tbody>
+</table>
+
+<h2>权限何时生效</h2>
+<ul>
+  <li><strong>麦克风权限</strong>:只有当你打开「调音」tab 或使用「跟唱录音」功能时才会用到,首次使用时系统会弹出授权询问。你可以拒绝,拒绝后其它功能(节拍器、和弦、歌词、统计等)不受影响。麦克风在你离开这些功能后立即停止使用。</li>
+  <li><strong>通知权限</strong>:只有当你主动开启「每日练习提醒」时才会用到。</li>
+</ul>
+
+<h2>第三方服务</h2>
+<p>本应用<strong>不使用任何第三方数据分析、广告或跟踪服务</strong>。</p>
+
+<h2>儿童隐私</h2>
+<p>本应用面向通用人群,不专门针对儿童,也不 knowingly 收集任何儿童的个人信息。由于本应用不采集任何用户数据,因此同样不采集儿童数据。</p>
+
+<h2>数据安全</h2>
+<p>由于本应用不联网、不采集数据,不存在数据在传输或存储中被泄露的风险。你的练习数据只存在于你自己的设备上。</p>
+
+<h2>你的选择</h2>
+<ul>
+  <li>你可以随时在系统设置中撤销麦克风 / 通知权限,本应用相应功能会停用,其余功能正常。</li>
+  <li>卸载本应用会永久删除所有本地练习数据。</li>
+</ul>
+
+<h2>政策变更</h2>
+<p>如果未来本应用的数据处理方式发生变化(例如增加联网功能),我们会更新本政策并在应用内提示。</p>
+
+<h2>联系我们</h2>
+<p>对本隐私政策有任何问题,请联系:<code>[待补 — 注册 Google Play 后填入联系邮箱]</code></p>
+
+<hr>
+
+<p><em>本隐私政策最后更新于 2026-08-11。</em></p>
+
+</body>
+</html>
