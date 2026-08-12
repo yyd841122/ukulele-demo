@@ -7,10 +7,12 @@ CLAUDE.md
 # 软著申请材料(含源码摘录/个人身份证件,绝不进 git)
 .copyright-apply/
 
-# docs/ 下大部分是本地 AI 工作笔记(交接 handover、agent 工作流),不上 git;
-# 但【架构决策 ADR】是仓库该有的东西,放开 docs/adr/ 进版本控制。
+# docs/ 下大部分是本地 AI 工作笔记(交接 handover),不上 git;
+# 但【架构决策 ADR】+【agent 规范文档】是仓库该有的东西,CLAUDE.md 公开引用它们,
+# 协作者 clone 后该能看到,所以放开 docs/adr/ 和 docs/agents/ 进版本控制。
 docs/*
 !docs/adr/
+!docs/agents/
 # 隐私政策要发布到 GitHub Pages(Google Play 要求公开 URL),必须进 git。
 !docs/privacy-policy.md
 !docs/privacy-policy.html
@@ -19,3 +21,6 @@ docs/*
 
 # node 依赖(以后如果用得到)
 node_modules/
+
+# nlpm generated artifacts
+.claude/nlpm-history.json
