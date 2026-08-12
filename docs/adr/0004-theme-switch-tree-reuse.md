@@ -60,6 +60,24 @@ app 一直是【仅深色】:`MaterialApp` 只给一个 `theme:`(且 `brightness
 - **红线:`MainScaffold` 不能被赋予会变的 `key`、也不能被挪进"因主题变而整片重建"的父级**——
   否则 `home` 的 `Element` 被替换、`_MainScaffoldState` 重置、音频引擎 / 节拍器中断。换肤相关改动
   务必保持 `home` 的 widget 身份稳定。
+
+> **更新注记(UI 重构 `e66ad6b`,导航 7Tab→4Tab + 练琴 Hub):**
+> 上方「背景」里「5 个 tab 的 State……IndexedStack 保活」是本 ADR 写定时(第47步)的事实;
+> UI 重构后已变,但**核心红线不变、仍被遵守**——核实如下:
+>
+> - tab 数 5→4(首页 / 练琴 / 和弦 / 统计)。`MainScaffold` 仍是 `home: MainScaffold(theme:)`、
+>   无 key,换肤时 `ValueListenableBuilder` 重建 `MaterialApp`、树复用保 `_MainScaffoldState`
+>   (共享 `AudioEngine` + `SongStore`)——这条**没动**,红线守住。
+> - 练习页(扫弦跟唱 / 换和弦 / 指弹 / 琶音)从平级 tab 改成「练琴 Hub 里 `Navigator.push` 的全屏页」:
+>   **不再 IndexedStack 保活**,改成 pop 时 `dispose()` 自动清理(节拍器 timer / wakelock / 录音 /
+>   统计落盘)。代价是每次进入是新状态(从头练);歌曲/速度/移调从 prefs 恢复。
+> - 原 `_MainScaffoldState` 持有的 5 个 `GlobalKey` + "切走 tab 戳练习页 stop / flushStats / 调音 pause"
+>   钩子**全删**——push 页自带 dispose 清理,不再需要手动戳停。
+> - 主题切换入口随之移到【首页 + 统计页】(都在保活的 IndexedStack tab 里),全屏练习页**没有主题入口**——
+>   即"节拍器响着切主题"这个场景在现架构下无触发路径,红线不只在守,连触发条件都被规避了。
+> - **保活哲学变了,但保活对象没变**:ADR-0004 守的是"换肤时 `_MainScaffoldState`(音频引擎 / 歌库)
+>   不能丢",这条始终有效;它顺带描述的"练习页节拍器靠 IndexedStack 保活"已是历史细节。
+
 - 以后再加"全局 UI 偏好"(语言、全局字号等)走同一套:`ValueNotifier` 从根注入 + 树复用。
 - 主题模式键 `pref_theme_mode`(system/light/dark);`ThemeController._fromString/_toString` 维护
   字符串 ↔ `ThemeMode` 映射。
