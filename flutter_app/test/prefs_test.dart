@@ -193,6 +193,29 @@ void main() {
     expect(p2.getTrainerChordSound(true), false); // 存过就忽略 fallback
   });
 
+  test('换和弦训练·多和弦:序列/切换模式 存读往返 + 默认(老键不动仍能读)', () async {
+    final p = await AppPreferences.load();
+    // 没存过 → 序列 null(调用方走老键迁移 / 默认)、模式默认 sequence
+    expect(p.getTrainerChords(), isNull);
+    expect(p.getTrainerMode(), 'sequence');
+    expect(p.getTrainerMode('random'), 'random'); // 没存过用 fallback
+
+    await p.setTrainerChords(['C', 'G', 'Am', 'F']);
+    await p.setTrainerMode('random');
+
+    final p2 = await AppPreferences.load(); // 模拟重启
+    expect(p2.getTrainerChords(), ['C', 'G', 'Am', 'F']);
+    expect(p2.getTrainerMode(), 'random');
+    expect(p2.getTrainerMode('sequence'), 'random'); // 存过就忽略 fallback
+
+    // 老键(一次性迁移源)还在、还能读——老用户升级到新版,进页还能拿回 A/B
+    await p2.setTrainerChordA('Em');
+    await p2.setTrainerChordB('Dm');
+    final p3 = await AppPreferences.load();
+    expect(p3.getTrainerChordA('C'), 'Em');
+    expect(p3.getTrainerChordB('G'), 'Dm');
+  });
+
   test('指弹练习偏好:曲谱/示范音/速度 存读往返 + 默认值', () async {
     final p = await AppPreferences.load();
     expect(p.getFingerpickScore(), 0); // 默认第 0 首

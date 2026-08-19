@@ -1163,3 +1163,49 @@ const builtinArpStudies = <ArpStudy>[
   ArpStudy(title: '🌅 Counting Stars', subtitle: 'OneRepublic · Am C G F', chords: ['Am', 'C', 'G', 'F'], tempo: 100),
   ArpStudy(title: "💕 Can't Help Falling in Love", subtitle: 'Elvis · C Em Am F G', chords: ['C', 'Em', 'Am', 'F', 'G'], tempo: 66),
 ];
+
+// —— 换和弦训练·多和弦(新功能Step16) ——
+// 一条换和弦训练预设:命名的经典进行,一键塞进训练页当序列练。
+@immutable
+class TrainerPreset {
+  final String name;         // '万能四和弦'
+  final String hint;         // 'C-G-Am-F · 1-5-6-4,流行歌万能套'
+  final List<String> chords; // 和弦序列(每个都在 chordShapes 里、线性相邻不重复)
+
+  const TrainerPreset({required this.name, required this.hint, required this.chords});
+}
+
+// 四条最经典的进行(都 C 调、都由三和弦构成,新手够用;琶音页的 builtinArpStudies 前 3 条同源)。
+// trainer_logic_test 有合法性卡口:和弦名必须在 chordShapes 里、相邻不重复,写错测试直接红。
+const trainerPresets = <TrainerPreset>[
+  TrainerPreset(name: '万能四和弦', hint: 'C-G-Am-F · 1-5-6-4,大部分流行歌都能套', chords: ['C', 'G', 'Am', 'F']),
+  TrainerPreset(name: '50年代', hint: 'C-Am-F-G · 1-6-4-5,经典抒情', chords: ['C', 'Am', 'F', 'G']),
+  TrainerPreset(name: '卡农进行', hint: 'C-G-Am-Em-F-C-F-G · 8 个和弦', chords: ['C', 'G', 'Am', 'Em', 'F', 'C', 'F', 'G']),
+  TrainerPreset(name: '1-4-5', hint: 'C-F-G · 最基础的三和弦', chords: ['C', 'F', 'G']),
+];
+
+/// 换和弦训练:该切到序列里第几个了(新功能Step16)。纯函数,随机性由调用方传 Random
+/// (无头测试能锁行为,跟 nextRampTempo 一个套路)。
+/// 顺序模式:下一个下标,越过末尾转圈。
+/// 随机模式:挑一个 ≠ 当前的——偏移法(rnd 出 0..len-2,大于等于当前就 +1 跳过自己),
+/// 一步到位且每个位置等概率,不用"抽到相同就重抽"的拒绝循环(理论上会转很多圈)。
+int nextTrainerIndex(int len, int idx, {required bool random, required Random rnd}) {
+  if (len < 2) return idx; // 序列退化(不该发生,编辑/载入都保证 ≥2)→ 不动,防崩
+  if (!random) return (idx + 1) % len;
+  final j = rnd.nextInt(len - 1);
+  return j >= idx ? j + 1 : j;
+}
+
+/// 清洗存的换和弦序列(新功能Step16):去掉 chordShapes 里没有的(以后删和弦防失效)
+/// + 去掉线性相邻重复(相邻相同 = 切了等于没切,计数虚加、切和弦动画也不触发)。
+/// 清完不足 2 个 → 返回空表,调用方走 fallback(老键迁移 / 随机抽)。
+/// 注意:只去"相邻"重复——序列里允许同一和弦出现多次(卡农里 C 就有两次),那是合法的。
+List<String> sanitizeTrainerChords(List<String> raw) {
+  final out = <String>[];
+  for (final c in raw) {
+    if (!chordShapes.containsKey(c)) continue; // 指法没了的和弦直接丢
+    if (out.isNotEmpty && out.last == c) continue; // 跟前一个一样 → 丢这个
+    out.add(c);
+  }
+  return out.length < 2 ? const [] : out;
+}

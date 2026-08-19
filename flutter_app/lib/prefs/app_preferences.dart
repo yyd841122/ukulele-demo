@@ -113,6 +113,20 @@ class AppPreferences {
   Future<void> setTrainerChordSound(bool v) =>
       _prefs.setBool(_kTrainerChordSound, v);
 
+  // —— 换和弦训练·多和弦(新功能Step16):上次的和弦序列 + 切换模式 ——
+  // 序列存 StringList(元素是和弦名);老版的 chord_a/chord_b 两个键留作一次性迁移读
+  // (跟 _kSongIndex 先例一样:迁移完不再写、成孤儿 key 无害,降级老版本还能读回去)。
+  // 没存过返回 null,调用方走老键迁移 / 默认 [C, G]。
+  List<String>? getTrainerChords() => _prefs.getStringList(_kTrainerChords);
+  Future<void> setTrainerChords(List<String> v) =>
+      _prefs.setStringList(_kTrainerChords, v);
+
+  // 切换模式:'sequence'(顺序循环)/ 'random'(随机蹦)。默认 sequence = 老版 A↔B 行为。
+  String getTrainerMode([String fallback = 'sequence']) =>
+      _prefs.getString(_kTrainerMode) ?? fallback;
+  Future<void> setTrainerMode(String v) =>
+      _prefs.setString(_kTrainerMode, v);
+
   // —— 用户自加的歌(第43b起)——
   // 存成一串 JSON 字符串(每首一首);启动时 SongStore 读出来、跟内置歌合并。id 存在 JSON 里,跨重启稳定。
   List<String> getUserSongs() => _prefs.getStringList(_kUserSongs) ?? [];
@@ -340,6 +354,8 @@ class AppPreferences {
   static const _kTrainerBeats = 'pref_trainer_beats'; // 换和弦训练:每几拍换
   static const _kTrainerChallenge = 'pref_trainer_challenge'; // 换和弦训练:60 秒挑战开关
   static const _kTrainerChordSound = 'pref_trainer_chord_sound'; // 换和弦训练:示范音开关(新功能Step15)
+  static const _kTrainerChords = 'pref_trainer_chords'; // 换和弦训练:和弦序列(≥2 个,新功能Step16)
+  static const _kTrainerMode = 'pref_trainer_mode'; // 换和弦训练:切换模式 sequence/random(新功能Step16)
   static const _kUserSongs = 'pref_user_songs'; // 用户自加的歌:JSON 字符串列表
   static const _kUserSongSeq = 'pref_user_song_seq'; // 用户歌 id 计数器(u1、u2…)
   static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲 id,如 pref_tempo_0(内置)、pref_tempo_u1(用户)
