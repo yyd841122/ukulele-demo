@@ -165,7 +165,7 @@ void main() {
     expect(p2.getSec('u1'), 0);
   });
 
-  test('换和弦训练:弦对/速度/档位/挑战,存了能读回、没存过给默认', () async {
+  test('换和弦训练:弦对/速度/档位/挑战/示范音,存了能读回、没存过给默认', () async {
     final p = await AppPreferences.load();
     // 没存过 → 调用方给的 fallback
     expect(p.getTrainerChordA('C'), 'C');
@@ -173,12 +173,14 @@ void main() {
     expect(p.getTrainerBpm(60), 60);
     expect(p.getTrainerBeats(4), 4);
     expect(p.getTrainerChallenge(), false);
+    expect(p.getTrainerChordSound(), true); // 示范音默认开(新手友好)
 
     await p.setTrainerChordA('Am');
     await p.setTrainerChordB('F');
     await p.setTrainerBpm(80);
     await p.setTrainerBeats(2);
     await p.setTrainerChallenge(true);
+    await p.setTrainerChordSound(false);
 
     final p2 = await AppPreferences.load(); // 模拟重启
     expect(p2.getTrainerChordA('C'), 'Am');
@@ -187,6 +189,8 @@ void main() {
     expect(p2.getTrainerBeats(4), 2);
     expect(p2.getTrainerChallenge(), true);
     expect(p2.getTrainerChallenge(false), true); // 存过就忽略 fallback
+    expect(p2.getTrainerChordSound(), false);
+    expect(p2.getTrainerChordSound(true), false); // 存过就忽略 fallback
   });
 
   test('指弹练习偏好:曲谱/示范音/速度 存读往返 + 默认值', () async {

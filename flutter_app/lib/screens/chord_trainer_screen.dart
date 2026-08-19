@@ -3,7 +3,8 @@
 //
 // 复用现成三件套,不另起炉灶:
 //   - AudioEngine(构造传入,跟和弦页 / 调音页一样复用 MainScaffold 的共享引擎):
-//       playClick(accent:) 每拍嗒一声、当前和弦第 1 拍重音;点卡片换和弦时 playChord 试听一声。
+//       playClick(accent:) 每拍嗒一声;点卡片换和弦时 playChord 试听一声;
+//       示范音开(新功能Step15)时每个和弦第 1 拍 playChord 播当前和弦代替重音嗒。
 //   - ChordDiagram:画指法图(大图盯着按 + 选择卡上的小图)。
 //   - chordShapes:6 个和弦的指法,选和弦就在这几个里循环。
 //
@@ -99,6 +100,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
   int _beatsPerChange = 4; // 每多少拍切到另一个和弦(1 / 2 / 4;4 = 一小节一换,最从容)
   int _bpm = 60; // 节拍器速度。60 BPM = 一秒一拍,跟得上手。
   bool _challenge = false; // 60 秒挑战模式(false = 无尽练到手动停)
+  bool _chordSoundOn = true; // 示范音(新功能Step15):开 = 每次换到新和弦的第 1 拍播一声该和弦
 
   bool _playing = false; // 节拍器在跑吗
   bool _finished = false; // 60 秒挑战跑完了(用来显示成绩;手动停不点亮它)
@@ -145,6 +147,7 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
       _beatsPerChange = const {1, 2, 4}.contains(bpc) ? bpc : _beatsPerChange;
       _bpm = p.getTrainerBpm(_bpm);
       _challenge = p.getTrainerChallenge(_challenge);
+      _chordSoundOn = p.getTrainerChordSound(true);
       final savedDiff = p.getTrainerDifficulty('custom');
       _difficulty = (savedDiff == 'beginner' || savedDiff == 'easy' || savedDiff == 'medium' || savedDiff == 'hard' || savedDiff == 'custom') ? savedDiff : 'custom';
     });
@@ -163,6 +166,12 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
     } else {
       _start();
     }
+  }
+
+  /// 切"示范音"开关(新功能Step15)。播放中切也立刻生效(下一拍就按新状态响)。同时存下来。
+  void _toggleChordSound() {
+    setState(() => _chordSoundOn = !_chordSoundOn);
+    _prefs?.setTrainerChordSound(_chordSoundOn);
   }
 
   /// 开始:重置计数 + 起定时器。引擎没就绪(测试 / 原生库没装)直接 return,不点亮声音路径。
@@ -187,9 +196,17 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
     if (_playing) setState(() => _playing = false);
   }
 
-  /// 每拍回调:嗒一声、推进节拍计数、到点切和弦;60 秒挑战跑满自停。
+  /// 每拍回调:响声、推进节拍计数、到点切和弦;60 秒挑战跑满自停。
   void _tick() {
-    widget.audio.playClick(accent: _beat == 0); // 当前和弦的第 1 拍 → 重音嗒
+    // 示范音(新功能Step15)开:每个和弦的第 1 拍播一声当前和弦的扫弦,代替重音嗒——
+    // 扫弦起音本身就是重音(跟弹唱页"扫弦声开代替嗒声"一个套路),新手能对照听换的指法对不对。
+    // 切换发生在上一拍末尾,所以 _beat==0 的这拍 _current 已是新和弦,时序天然对。
+    // 关:全嗒声(老行为)。每 1 拍换时每拍都是第 1 拍 → 每拍都是和弦声,自然。
+    if (_chordSoundOn && _beat == 0) {
+      widget.audio.playChord(_current);
+    } else {
+      widget.audio.playClick(accent: _beat == 0); // 当前和弦的第 1 拍 → 重音嗒
+    }
     setState(() {
       _elapsedBeats++;
       _beat++;
@@ -266,14 +283,27 @@ class ChordTrainerState extends State<ChordTrainerScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('换和弦训练')),
+      appBar: AppBar(
+        title: const Text('换和弦训练'),
+        // 示范音开关(新功能Step15):跟琶音/指弹/弹唱页同款小图标。
+        actions: [
+          IconButton(
+            onPressed: _toggleChordSound,
+            tooltip: _chordSoundOn ? '示范音:开(换和弦时听一声)' : '示范音:关(只听节拍器)',
+            icon: Icon(_chordSoundOn ? Icons.graphic_eq : Icons.volume_off),
+            style: IconButton.styleFrom(
+              foregroundColor: _chordSoundOn ? cs.primary : cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              '挑两个和弦,跟着嗒声按时切换。点下面的卡片换和弦。',
+              '挑两个和弦,跟着节拍按时切换。点下面的卡片换和弦。',
               style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),

@@ -107,6 +107,12 @@ class AppPreferences {
   Future<void> setTrainerChallenge(bool v) =>
       _prefs.setBool(_kTrainerChallenge, v);
 
+  // 换和弦训练示范音(新功能Step15):开 = 每次换到新和弦的第 1 拍播一声该和弦,代替重音嗒。
+  bool getTrainerChordSound([bool fallback = true]) =>
+      _prefs.getBool(_kTrainerChordSound) ?? fallback;
+  Future<void> setTrainerChordSound(bool v) =>
+      _prefs.setBool(_kTrainerChordSound, v);
+
   // —— 用户自加的歌(第43b起)——
   // 存成一串 JSON 字符串(每首一首);启动时 SongStore 读出来、跟内置歌合并。id 存在 JSON 里,跨重启稳定。
   List<String> getUserSongs() => _prefs.getStringList(_kUserSongs) ?? [];
@@ -333,6 +339,7 @@ class AppPreferences {
   static const _kTrainerBpm = 'pref_trainer_bpm'; // 换和弦训练:速度
   static const _kTrainerBeats = 'pref_trainer_beats'; // 换和弦训练:每几拍换
   static const _kTrainerChallenge = 'pref_trainer_challenge'; // 换和弦训练:60 秒挑战开关
+  static const _kTrainerChordSound = 'pref_trainer_chord_sound'; // 换和弦训练:示范音开关(新功能Step15)
   static const _kUserSongs = 'pref_user_songs'; // 用户自加的歌:JSON 字符串列表
   static const _kUserSongSeq = 'pref_user_song_seq'; // 用户歌 id 计数器(u1、u2…)
   static const _kTempoPrefix = 'pref_tempo_'; // 后接歌曲 id,如 pref_tempo_0(内置)、pref_tempo_u1(用户)
